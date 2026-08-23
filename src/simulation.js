@@ -12,6 +12,7 @@ import {
   NAMES,
   PHASES,
   RENT_INTERVAL_DAYS,
+  STAFFING_REVENUE_BUFFER,
 } from "./config.js";
 import { createRandom } from "./random.js";
 
@@ -46,7 +47,7 @@ export class TownSimulation {
       turnedAwayTransactions: 0,
       active: true,
       trouble: 0,
-      demandEMA: firm.demand,
+      revenueEMA: firm.initialStaff * firm.wage * STAFFING_REVENUE_BUFFER,
       targetStaff: firm.initialStaff,
       vacancyAge: 0,
       overstaffedDays: 0,
@@ -533,17 +534,14 @@ export class TownSimulation {
   settleFirm(firm) {
     if (!firm.active) return;
     const wage = Math.max(this.policy.minimumWage, firm.wage);
-    if (firm.sector !== "housing" || this.rentDueToday()) {
-      firm.demandEMA = firm.demandEMA * 0.72 + firm.attemptedTransactions * 0.28;
-    }
-    const transactionsPerWorker = firm.transactionsPerWorker;
-    const demandStaff = clamp(Math.ceil(firm.demandEMA / transactionsPerWorker), firm.sector === "housing" ? 2 : 1, firm.maxStaff);
-    const unmetDemand = Math.max(0, firm.demandEMA - firm.employees.length * transactionsPerWorker);
-    const marginalRevenue = Math.min(transactionsPerWorker, unmetDemand) * firm.price;
-    const profitableVacancy = marginalRevenue >= wage * 1.08 && firm.cash >= wage * 6 && firm.employees.length < firm.maxStaff;
-    firm.targetStaff = profitableVacancy ? Math.min(demandStaff, firm.employees.length + 1) : Math.min(demandStaff, firm.employees.length);
+    const revenueSample = firm.sector === "housing" ? (firm.sales > 0 ? firm.sales / RENT_INTERVAL_DAYS : null) : firm.sales;
+    if (revenueSample !== null) firm.revenueEMA = firm.revenueEMA * 0.72 + revenueSample * 0.28;
+    const minimumStaff = firm.sector === "housing" ? 2 : 1;
+    const incomeSupportedStaff = clamp(Math.floor(firm.revenueEMA / (wage * STAFFING_REVENUE_BUFFER) + 1e-9), minimumStaff, firm.maxStaff);
+    const fundedExpansion = incomeSupportedStaff > firm.employees.length && firm.cash >= wage * 6 && firm.employees.length < firm.maxStaff;
+    firm.targetStaff = fundedExpansion ? Math.min(incomeSupportedStaff, firm.employees.length + 1) : Math.min(incomeSupportedStaff, firm.employees.length);
     firm.trouble = firm.cash < wage * Math.max(1, firm.employees.length) * 0.7 ? firm.trouble + 1 : Math.max(0, firm.trouble - 1);
-    firm.overstaffedDays = firm.employees.length > demandStaff || firm.trouble >= 3 ? firm.overstaffedDays + 1 : 0;
+    firm.overstaffedDays = firm.employees.length > incomeSupportedStaff || firm.trouble >= 3 ? firm.overstaffedDays + 1 : 0;
     if (firm.overstaffedDays >= 3 && firm.employees.length > 1) {
       const worker = this.people[[...firm.employees].sort((a, b) => this.people[a].reliability - this.people[b].reliability)[0]];
       this.fire(firm, worker, "lower demand eliminated a position");

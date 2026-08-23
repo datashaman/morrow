@@ -109,16 +109,27 @@ test("housed citizens pay rent weekly rather than daily", () => {
   assert.equal(person.ledger[0].text, "rent to HomeWorks");
 });
 
-test("housing demand does not decay between weekly billing days", () => {
+test("housing income does not decay between weekly billing days", () => {
   const town = new TownSimulation({ seed: 42 });
   town.setPolicy("shockRisk", 0);
   const housing = town.firms.find((firm) => firm.sector === "housing");
-  const demand = housing.demandEMA;
+  const revenue = housing.revenueEMA;
   town.day = 2;
 
   town.settleFirm(housing);
 
-  assert.equal(housing.demandEMA, demand);
+  assert.equal(housing.revenueEMA, revenue);
+});
+
+test("housing receipts are normalized to daily income", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const housing = town.firms.find((firm) => firm.sector === "housing");
+  const previousRevenue = housing.revenueEMA;
+  housing.sales = 70;
+
+  town.settleFirm(housing);
+
+  assert.ok(Math.abs(housing.revenueEMA - (previousRevenue * 0.72 + 10 * 0.28)) < 1e-9);
 });
 
 test("a typical low-wage worker can cover daily-equivalent essentials", () => {
@@ -383,12 +394,29 @@ test("attending staff cap the number of daily transactions", () => {
   assert.match(buyers[2].events[0].text, /could not serve/);
 });
 
-test("payable excess demand creates an economically supported position", () => {
+test("bulk units contribute their full realized income through one transaction", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
+  const person = town.people.at(-1);
+  person.cash = 20;
+  firm.revenueEMA = 0;
+
+  town.buy(person, firm, 3, "food");
+  assert.equal(firm.attemptedTransactions, 1);
+  assert.equal(firm.unitsSold, 3);
+  assert.equal(firm.sales, 5.4);
+  town.settleFirm(firm);
+
+  assert.ok(Math.abs(firm.revenueEMA - 5.4 * 0.28) < 1e-9);
+});
+
+test("sufficient realized income creates an economically supported position", () => {
   const town = new TownSimulation({ seed: 42 });
   town.setPolicy("shockRisk", 0);
   const firm = town.firms[0];
-  firm.demandEMA = firm.employees.length * firm.transactionsPerWorker;
-  firm.attemptedTransactions = firm.demandEMA + 14;
+  const wage = Math.max(town.policy.minimumWage, firm.wage);
+  firm.revenueEMA = wage * 1.08 * (firm.employees.length + 1);
+  firm.sales = firm.revenueEMA;
 
   town.settleFirm(firm);
 
@@ -397,29 +425,29 @@ test("payable excess demand creates an economically supported position", () => {
   assert.equal(firm.vacancyAge, 1);
 });
 
-test("sustained excess demand eventually expands staffing", () => {
+test("sustained income eventually expands staffing", () => {
   const town = new TownSimulation({ seed: 42 });
   town.setPolicy("shockRisk", 0);
   const firm = town.firms[0];
   const startingStaff = firm.employees.length;
-  firm.demandEMA = startingStaff * firm.transactionsPerWorker;
+  const wage = Math.max(town.policy.minimumWage, firm.wage);
 
-  for (let day = 0; day < 3; day += 1) {
-    firm.attemptedTransactions = firm.employees.length * firm.transactionsPerWorker + 10;
+  for (let day = 0; day < 10 && firm.employees.length === startingStaff; day += 1) {
+    firm.sales = wage * 1.08 * (startingStaff + 2);
     town.settleFirm(firm);
   }
 
   assert.equal(firm.employees.length, startingStaff + 1);
 });
 
-test("excess demand does not create a position without payroll reserves", () => {
+test("income does not create a position without payroll reserves", () => {
   const town = new TownSimulation({ seed: 42 });
   town.setPolicy("shockRisk", 0);
   const firm = town.firms[0];
   const wage = Math.max(town.policy.minimumWage, firm.wage);
   firm.cash = wage * 5;
-  firm.demandEMA = firm.employees.length * firm.transactionsPerWorker;
-  firm.attemptedTransactions = firm.demandEMA + 10;
+  firm.revenueEMA = wage * 1.08 * (firm.employees.length + 1);
+  firm.sales = firm.revenueEMA;
 
   town.settleFirm(firm);
 
@@ -427,12 +455,12 @@ test("excess demand does not create a position without payroll reserves", () => 
   assert.equal(town.snapshot().positionsAvailable, 0);
 });
 
-test("a weak-demand layoff does not create an available position", () => {
+test("a weak-income layoff does not create an available position", () => {
   const town = new TownSimulation({ seed: 42 });
   town.setPolicy("shockRisk", 0);
   const firm = town.firms[0];
-  firm.demandEMA = 0;
-  firm.unitsSold = 0;
+  firm.revenueEMA = 0;
+  firm.sales = 0;
   firm.overstaffedDays = 2;
   const before = town.snapshot();
 

@@ -43,7 +43,7 @@ Five firms are configured in `src/config.js`:
 | Makers Guild | Goods | 6.0 | — | 7.8 | 3 | 4 | 6 |
 | Common Café | Service | 2.2 | — | 6.4 | 4 | 4 | 6 |
 
-Every firm begins with 150 cash. Firms track employees, inventory, sales, units sold, demand, vacancies, staffing targets, trouble, and operational status. The first five people are assigned as owners, one per firm; ownership and employment are separate concepts.
+Every firm begins with 150 cash. Firms track employees, inventory, sales, units sold, smoothed income, vacancies, staffing targets, trouble, and operational status. The first five people are assigned as owners, one per firm; ownership and employment are separate concepts.
 
 The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 5.18 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.95 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 
@@ -53,7 +53,7 @@ An active firm can complete a limited number of transactions each day:
 
 `attending workers × configured transactions per worker`
 
-Only a customer who can cover the exact price and reaches an active firm with the required inventory, where applicable, creates attempted demand. A transaction beyond the firm’s daily capacity is recorded as turned away, moves no cash or inventory, and creates a life event for that customer. Completed and turned-away transactions both contribute to attempted demand, while only completed transactions consume inventory and produce revenue. Daily transaction counters reset during settlement.
+Only a customer who can cover the exact price and reaches an active firm with the required inventory, where applicable, creates an attempted transaction. A transaction beyond the firm's daily capacity is recorded as turned away, moves no cash or inventory, and creates a life event for that customer. Transaction counts measure workload and congestion only. Completed transactions consume inventory and produce realized income; turned-away transactions do neither. Daily transaction counters reset during settlement.
 
 ### Treasury
 
@@ -166,19 +166,17 @@ People are sorted by hunger, housing status, and then cash. A person qualifies w
 
 #### Firm settlement
 
-Each firm updates its smoothed demand:
+Each non-housing firm updates its smoothed realized daily income:
 
-`previous demand × 0.72 + attempted transactions × 0.28`
+`previous income × 0.72 + realized income × 0.28`
 
-HomeWorks updates this value only on weekly billing days. Its demand does not decay merely because no housed citizen owes rent between bills.
+Housing receipts are divided by seven to produce a daily-equivalent income sample. HomeWorks updates its smoothed income only when it receives revenue, so its income does not decay merely because no housed citizen owes rent between bills.
 
-Required staff is the bounded ceiling of smoothed demand divided by configured transactions per worker. The estimated revenue available to support one more worker is:
+Income-supported staff is the bounded floor of smoothed income divided by 108% of the configured wage. Active firms retain a minimum of one worker, or two for housing. A firm approves at most one additional position per settlement when income supports it, the firm holds at least six wages in cash, and it remains below maximum staff.
 
-`min(transactions per worker, demand above current capacity) × price`
+Vacancies must persist for two settlement phases before recruitment. Candidates are ranked by skill and reliability and must accept the offered wage relative to a skill-based reservation wage. Transaction capacity still limits how many customers attending staff can serve, but transaction count does not determine whether a firm is financially successful.
 
-A firm approves at most one additional position per settlement when that marginal revenue is at least 108% of the wage, it holds at least six wages in cash, and it remains below maximum staff. Vacancies must persist for two settlement phases before recruitment. Candidates are ranked by skill and reliability and must accept the offered wage relative to a skill-based reservation wage.
-
-The Employment card reports positions available as approved vacancies across active firms: the sum of `targetStaff − current employees`, bounded at zero for each firm. Because `targetStaff` reflects demand, profitability, cash reserves, and current staffing, a layoff or closure does not automatically create an available position. Vacancies must still persist for two settlement phases before recruitment, and a candidate may decline or fail to accept the offered wage.
+The Employment card reports positions available as approved vacancies across active firms: the sum of `targetStaff − current employees`, bounded at zero for each firm. Because `targetStaff` reflects smoothed income, payroll coverage, cash reserves, and current staffing, a layoff or closure does not automatically create an available position. Vacancies must still persist for two settlement phases before recruitment, and a candidate may decline or fail to accept the offered wage.
 
 Overstaffing or sustained cash trouble can produce layoffs after three settlement phases. A firm closes after cash falls below 0.5 while trouble exceeds five; all remaining workers lose their jobs.
 
