@@ -12,10 +12,6 @@ People can form friendships at the café, but the repository version does not im
 
 Stress falls through financial runway, stable employment, food, housing, recent contact, and a small immediate comfort purchase. There is no direct recovery from rest, sleep, health care, resolving arrears, predictable schedules, time safely housed, supportive relationships, autonomy, or treatment.
 
-### Some person fields are inactive
-
-`risk`, `masteryDays`, and much of `esteemBoost` currently have no meaningful downstream effect. They are remnants or placeholders from earlier iterations. Remove them or reconnect them deliberately.
-
 ### No saved or shareable run
 
 The seed is fixed in code, not visible or editable in the interface. Policy changes and runs cannot be exported, imported, bookmarked, or compared side by side.

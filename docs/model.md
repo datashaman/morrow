@@ -25,7 +25,7 @@ There are 40 named people. Each person carries:
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Social state: friends, social capacity, and last social contact day
-- Personal differences: risk tolerance and randomized starting values
+- Personal differences: randomized starting values and a persistent esteem baseline
 - Narrative state: recent life events
 - Display state: home and current map positions
 
@@ -231,7 +231,7 @@ Needs are scores from zero to one. The hierarchy is inspired by Maslow but is no
 - **Physiological:** 52% health and 48% fed status.
 - **Safety:** housing, employment, employer stability, and up to twelve days of runway.
 - **Belonging:** a baseline, friendship capacity filled, and recent contact.
-- **Esteem:** a baseline, skill, employment, ownership, and esteem boost.
+- **Esteem:** a common baseline, skill, employment, ownership, and a randomized personal esteem baseline from 0.05 to 0.17.
 - **Growth:** the person’s accumulated growth state.
 
 The person focuses on the first of physiological, safety, belonging, or esteem below 0.75. If all four are at least 0.75, they focus on growth only when stress is below 0.45; otherwise they return to safety.

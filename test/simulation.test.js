@@ -9,6 +9,15 @@ test("money remains inside the closed economy", () => {
   assert.ok(Math.abs(town.totalMoney() - initial) <= 0.1);
 });
 
+test("every firm begins with its configured owner and staff count", () => {
+  const town = new TownSimulation({ seed: 42 });
+
+  town.firms.forEach((firm) => {
+    assert.equal(town.people[firm.owner].employer, firm.id);
+    assert.equal(firm.employees.length, firm.initialStaff);
+  });
+});
+
 test("an exact transfer cannot overdraw its sender", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];
@@ -217,6 +226,23 @@ test("secure essentials and recent social contact lower underlying stress pressu
 
   assert.ok(secure < precarious);
   assert.equal(secure, 0);
+});
+
+test("person state excludes inactive placeholders and retains an explicit esteem baseline", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  person.employer = -1;
+  const originalBaseline = person.esteemBaseline;
+  const originalEsteem = town.assessNeeds(person).esteem;
+
+  person.esteemBaseline += 0.1;
+  const raisedEsteem = town.assessNeeds(person).esteem;
+
+  assert.equal("risk" in person, false);
+  assert.equal("masteryDays" in person, false);
+  assert.equal("esteemBoost" in person, false);
+  assert.ok(originalBaseline >= 0.05 && originalBaseline <= 0.17);
+  assert.ok(Math.abs(raisedEsteem - originalEsteem - 0.1) < 1e-9);
 });
 
 test("critical health causes a traceable death and updates population counts", () => {

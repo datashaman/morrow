@@ -59,7 +59,6 @@ export class TownSimulation {
         cash: roundMoney(18 + this.random() * 62),
         skill: 0.25 + this.random() * 0.65,
         reliability: 0.55 + this.random() * 0.43,
-        risk: this.random(),
         employer: -1,
         friends: [],
         socialCapacity: 3 + Math.floor(this.random() * 4),
@@ -69,9 +68,8 @@ export class TownSimulation {
         housed: true,
         health: 0.58 + this.random() * 0.36,
         stress: 0.12 + this.random() * 0.25,
-        esteemBoost: 0.05 + this.random() * 0.12,
+        esteemBaseline: 0.05 + this.random() * 0.12,
         growth: 0.04 + this.random() * 0.15,
-        masteryDays: 0,
         attended: true,
         scarcityError: false,
         missedWork: 0,
@@ -100,12 +98,12 @@ export class TownSimulation {
         b.friends.push(a.id);
       }
     }
-    this.firms.forEach((firm, index) => {
-      this.hire(firm, this.people[index], true);
+    this.firms.forEach((firm) => this.hire(firm, this.people[firm.owner], true));
+    this.firms.forEach((firm) => {
       this.people
         .filter((person) => person.employer < 0)
         .sort((a, b) => b.skill - a.skill)
-        .slice(0, Math.max(0, firm.initialStaff - 1))
+        .slice(0, Math.max(0, firm.initialStaff - firm.employees.length))
         .forEach((person) => this.hire(firm, person, true));
     });
     this.people.forEach((person) => {
@@ -205,7 +203,7 @@ export class TownSimulation {
     const safety = clamp((person.housed ? 0.23 : 0) + (person.employer >= 0 ? 0.18 : 0) + jobSecurity * 0.15 + clamp(this.runwayDays(person) / 12) * 0.44);
     const recentContact = this.day - person.lastSocialDay <= 3 ? 0.2 : 0;
     const belonging = clamp(0.12 + Math.min(1, person.friends.length / Math.max(3, person.socialCapacity)) * 0.68 + recentContact);
-    const esteem = clamp(0.1 + person.skill * 0.32 + (person.employer >= 0 ? 0.18 : 0) + (ownsFirm ? 0.18 : 0) + person.esteemBoost);
+    const esteem = clamp(0.1 + person.skill * 0.32 + (person.employer >= 0 ? 0.18 : 0) + (ownsFirm ? 0.18 : 0) + person.esteemBaseline);
     const growth = clamp(person.growth);
     person.needs = { physiological, safety, belonging, esteem, growth };
     person.focus = ["physiological", "safety", "belonging", "esteem"].find((need) => person.needs[need] < 0.75)
