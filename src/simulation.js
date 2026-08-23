@@ -1,4 +1,4 @@
-import { DEFAULT_POLICY, FIRMS, NAMES, PHASES, RENT_INTERVAL_DAYS } from "./config.js";
+import { DEFAULT_POLICY, FIRMS, FOOD_HEALTH_RECOVERY, NAMES, PHASES, RENT_INTERVAL_DAYS } from "./config.js";
 import { createRandom } from "./random.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
@@ -67,6 +67,7 @@ export class TownSimulation {
         scarcityError: false,
         missedWork: 0,
         foodSeller: -1,
+        lastFoodQuality: null,
         personalSeller: -1,
         rentSeller: -1,
         homeX,
@@ -261,7 +262,10 @@ export class TownSimulation {
     firm.inventory -= units;
     firm.sales += paid;
     firm.unitsSold += units;
-    if (purpose === "food") person.foodSeller = firm.id;
+    if (purpose === "food") {
+      person.foodSeller = firm.id;
+      person.lastFoodQuality = firm.quality;
+    }
     else person.personalSeller = firm.id;
     this.ledger(person, { direction: "out", amount: paid, text: `${purpose} to ${firm.name}`, before });
     return paid;
@@ -323,9 +327,8 @@ export class TownSimulation {
       const sellers = person.scarcityError && affordable.length > 1 ? [...affordable].reverse() : affordable;
       const paid = delayed ? 0 : sellers.reduce((result, firm) => result || this.buy(person, firm, 1, "food"), 0);
       if (paid) {
-        const recovering = person.hungryDays > 0;
         person.hungryDays = Math.max(0, person.hungryDays - 1);
-        if (recovering) person.health = clamp(person.health + 0.004);
+        person.health = clamp(person.health + person.lastFoodQuality * FOOD_HEALTH_RECOVERY);
       } else {
         person.hungryDays += 1;
         person.health = clamp(person.health - 0.045);

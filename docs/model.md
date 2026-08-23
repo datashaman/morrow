@@ -35,13 +35,13 @@ Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.
 
 Five firms are configured in `src/config.js`:
 
-| Firm | Sector | Price | Base wage | Transactions per worker | Starting staff | Maximum staff |
-|---|---|---:|---:|---:|---:|---:|
-| Harvest Foods | Food | 1.8 | 6.2 | 4 | 6 | 9 |
-| Green Basket | Food | 2.0 | 6.5 | 4 | 6 | 9 |
-| HomeWorks | Housing | 6.0 weekly | 7.2 | 10 | 4 | 6 |
-| Makers Guild | Goods | 6.0 | 7.8 | 3 | 4 | 6 |
-| Common Café | Service | 2.2 | 6.4 | 4 | 4 | 6 |
+| Firm | Sector | Price | Food quality | Base wage | Transactions per worker | Starting staff | Maximum staff |
+|---|---|---:|---:|---:|---:|---:|---:|
+| Harvest Foods | Food | 1.8 | 0.55 | 6.2 | 4 | 6 | 9 |
+| Green Basket | Food | 2.0 | 0.85 | 6.5 | 4 | 6 | 9 |
+| HomeWorks | Housing | 6.0 weekly | — | 7.2 | 10 | 4 | 6 |
+| Makers Guild | Goods | 6.0 | — | 7.8 | 3 | 4 | 6 |
+| Common Café | Service | 2.2 | — | 6.4 | 4 | 4 | 6 |
 
 Every firm begins with 150 cash. Firms track employees, inventory, sales, units sold, demand, vacancies, staffing targets, trouble, and operational status. The first five people are assigned as owners, one per firm; ownership and employment are separate concepts.
 
@@ -121,7 +121,7 @@ A scarcity error can cause either:
 - choosing the more expensive affordable food seller, or
 - delaying food despite available cash when stress exceeds 0.62 and runway is below five days; this additional delay has a 0.32 probability.
 
-A shopper tries another affordable food firm when the preferred seller lacks transaction capacity. A successful purchase reduces `hungryDays` by one. If recovering from hunger, health rises by 0.004. Failure to buy food adds one hungry day and reduces health by 0.045.
+A shopper tries another affordable food firm when the preferred seller lacks transaction capacity. A successful purchase reduces `hungryDays` by one and restores health by the seller's quality multiplied by 0.006. Harvest Foods is cheaper and has quality 0.55; Green Basket is dearer and has quality 0.85. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy food adds one hungry day and reduces health by 0.045.
 
 ### 4. Housing and bills
 

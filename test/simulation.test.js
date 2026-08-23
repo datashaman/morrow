@@ -105,6 +105,26 @@ test("a typical low-wage worker can cover daily-equivalent essentials", () => {
   assert.ok(typicalNetWage >= town.essentialCost() * 1.8);
 });
 
+test("higher-quality food replenishes more health", () => {
+  const eatFrom = (sellerName) => {
+    const town = new TownSimulation({ seed: 42 });
+    const person = town.people[0];
+    town.people.slice(1).forEach((other) => { other.alive = false; });
+    town.firms.filter((firm) => firm.sector === "food" && firm.name !== sellerName).forEach((firm) => { firm.active = false; });
+    person.cash = 20;
+    person.health = 0.5;
+    town.foodPhase();
+    return { health: person.health, quality: person.lastFoodQuality };
+  };
+
+  const cheaper = eatFrom("Harvest Foods");
+  const dearer = eatFrom("Green Basket");
+
+  assert.equal(cheaper.quality, 0.55);
+  assert.equal(dearer.quality, 0.85);
+  assert.ok(dearer.health > cheaper.health);
+});
+
 test("eviction is recorded once and leaves no rent arrears while unhoused", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];
