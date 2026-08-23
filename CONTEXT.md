@@ -27,7 +27,7 @@ The visualization became large enough that it was migrated into this repository.
 
 1. **Follow a person.** Aggregate statistics are useful, but the primary unit of explanation is a named individual with a current state, ledger, and history.
 2. **Every payment has two sides.** Wages come from firms, purchases go to sellers, rent goes to a housing provider, taxes go to the treasury, and support comes from it.
-3. **Scarcity has consequences.** Low resources must be capable of producing hunger, arrears, eviction, stress, health decline, lower productivity, and unemployment.
+3. **Scarcity has consequences.** Low resources must be capable of producing hunger, arrears, eviction, stress, health decline, lower productivity, unemployment, and death.
 4. **Success is not guaranteed.** The system must allow persistent hardship, business trouble, and unequal outcomes.
 5. **Needs compete.** Higher-order pursuits should generally yield to physiological and safety needs when those needs are insecure.
 6. **Behaviour is bounded, not perfectly rational.** Stress can cause avoidance, missed work, delayed essentials, and short-term comfort spending.
@@ -39,7 +39,7 @@ The visualization became large enough that it was migrated into this repository.
 
 - A Vite-based browser app runs the simulation.
 - The simulation core is independent of the DOM and can be exercised from tests.
-- Thirteen deterministic regression tests pass.
+- Fifteen deterministic regression tests pass.
 - The production build passes.
 - The repository has an initial commit.
 - Historical single-file previews remain in `work/` and are ignored by Git.

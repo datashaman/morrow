@@ -44,6 +44,9 @@ export class TownSimulation {
         kind: "person",
         id,
         name,
+        alive: true,
+        deathDay: null,
+        criticalHealthDays: 0,
         cash: roundMoney(18 + this.random() * 62),
         skill: 0.25 + this.random() * 0.65,
         reliability: 0.55 + this.random() * 0.43,
@@ -186,7 +189,7 @@ export class TownSimulation {
   }
 
   hire(firm, person, silent = false) {
-    if (!firm.active || person.employer >= 0) return false;
+    if (!firm.active || !person.alive || person.employer >= 0) return false;
     person.employer = firm.id;
     firm.employees.push(person.id);
     if (!silent) this.note(person, `hired by ${firm.name}`, "good");
@@ -197,6 +200,27 @@ export class TownSimulation {
     firm.employees = firm.employees.filter((id) => id !== person.id);
     person.employer = -1;
     this.note(person, `${reason} at ${firm.name}`, "bad");
+  }
+
+  die(person, reason = "died after health reached a critical level") {
+    if (!person.alive) return false;
+    if (person.employer >= 0) {
+      const firm = this.firms[person.employer];
+      firm.employees = firm.employees.filter((id) => id !== person.id);
+      person.employer = -1;
+    }
+    person.friends.forEach((friendId) => {
+      const friend = this.people[friendId];
+      friend.friends = friend.friends.filter((id) => id !== person.id);
+    });
+    person.friends = [];
+    person.alive = false;
+    person.deathDay = this.day;
+    person.attended = false;
+    person.socialToday = false;
+    person.rentArrears = 0;
+    this.note(person, reason, "bad");
+    return true;
   }
 
   transactionCapacity(firm) {
@@ -216,7 +240,7 @@ export class TownSimulation {
   }
 
   buy(person, firm, units, purpose) {
-    if (!firm?.active || firm.inventory < units) return 0;
+    if (!person.alive || !firm?.active || firm.inventory < units) return 0;
     const cost = roundMoney(firm.price * units);
     if (person.cash + 1e-9 < cost || !this.requestTransaction(firm, person, purpose)) return 0;
     const before = person.cash;
@@ -233,6 +257,11 @@ export class TownSimulation {
 
   productionPhase() {
     this.people.forEach((person) => {
+      if (!person.alive) {
+        person.attended = false;
+        person.scarcityError = false;
+        return;
+      }
       person.scarcityError = this.random() < person.stress ** 2 * 0.24;
       if (person.employer < 0) return void (person.attended = false);
       const missChance = 0.015 + person.stress * 0.1 + (1 - person.health) * 0.22 + (person.hungryDays ? 0.1 : 0);
@@ -255,7 +284,7 @@ export class TownSimulation {
   payrollPhase() {
     const taxRate = this.policy.taxRate / 100;
     this.firms.forEach((firm) => {
-      const attendees = firm.employees.map((id) => this.people[id]).filter((person) => person.attended);
+      const attendees = firm.employees.map((id) => this.people[id]).filter((person) => person.alive && person.attended);
       const wage = Math.max(this.policy.minimumWage, firm.wage);
       const ratio = attendees.length ? Math.min(1, firm.cash / (wage * attendees.length)) : 1;
       attendees.forEach((person) => {
@@ -275,6 +304,7 @@ export class TownSimulation {
   foodPhase() {
     const foodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food" && firm.inventory >= 1).sort((a, b) => a.price - b.price);
     this.people.forEach((person) => {
+      if (!person.alive) return;
       person.socialToday = false;
       const affordable = foodFirms.filter((firm) => person.cash >= firm.price && firm.inventory >= 1);
       const delayed = person.scarcityError && person.stress > 0.62 && this.runwayDays(person) < 5 && this.random() < 0.32;
@@ -297,6 +327,7 @@ export class TownSimulation {
     const housing = this.firms.find((firm) => firm.active && firm.sector === "housing");
     if (!housing) return;
     this.people.forEach((person) => {
+      if (!person.alive) return;
       if (!person.housed) person.rentArrears = 0;
       const due = roundMoney(person.housed ? housing.price : housing.price * 3);
       const avoidance = person.housed && person.scarcityError && person.stress > 0.6 && this.runwayDays(person) < 5 && this.random() < 0.38;
@@ -333,6 +364,7 @@ export class TownSimulation {
     const café = this.firms.find((firm) => firm.active && firm.sector === "service" && firm.inventory >= 1);
     const makers = this.firms.find((firm) => firm.active && firm.sector === "goods" && firm.inventory >= 1);
     this.people.forEach((person) => {
+      if (!person.alive) return;
       this.assessNeeds(person);
       if (person.scarcityError && person.stress > 0.65 && café && this.buy(person, café, 1, "short-term comfort")) {
         person.stress = clamp(person.stress - 0.035);
@@ -345,7 +377,7 @@ export class TownSimulation {
         person.growth = clamp(person.growth + 0.04);
       }
     });
-    const social = this.people.filter((person) => person.socialToday).sort(() => this.random() - 0.5);
+    const social = this.people.filter((person) => person.alive && person.socialToday).sort(() => this.random() - 0.5);
     for (let index = 0; index + 1 < social.length; index += 2) {
       const a = social[index];
       const b = social[index + 1];
@@ -362,7 +394,7 @@ export class TownSimulation {
   settlementPhase() {
     const budget = this.government.cash * (this.policy.supportRate / 100) * 0.18;
     let spent = 0;
-    const vulnerable = [...this.people].sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
+    const vulnerable = this.people.filter((person) => person.alive).sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
     vulnerable.forEach((person) => {
       if (spent >= budget || this.government.cash <= 0 || (person.cash >= 12 && !person.hungryDays && person.housed)) return;
       const before = person.cash;
@@ -373,6 +405,7 @@ export class TownSimulation {
 
     this.firms.forEach((firm) => this.settleFirm(firm));
     this.people.forEach((person) => {
+      if (!person.alive) return;
       this.updateStress(person);
       if (person.stress > 0.55) {
         person.health = clamp(person.health - (0.002 + (person.stress - 0.55) * 0.018), 0.08, 1);
@@ -381,6 +414,11 @@ export class TownSimulation {
       if (this.random() < 0.006 + person.stress * 0.018 + (1 - person.health) * 0.008) {
         person.health = clamp(person.health - (0.04 + this.random() * 0.09), 0.08, 1);
         this.note(person, "a health setback reduced capacity to work", "bad");
+      }
+      person.criticalHealthDays = person.health <= 0.08 ? person.criticalHealthDays + 1 : 0;
+      if (person.criticalHealthDays >= 3) {
+        this.die(person);
+        return;
       }
       this.updateStress(person);
       this.assessNeeds(person);
@@ -408,7 +446,7 @@ export class TownSimulation {
     const vacancies = Math.max(0, firm.targetStaff - firm.employees.length);
     firm.vacancyAge = vacancies ? firm.vacancyAge + 1 : 0;
     if (vacancies && firm.vacancyAge >= 2) {
-      const candidate = this.people.filter((person) => person.employer < 0).sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
+      const candidate = this.people.filter((person) => person.alive && person.employer < 0).sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
       if (candidate && wage >= 3.2 + candidate.skill * 4.5 && this.random() < 0.5 + candidate.reliability * 0.35) {
         this.hire(firm, candidate);
         firm.vacancyAge = 0;
@@ -420,9 +458,11 @@ export class TownSimulation {
     }
     if (firm.cash > 230) {
       const owner = this.people[firm.owner];
-      const before = owner.cash;
-      const paid = this.transfer(firm, owner, (firm.cash - 210) * 0.35);
-      this.ledger(owner, { direction: "in", amount: paid, text: `owner dividend from ${firm.name}`, before });
+      if (owner.alive) {
+        const before = owner.cash;
+        const paid = this.transfer(firm, owner, (firm.cash - 210) * 0.35);
+        this.ledger(owner, { direction: "in", amount: paid, text: `owner dividend from ${firm.name}`, before });
+      }
     }
     if (firm.cash < 0.5 && firm.trouble > 5) {
       [...firm.employees].forEach((id) => this.fire(firm, this.people[id], "business closure ended employment"));
@@ -453,22 +493,28 @@ export class TownSimulation {
   assertInvariants() {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
+    if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
     if (Math.abs(this.totalMoney() - this.initialMoney) > 0.1) throw new Error("Money escaped the closed economy");
   }
 
   snapshot() {
+    const alive = this.people.filter((person) => person.alive).length;
+    const dead = this.people.length - alive;
     return {
       day: this.day,
       phase: this.phase,
       phaseName: PHASES[this.phase],
       totalMoney: this.totalMoney(),
       initialMoney: this.initialMoney,
-      employed: this.people.filter((person) => person.employer >= 0).length,
+      employed: this.people.filter((person) => person.alive && person.employer >= 0).length,
+      alive,
+      dead,
+      totalCitizens: this.people.length,
       positionsAvailable: this.firms
         .filter((firm) => firm.active)
         .reduce((total, firm) => total + Math.max(0, firm.targetStaff - firm.employees.length), 0),
-      hungry: this.people.filter((person) => person.hungryDays > 0).length,
-      unhoused: this.people.filter((person) => !person.housed).length,
+      hungry: this.people.filter((person) => person.alive && person.hungryDays > 0).length,
+      unhoused: this.people.filter((person) => person.alive && !person.housed).length,
     };
   }
 }

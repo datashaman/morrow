@@ -31,7 +31,7 @@ npm test
 npm run build
 ```
 
-The current baseline is thirteen passing tests and a successful Vite build.
+The current baseline is fifteen passing tests and a successful Vite build.
 
 ## Testing strategy
 
@@ -45,6 +45,7 @@ Current coverage protects:
 - before/after ledger balances for a funded rehousing payment
 - one-time eviction events with no arrears while unhoused
 - lower stress pressure under secure conditions
+- critical-health death, terminal inactivity, population counts, and conserved final cash
 - attending-worker transaction limits and turned-away demand
 - economically supported vacancies, constrained expansion, and eventual hiring
 - deterministic reproduction from a seed

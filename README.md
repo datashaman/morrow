@@ -1,6 +1,6 @@
 # Morrow
 
-An individual-level social and economic simulation. People work for firms, receive wages, buy food and services, pay rent, form relationships, experience stress and health changes, and sometimes become hungry or unhoused. Every cash transfer stays within the town economy.
+An individual-level social and economic simulation. People work for firms, receive wages, buy food and services, pay rent, form relationships, experience stress and health changes, and sometimes become hungry, unhoused, or die. Every cash transfer stays within the town economy.
 
 This is an exploratory thinking tool, not an empirically calibrated forecast. For the project’s purpose and modeling principles, read [CONTEXT.md](./CONTEXT.md). For complete documentation, use [docs/README.md](./docs/README.md).
 

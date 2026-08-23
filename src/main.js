@@ -17,6 +17,7 @@ app.innerHTML = `
       <article><span>Money accounted for</span><strong id="money"></strong><small id="money-detail"></small></article>
       <article><span>Employment</span><strong id="employment"></strong><small id="employment-detail"></small></article>
       <article><span>Immediate hardship</span><strong id="hardship"></strong><small id="hardship-detail"></small></article>
+      <article><span>Citizens</span><strong id="population"></strong><small id="population-detail"></small></article>
     </section>
 
     <div class="stage-wrap">
@@ -63,6 +64,7 @@ const context = canvas.getContext("2d");
 
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
+  "population", "population-detail",
   "person-select", "focus", "person-summary", "needs", "ledger", "events", "pause", "step", "reset", "speed", "policy-grid",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
@@ -109,6 +111,10 @@ const needNames = { physiological: "Physiological", safety: "Safety", belonging:
 function updateInterface() {
   const state = simulation.snapshot();
   const person = simulation.people[selected];
+  [...elements["person-select"].options].forEach((option) => {
+    const citizen = simulation.people[Number(option.value)];
+    option.textContent = `${citizen.name}${citizen.alive ? "" : " (dead)"}`;
+  });
   const employer = person.employer >= 0 ? simulation.firms[person.employer].name : "no employer";
   const owned = simulation.firms.find((firm) => firm.active && firm.owner === person.id);
   const foodSeller = person.foodSeller >= 0 ? simulation.firms[person.foodSeller].name : "not yet chosen";
@@ -119,12 +125,15 @@ function updateInterface() {
   elements.clock.textContent = `Day ${state.day} · ${state.phaseName}`;
   elements.money.textContent = `${(state.totalMoney / state.initialMoney * 100).toFixed(2)}%`;
   elements["money-detail"].textContent = `${money(state.totalMoney)} of ${money(state.initialMoney)} remains on ledgers`;
-  elements.employment.textContent = `${Math.round(state.employed / simulation.people.length * 100)}%`;
-  elements["employment-detail"].textContent = `${state.employed} employed · ${simulation.people.length - state.employed} seeking · ${state.positionsAvailable} position${state.positionsAvailable === 1 ? "" : "s"} available`;
+  elements.employment.textContent = `${state.alive ? Math.round(state.employed / state.alive * 100) : 0}%`;
+  elements["employment-detail"].textContent = `${state.employed} employed · ${state.alive - state.employed} seeking · ${state.positionsAvailable} position${state.positionsAvailable === 1 ? "" : "s"} available`;
   elements.hardship.textContent = state.hungry + state.unhoused;
-  elements["hardship-detail"].textContent = `${state.hungry} without food · ${state.unhoused} without housing`;
-  elements.focus.textContent = `${needNames[person.focus]} focus`;
-  elements["person-summary"].textContent = `Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller} · housing: ${provider}`;
+  elements["hardship-detail"].textContent = `${state.hungry} living without food · ${state.unhoused} living without housing`;
+  elements.population.textContent = `${state.alive}/${state.totalCitizens}`;
+  elements["population-detail"].textContent = `${state.alive} alive · ${state.dead} dead · ${state.totalCitizens} total`;
+  elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
+  elements["person-summary"].textContent = `${person.alive ? "Alive" : `Died on day ${person.deathDay}`} · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller} · housing: ${provider}`;
+  elements.needs.hidden = !person.alive;
 
   elements.needs.replaceChildren(...Object.entries(person.needs).map(([name, value]) => {
     const item = document.createElement("div");
@@ -202,14 +211,14 @@ function drawTown() {
 
   simulation.people.forEach((person) => {
     const employer = person.employer >= 0 ? simulation.firms[person.employer] : null;
-    const targetX = employer ? employer.x : person.homeX;
-    const targetY = employer ? employer.y : person.homeY;
+    const targetX = !person.alive ? person.x : employer ? employer.x : person.homeX;
+    const targetY = !person.alive ? person.y : employer ? employer.y : person.homeY;
     person.x += (targetX - person.x) * 0.02;
     person.y += (targetY - person.y) * 0.02;
     const x = person.x * width + Math.sin(person.id * 7) * 18;
     const y = person.y * height + Math.cos(person.id * 11) * 16;
     context.beginPath(); context.arc(x, y, person.id === selected ? 7 : 4.5, 0, Math.PI * 2);
-    context.fillStyle = !person.housed || person.hungryDays ? colors.danger : colors.accent;
+    context.fillStyle = !person.alive ? colors.muted : !person.housed || person.hungryDays ? colors.danger : colors.accent;
     context.fill();
     if (person.id === selected) {
       context.strokeStyle = colors.text; context.lineWidth = 2; context.stroke();

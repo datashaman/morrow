@@ -29,7 +29,7 @@ button:hover { border-color: var(--accent); }
 h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp(2rem, 5vw, 3.4rem); font-weight: 500; line-height: 0.95; }
 .clock { color: var(--muted); font-variant-numeric: tabular-nums; }
 
-.metrics { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--border); border-radius: 14px 14px 0 0; overflow: hidden; background: var(--surface); }
+.metrics { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--border); border-radius: 14px 14px 0 0; overflow: hidden; background: var(--surface); }
 .metrics article { display: grid; gap: 0.25rem; padding: 1rem; }
 .metrics article + article { border-left: 1px solid var(--border); }
 .metrics span { color: var(--muted); font-size: 0.78rem; }

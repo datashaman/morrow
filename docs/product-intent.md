@@ -28,7 +28,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - A treasury that receives taxes and redistributes support
 - Production, payroll, food, housing, discretionary activity, and settlement
 - Employment, layoffs, vacancies, hiring, and firm closure
-- Hunger, health, stress, scarcity errors, arrears, eviction, and rehousing
+- Hunger, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Friendships and social encounters
 - Maslow-inspired needs and current behavioural focus
 - Auditable cash transfers and deterministic replay
@@ -38,7 +38,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Predicting an actual city, population, or policy outcome
 - Claiming psychological or economic calibration
 - Real currencies, inflation, credit markets, banking, or interest
-- Demographic reproduction, mortality, migration, households, or families
+- Demographic reproduction, migration, households, or families
 - Land, construction, housing capacity, or physical supply chains
 - A server, database, accounts, multiplayer operation, or saved runs
 - Formal validation against empirical datasets

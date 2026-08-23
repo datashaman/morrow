@@ -35,7 +35,8 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Initially housed people receive housing without an initial payment or provider record.
 - Every person consumes at most one food unit per day regardless of body, work, or household.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
-- Owners are the first five people and can also be employees. Ownership cannot be sold or inherited.
+- Owners are the first five people and can also be employees. Ownership cannot be sold or inherited; a firm with a dead owner retains dividends.
+- Cash held by a deceased person remains inert on their ledger. There is no inheritance, probate, estate tax, or treasury transfer.
 - Firm reopening after closure existed in an earlier visualization but is not implemented in the repository version.
 - A closed housing or food firm can make essential services unavailable with no replacement-entry mechanism.
 
@@ -52,7 +53,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 ## Social and demographic simplifications
 
 - People are isolated individuals rather than households or families.
-- There is no age, disability, gender, caregiving, migration, birth, or death.
+- There is no age, disability, gender, caregiving, migration, birth, or demographic replacement.
 - Friendships are symmetric, binary, and capped by a fixed capacity.
 - Social contact occurs only through paid café visits.
 - Friends do not lend money, share food or housing, refer one another for jobs, transmit stress, or provide care.
@@ -60,7 +61,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 ## Health and psychology simplifications
 
-- Health is a single scalar bounded at 0.08; people cannot die.
+- Health is a single scalar. Three consecutive settlement phases at the critical floor cause death, regardless of diagnosis or individual physiology.
 - Hunger immediately reduces the same general health score for everyone.
 - Health setbacks are generic random events with no diagnosis, treatment, cost, duration, or recovery path.
 - Stress is a single scalar and is updated twice during settlement, which makes it converge quickly toward pressure.

@@ -22,7 +22,7 @@ The day counter increments during settlement. A full day therefore requires six 
 There are 40 named people. Each person carries:
 
 - Economic state: cash, employer, seller references, housing status, rent arrears, and transaction ledger
-- Capacity: skill, reliability, attendance, missed work, and health
+- Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Social state: friends, social capacity, and last social contact day
 - Personal differences: risk tolerance and randomized starting values
@@ -69,6 +69,8 @@ Money is rounded to cents when transferred. After every phase, `assertInvariants
 - Total current cash differs from initial cash by no more than 0.1.
 
 Individual ledger records store the day, direction, amount, purpose, and cash balance before and after. The interface displays the five most recent entries; the model retains twelve.
+
+When a person dies, their final cash remains on their ledger. It is still inside the accounting boundary but becomes economically inactive because inheritance, probate, and estate transfers are not yet modeled.
 
 ## Initial social and employment network
 
@@ -174,7 +176,7 @@ Overstaffing or sustained cash trouble can produce layoffs after three settlemen
 
 At the current shock setting, a firm has `shockRisk / 100 × 0.025` probability of transferring a random 12–34 cash to the treasury and gaining trouble.
 
-When firm cash exceeds 230, 35% of the amount above 210 is paid to its owner as a dividend.
+When firm cash exceeds 230, 35% of the amount above 210 is paid to its living owner as a dividend. A firm retains the money when its owner has died.
 
 #### Health and stress
 
@@ -188,7 +190,9 @@ An additional health setback occurs with probability:
 
 `0.006 + stress × 0.018 + (1 − health) × 0.008`
 
-The setback reduces health by a random 0.04–0.13. Health is bounded between 0.08 and 1.
+The setback reduces health by a random 0.04–0.13. Settlement health is bounded between 0.08 and 1. A person who remains at the 0.08 critical floor for three consecutive settlement phases dies. Recovery above the floor resets the critical-health counter.
+
+Death is a terminal, recorded life event. The person leaves employment and their reciprocal friendships are removed. They no longer work, receive wages or support, buy food or services, pay rent, socialize, recover, enter hiring pools, or receive owner dividends. The Citizens card reports living, dead, and total citizens; employment and hardship metrics count only living people.
 
 ## Stress
 

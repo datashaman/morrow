@@ -17,7 +17,7 @@ Start with [CONTEXT.md](./CONTEXT.md), then use [docs/README.md](./docs/README.m
 - Individual outcomes must be traceable to transactions and life events.
 - Random behaviour must remain reproducible from a seed.
 - Firms are distinct economic actors. People do not create income without a paying counterparty.
-- Consequences such as hunger, declining health, arrears, eviction, unemployment, and business failure must remain possible.
+- Consequences such as hunger, declining health, arrears, eviction, unemployment, business failure, and death must remain possible.
 
 ## Working conventions
 
