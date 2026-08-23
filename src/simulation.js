@@ -606,7 +606,10 @@ export class TownSimulation {
       const pursuesDiscretionaryPurchase = this.random() < this.policy.discretionaryDemand / 100;
       if (pursuesDiscretionaryPurchase && person.scarcityError && person.stress > 0.65 && café && this.buy(person, café, 1, "short-term comfort")) {
         person.stress = clamp(person.stress - 0.035);
-        this.note(person, "stress relief spending reduced thin reserves", "bad");
+        const insecureCircumstances = [person.employer < 0 ? "unemployed" : "", !person.housed ? "unhoused" : ""].filter(Boolean).join(" and ");
+        this.note(person, insecureCircumstances
+          ? `short-term comfort spending while ${insecureCircumstances} reduced thin reserves`
+          : "stress relief spending reduced thin reserves", "bad");
       } else if (pursuesDiscretionaryPurchase && person.focus === "belonging" && café && person.cash > café.price + 7 && this.buy(person, café, 1, "social visit")) {
         person.socialToday = true;
       } else if (pursuesDiscretionaryPurchase && ["esteem", "growth"].includes(person.focus) && makers && person.cash > makers.price + 10 && this.buy(person, makers, 1, "learning tools")) {

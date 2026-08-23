@@ -160,7 +160,7 @@ An unhoused person owes no recurring rent and does not accumulate arrears. Rehou
 
 The current focus is reassessed before choosing an activity. The discretionary-demand policy is the probability that an otherwise eligible optional purchase proceeds: 0% suppresses café and goods purchases, while 100% permits every eligible purchase. It does not affect food or housing.
 
-- A highly stressed person experiencing a scarcity error may buy short-term comfort at the café. This immediately reduces stress by 0.035 but also lowers cash reserves.
+- A highly stressed person experiencing a scarcity error may buy short-term comfort at the café. This immediately reduces stress by 0.035 but also lowers cash reserves. Employment and housing status do not block an affordable purchase: an unemployed or unhoused citizen with cash retains the same bounded agency, and the resulting life event names those circumstances.
 - A person focused on belonging may buy a social visit if they retain more than seven cash after its price.
 - A person focused on esteem or growth may buy learning tools if they retain more than ten cash after the price. This increases skill by 0.02 and growth by 0.04.
 

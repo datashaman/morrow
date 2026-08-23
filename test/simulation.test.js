@@ -501,6 +501,35 @@ test("discretionary demand controls otherwise eligible optional purchases", () =
   assert.match(encouraged.ledger[0].text, /short-term comfort to Common Café/);
 });
 
+test("an unemployed and unhoused citizen with cash can choose short-term comfort spending", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const formerEmployer = town.firms[person.employer];
+  const café = town.firms.find((firm) => firm.name === "Common Café");
+  town.people.filter((other) => other !== person).forEach((other) => { other.alive = false; });
+  formerEmployer.employees = formerEmployer.employees.filter((id) => id !== person.id);
+  person.employer = -1;
+  person.housed = false;
+  person.cash = 20;
+  person.stress = 0.8;
+  person.scarcityError = true;
+  person.ledger = [];
+  person.events = [];
+  town.setPolicy("discretionaryDemand", 100);
+  const caféCashBefore = café.cash;
+  const totalBefore = town.totalMoney();
+
+  town.personalPhase();
+
+  assert.equal(person.cash, 17.8);
+  assert.equal(café.cash, caféCashBefore + 2.2);
+  assert.equal(person.employer, -1);
+  assert.equal(person.housed, false);
+  assert.equal(person.ledger[0].text, "short-term comfort to Common Café");
+  assert.equal(person.events[0].text, "short-term comfort spending while unemployed and unhoused reduced thin reserves");
+  assert.equal(town.totalMoney(), totalBefore);
+});
+
 test("eviction is recorded once and leaves no rent arrears while unhoused", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];

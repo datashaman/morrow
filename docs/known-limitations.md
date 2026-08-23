@@ -64,6 +64,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Stress is a single scalar and is updated twice during settlement, which makes it converge quickly toward pressure.
 - Any hunger applies the same stress contribution regardless of duration.
 - Scarcity errors are generic and probabilistic; they should not be interpreted as a clinical claim about people in poverty.
+- Short-term comfort spending can occur during unemployment or homelessness, but this is a gameplay hypothesis rather than a calibrated claim about how people experiencing hardship behave.
 - The Maslow-inspired hierarchy uses hard thresholds and weighted sums. It is a gameplay heuristic, not validated psychology.
 - Current focus selects one need category but does not plan across days or learn from outcomes.
 
