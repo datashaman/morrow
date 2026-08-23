@@ -11,6 +11,11 @@ export const RENT_INTERVAL_DAYS = 7;
 export const FOOD_HEALTH_RECOVERY = 0.006;
 export const FOOD_QUALITY_DECAY_PER_DAY = 0.12;
 export const MIN_FOOD_QUALITY = 0.2;
+export const INITIAL_FRIENDSHIP_STRENGTH = 0.6;
+export const FRIENDSHIP_CONTACT_GAIN = 0.18;
+export const FRIENDSHIP_DECAY_GRACE_DAYS = 5;
+export const FRIENDSHIP_DAILY_DECAY = 0.015;
+export const FRIENDSHIP_END_THRESHOLD = 0.2;
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",

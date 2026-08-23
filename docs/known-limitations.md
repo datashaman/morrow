@@ -4,13 +4,13 @@ These items distinguish intentional simplifications from completed realism. A fu
 
 ## Highest-priority gaps
 
-### Relationships only grow
+### Relationship support remains narrow
 
-People can form friendships at the café, but the repository version does not implement friendship decay, conflict, maintenance costs, practical support, or relationship quality. This can recreate the earlier problem in which everyone appears to keep making friends without meaningful loss or consequence.
+Friendships gain strength through café contact and decay after periods without contact, but the model does not implement conflict, non-commercial contact, maintenance costs, or practical support. Friendship affects belonging and stress only; friends cannot yet share food or housing, lend money, provide care, or refer one another for work.
 
 ### Stress recovery is narrow
 
-Stress falls through financial runway, stable employment, food, housing, recent contact, and a small immediate comfort purchase. There is no direct recovery from rest, sleep, health care, resolving arrears, predictable schedules, time safely housed, supportive relationships, autonomy, or treatment.
+Stress falls through financial runway, stable employment, food, housing, friendship strength, recent contact, and a small immediate comfort purchase. There is no direct recovery from rest, sleep, health care, resolving arrears, predictable schedules, time safely housed, autonomy, or treatment.
 
 ### No saved or shareable run
 
@@ -48,7 +48,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 - People are isolated individuals rather than households or families.
 - There is no age, disability, gender, caregiving, migration, birth, or demographic replacement.
-- Friendships are symmetric, binary, and capped by a fixed capacity.
+- Friendships are symmetric, strength-weighted, and capped by a fixed capacity.
 - Social contact occurs only through paid café visits.
 - Friends do not lend money, share food or housing, refer one another for jobs, transmit stress, or provide care.
 - There are no institutions beyond firms and the treasury.
@@ -92,6 +92,6 @@ No parameter has been calibrated against real data. There are no sensitivity ana
 - Should the current daily-work/weekly-rent cadence gain weekends, months, or other explicit calendar structure?
 - Should people belong to households that share income, food, and housing?
 - What mechanisms should allow recovery from chronic stress and homelessness?
-- Should friendship support be economic, emotional, or both?
+- Should friendship support expand beyond the current emotional effect into economic or practical help?
 - Should the model prioritize interpretability or richer behavioural complexity when those goals conflict?
 - Which outputs would make policy comparisons credible without encouraging overinterpretation?

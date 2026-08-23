@@ -212,7 +212,7 @@ test("secure essentials and recent social contact lower underlying stress pressu
   person.cash = 0.5;
   person.housed = false;
   person.hungryDays = 2;
-  person.friends = [];
+  person.relationships = {};
   const precarious = town.stressPressure(person);
 
   person.employer = 0;
@@ -220,12 +220,68 @@ test("secure essentials and recent social contact lower underlying stress pressu
   person.cash = town.essentialCost() * 12;
   person.housed = true;
   person.hungryDays = 0;
-  person.friends = [1];
+  const friend = town.people[1];
+  person.relationships = {};
+  friend.relationships = {};
+  town.formFriendship(person, friend, 1, town.day);
   person.lastSocialDay = town.day;
   const secure = town.stressPressure(person);
 
   assert.ok(secure < precarious);
   assert.equal(secure, 0);
+});
+
+test("social contact strengthens a friendship symmetrically", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const a = town.people[0];
+  const b = town.people[1];
+  a.relationships = {};
+  b.relationships = {};
+  town.formFriendship(a, b, 0.6, 0);
+  town.day = 4;
+
+  town.recordSocialContact(a, b);
+
+  assert.equal(a.relationships[b.id].strength, 0.78);
+  assert.deepEqual(a.relationships[b.id], b.relationships[a.id]);
+  assert.equal(a.relationships[b.id].lastContactDay, 4);
+});
+
+test("an unmaintained friendship decays and ends symmetrically", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const a = town.people[0];
+  const b = town.people[1];
+  a.relationships = {};
+  b.relationships = {};
+  a.events = [];
+  b.events = [];
+  town.formFriendship(a, b, 0.21, 0);
+  town.day = 6;
+
+  town.decayRelationships();
+
+  assert.equal(a.relationships[b.id], undefined);
+  assert.equal(b.relationships[a.id], undefined);
+  assert.match(a.events[0].text, /friendship with Jonah faded/);
+  assert.match(b.events[0].text, /friendship with Amina faded/);
+});
+
+test("stronger friendships provide more belonging and less social pressure", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const friend = town.people[1];
+  person.relationships = {};
+  friend.relationships = {};
+  person.lastSocialDay = town.day;
+  town.formFriendship(person, friend, 0.3, town.day);
+  const weakerBelonging = town.assessNeeds(person).belonging;
+  const weakerPressure = town.stressPressure(person);
+
+  person.relationships[friend.id].strength = 0.9;
+  friend.relationships[person.id].strength = 0.9;
+
+  assert.ok(town.assessNeeds(person).belonging > weakerBelonging);
+  assert.ok(town.stressPressure(person) < weakerPressure);
 });
 
 test("person state excludes inactive placeholders and retains an explicit esteem baseline", () => {

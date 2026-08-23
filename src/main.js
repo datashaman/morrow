@@ -128,6 +128,8 @@ function updateInterface() {
   const foodAge = person.lastFoodAge === 0 ? "fresh" : `${person.lastFoodAge} day${person.lastFoodAge === 1 ? "" : "s"} stored`;
   const foodQuality = person.lastFoodQuality === null ? "no meal yet" : `last meal ${percent(person.lastFoodQuality)} quality; ${foodAge}`;
   const pantry = `${person.foodStock.length} meal${person.foodStock.length === 1 ? "" : "s"} stored`;
+  const relationships = simulation.relationshipStats(person);
+  const relationshipSummary = relationships.count ? `${relationships.count} friendship${relationships.count === 1 ? "" : "s"}; strongest ${percent(relationships.strongest)}` : "no active friendships";
   const rentTiming = simulation.daysUntilRent();
   const rentSchedule = rentTiming === 0 ? "rent due today" : `rent due in ${rentTiming} day${rentTiming === 1 ? "" : "s"}`;
   const provider = person.housed
@@ -148,7 +150,7 @@ function updateInterface() {
   elements["population-detail"].textContent = `${state.alive} alive · ${state.dead} dead · ${state.totalCitizens} total`;
   elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
   elements["person-summary"].textContent = person.alive
-    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider}`
+    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
     : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · final cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
   elements.needs.hidden = !person.alive;
 

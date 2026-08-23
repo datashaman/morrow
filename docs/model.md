@@ -24,7 +24,7 @@ There are 40 named people. Each person carries:
 - Economic state: cash, employer, seller references, food reserve, housing status, rent arrears, and transaction ledger
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
-- Social state: friends, social capacity, and last social contact day
+- Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
 - Personal differences: randomized starting values and a persistent esteem baseline
 - Narrative state: recent life events
 - Display state: home and current map positions
@@ -76,7 +76,7 @@ When a person dies, their final cash remains on their ledger. It is still inside
 
 ## Initial social and employment network
 
-The model attempts 52 random friendship links. A link is mutual, cannot duplicate an existing link, and cannot exceed either person’s social capacity. Because rejected attempts are not retried, the final number may be lower than 52.
+The model attempts 52 random friendship links. A link is mutual, begins at strength 0.60, cannot duplicate an existing link, and cannot exceed either person's social capacity. Because rejected attempts are not retried, the final number may be lower than 52.
 
 Firms receive their configured starting staff. Candidates are chosen from unemployed people in descending skill order. A person can have only one employer.
 
@@ -150,7 +150,9 @@ The current focus is reassessed before choosing an activity. The discretionary-d
 - A person focused on belonging may buy a social visit if they retain more than seven cash after its price.
 - A person focused on esteem or growth may buy learning tools if they retain more than ten cash after the price. This increases skill by 0.02 and growth by 0.04.
 
-Social visitors are shuffled and paired. The pair’s contact dates are refreshed. If they are not already friends and both have capacity, a mutual friendship is created.
+Social visitors are shuffled and paired. Contact refreshes the pair's contact date and increases an existing friendship's strength by 0.18, capped at 1. If they are not already friends and both have capacity, a mutual friendship begins at strength 0.60.
+
+After five days without contact, friendship strength declines by 0.015 per day. A friendship below 0.20 ends symmetrically and both people receive a life event. Friendship strength affects belonging and the social-isolation component of stress; friendships do not yet transfer money, food, housing, care, or job referrals. These decay values are gameplay hypotheses selected to allow visible turnover without erasing the initial network immediately.
 
 ### 6. Settlement
 
@@ -218,7 +220,7 @@ Stress pressure is the bounded sum of:
 | Being unhoused | 0.17 |
 | Isolation or stale social contact | 0.07 |
 
-Runway pressure falls linearly to zero at twelve days. Firm risk is maximal when unemployed and rises with employer trouble. Social pressure is maximal without friends; with friends it begins rising after three days without contact and reaches its maximum ten days later.
+Runway pressure falls linearly to zero at twelve days. Firm risk is maximal when unemployed and rises with employer trouble. Social pressure is maximal without friends. With friends, it combines the quality gap of the strongest friendship with contact staleness, which begins rising after three days without contact and reaches its maximum ten days later.
 
 Each update moves stress 30% toward underlying pressure, retains 70% of existing stress, and adds random noise from −0.0125 to +0.0125.
 
@@ -230,7 +232,7 @@ Needs are scores from zero to one. The hierarchy is inspired by Maslow but is no
 
 - **Physiological:** 52% health and 48% fed status.
 - **Safety:** housing, employment, employer stability, and up to twelve days of runway.
-- **Belonging:** a baseline, friendship capacity filled, and recent contact.
+- **Belonging:** a baseline, capacity-weighted total friendship strength, and recent contact.
 - **Esteem:** a common baseline, skill, employment, ownership, and a randomized personal esteem baseline from 0.05 to 0.17.
 - **Growth:** the person’s accumulated growth state.
 

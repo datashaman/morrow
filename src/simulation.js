@@ -1,8 +1,13 @@
 import {
   DEFAULT_POLICY,
   FIRMS,
+  FRIENDSHIP_CONTACT_GAIN,
+  FRIENDSHIP_DAILY_DECAY,
+  FRIENDSHIP_DECAY_GRACE_DAYS,
+  FRIENDSHIP_END_THRESHOLD,
   FOOD_HEALTH_RECOVERY,
   FOOD_QUALITY_DECAY_PER_DAY,
+  INITIAL_FRIENDSHIP_STRENGTH,
   MIN_FOOD_QUALITY,
   NAMES,
   PHASES,
@@ -60,7 +65,7 @@ export class TownSimulation {
         skill: 0.25 + this.random() * 0.65,
         reliability: 0.55 + this.random() * 0.43,
         employer: -1,
-        friends: [],
+        relationships: {},
         socialCapacity: 3 + Math.floor(this.random() * 4),
         lastSocialDay: 0,
         hungryDays: 0,
@@ -93,9 +98,8 @@ export class TownSimulation {
     for (let i = 0; i < 52; i += 1) {
       const a = this.random.pick(this.people);
       const b = this.random.pick(this.people);
-      if (a !== b && !a.friends.includes(b.id) && a.friends.length < a.socialCapacity && b.friends.length < b.socialCapacity) {
-        a.friends.push(b.id);
-        b.friends.push(a.id);
+      if (a !== b && !a.relationships[b.id] && this.friendIds(a).length < a.socialCapacity && this.friendIds(b).length < b.socialCapacity) {
+        this.formFriendship(a, b, INITIAL_FRIENDSHIP_STRENGTH, 0);
       }
     }
     this.firms.forEach((firm) => this.hire(firm, this.people[firm.owner], true));
@@ -177,10 +181,65 @@ export class TownSimulation {
     return person.cash / this.essentialCost();
   }
 
+  friendIds(person) {
+    return Object.keys(person.relationships).map(Number);
+  }
+
+  relationshipStats(person) {
+    const relationships = Object.values(person.relationships);
+    return {
+      count: relationships.length,
+      totalStrength: relationships.reduce((sum, relationship) => sum + relationship.strength, 0),
+      strongest: relationships.reduce((strongest, relationship) => Math.max(strongest, relationship.strength), 0),
+    };
+  }
+
+  formFriendship(a, b, strength = INITIAL_FRIENDSHIP_STRENGTH, contactDay = this.day) {
+    if (a === b || !a.alive || !b.alive || a.relationships[b.id] || this.friendIds(a).length >= a.socialCapacity || this.friendIds(b).length >= b.socialCapacity) return false;
+    const relationship = { strength: clamp(strength), lastContactDay: contactDay, lastDecayDay: contactDay };
+    a.relationships[b.id] = { ...relationship };
+    b.relationships[a.id] = { ...relationship };
+    return true;
+  }
+
+  recordSocialContact(a, b) {
+    a.lastSocialDay = b.lastSocialDay = this.day;
+    const relationship = a.relationships[b.id];
+    if (!relationship) return this.formFriendship(a, b);
+    const strength = clamp(relationship.strength + FRIENDSHIP_CONTACT_GAIN);
+    a.relationships[b.id] = { strength, lastContactDay: this.day, lastDecayDay: this.day };
+    b.relationships[a.id] = { strength, lastContactDay: this.day, lastDecayDay: this.day };
+    return true;
+  }
+
+  decayRelationships() {
+    this.people.forEach((person) => {
+      this.friendIds(person).filter((friendId) => friendId > person.id).forEach((friendId) => {
+        const friend = this.people[friendId];
+        const relationship = person.relationships[friendId];
+        const decayStart = Math.max(relationship.lastDecayDay, relationship.lastContactDay + FRIENDSHIP_DECAY_GRACE_DAYS);
+        const elapsed = Math.max(0, this.day - decayStart);
+        if (!elapsed) return;
+        const strength = clamp(relationship.strength - elapsed * FRIENDSHIP_DAILY_DECAY);
+        if (strength < FRIENDSHIP_END_THRESHOLD) {
+          delete person.relationships[friendId];
+          delete friend.relationships[person.id];
+          this.note(person, `friendship with ${friend.name} faded after prolonged distance`, "bad");
+          this.note(friend, `friendship with ${person.name} faded after prolonged distance`, "bad");
+          return;
+        }
+        person.relationships[friendId] = { ...relationship, strength, lastDecayDay: this.day };
+        friend.relationships[person.id] = { ...relationship, strength, lastDecayDay: this.day };
+      });
+    });
+  }
+
   stressPressure(person) {
     const runwayPressure = 1 - clamp(this.runwayDays(person) / 12);
     const firmRisk = person.employer >= 0 ? clamp((this.firms[person.employer].trouble || 0) / 4) : 1;
-    const isolation = person.friends.length ? clamp((this.day - person.lastSocialDay - 3) / 10) : 1;
+    const relationships = this.relationshipStats(person);
+    const contactStaleness = clamp((this.day - person.lastSocialDay - 3) / 10);
+    const isolation = relationships.count ? clamp((1 - relationships.strongest) * 0.35 + contactStaleness * 0.65) : 1;
     return clamp(
       runwayPressure * 0.42
       + firmRisk * 0.16
@@ -201,8 +260,9 @@ export class TownSimulation {
     const physiological = clamp(person.health * 0.52 + fed * 0.48);
     const jobSecurity = person.employer >= 0 ? 1 - clamp((this.firms[person.employer].trouble || 0) / 4) : 0;
     const safety = clamp((person.housed ? 0.23 : 0) + (person.employer >= 0 ? 0.18 : 0) + jobSecurity * 0.15 + clamp(this.runwayDays(person) / 12) * 0.44);
+    const relationships = this.relationshipStats(person);
     const recentContact = this.day - person.lastSocialDay <= 3 ? 0.2 : 0;
-    const belonging = clamp(0.12 + Math.min(1, person.friends.length / Math.max(3, person.socialCapacity)) * 0.68 + recentContact);
+    const belonging = clamp(0.12 + Math.min(1, relationships.totalStrength / Math.max(3, person.socialCapacity)) * 0.68 + recentContact);
     const esteem = clamp(0.1 + person.skill * 0.32 + (person.employer >= 0 ? 0.18 : 0) + (ownsFirm ? 0.18 : 0) + person.esteemBaseline);
     const growth = clamp(person.growth);
     person.needs = { physiological, safety, belonging, esteem, growth };
@@ -232,11 +292,11 @@ export class TownSimulation {
       firm.employees = firm.employees.filter((id) => id !== person.id);
       person.employer = -1;
     }
-    person.friends.forEach((friendId) => {
+    this.friendIds(person).forEach((friendId) => {
       const friend = this.people[friendId];
-      friend.friends = friend.friends.filter((id) => id !== person.id);
+      delete friend.relationships[person.id];
     });
-    person.friends = [];
+    person.relationships = {};
     person.alive = false;
     person.deathDay = this.day;
     person.attended = false;
@@ -419,7 +479,6 @@ export class TownSimulation {
         this.note(person, "stress relief spending reduced thin reserves", "bad");
       } else if (pursuesDiscretionaryPurchase && person.focus === "belonging" && café && person.cash > café.price + 7 && this.buy(person, café, 1, "social visit")) {
         person.socialToday = true;
-        person.lastSocialDay = this.day;
       } else if (pursuesDiscretionaryPurchase && ["esteem", "growth"].includes(person.focus) && makers && person.cash > makers.price + 10 && this.buy(person, makers, 1, "learning tools")) {
         person.skill = clamp(person.skill + 0.02);
         person.growth = clamp(person.growth + 0.04);
@@ -429,10 +488,8 @@ export class TownSimulation {
     for (let index = 0; index + 1 < social.length; index += 2) {
       const a = social[index];
       const b = social[index + 1];
-      a.lastSocialDay = b.lastSocialDay = this.day;
-      if (!a.friends.includes(b.id) && a.friends.length < a.socialCapacity && b.friends.length < b.socialCapacity) {
-        a.friends.push(b.id);
-        b.friends.push(a.id);
+      const existingFriendship = Boolean(a.relationships[b.id]);
+      if (this.recordSocialContact(a, b) && !existingFriendship) {
         this.note(a, `a café encounter became friendship with ${b.name}`, "good");
         this.note(b, `a café encounter became friendship with ${a.name}`, "good");
       }
@@ -452,6 +509,7 @@ export class TownSimulation {
     });
 
     this.firms.forEach((firm) => this.settleFirm(firm));
+    this.decayRelationships();
     this.people.forEach((person) => {
       if (!person.alive) return;
       this.updateStress(person);
@@ -544,6 +602,13 @@ export class TownSimulation {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
+    this.people.forEach((person) => {
+      this.friendIds(person).forEach((friendId) => {
+        const reciprocal = this.people[friendId].relationships[person.id];
+        const relationship = person.relationships[friendId];
+        if (!reciprocal || reciprocal.strength !== relationship.strength || reciprocal.lastContactDay !== relationship.lastContactDay) throw new Error("Relationships must remain reciprocal");
+      });
+    });
     if (Math.abs(this.totalMoney() - this.initialMoney) > 0.1) throw new Error("Money escaped the closed economy");
   }
 
