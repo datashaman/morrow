@@ -127,12 +127,12 @@ HomeWorks is the only current housing provider.
 - An unhoused person needs three rents, 14.4, to secure housing again. This represents a deposit plus rent.
 - Both are exact payments; insufficient cash causes no transfer.
 - A payable housing transaction can still fail when HomeWorks has exhausted its attending workers’ transaction capacity.
-- A housed person who misses three rents is evicted.
+- A housed person who misses three rents is evicted once; eviction clears the missed-rent counter because post-eviction debt is not modeled.
 - A successful rent resets arrears to zero.
 
 A housed person under scarcity pressure may defer rent despite being able to pay. This requires stress above 0.60, runway below five days, and a 0.38 random result after the scarcity-error flag has been set.
 
-An unhoused person does not accumulate additional arrears while unable to afford rehousing.
+An unhoused person owes no recurring rent and does not accumulate arrears. Rehousing still requires the separate deposit-and-rent payment described above.
 
 ### 5. Personal time
 

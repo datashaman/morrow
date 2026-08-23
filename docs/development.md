@@ -31,7 +31,7 @@ npm test
 npm run build
 ```
 
-The current baseline is twelve passing tests and a successful Vite build.
+The current baseline is thirteen passing tests and a successful Vite build.
 
 ## Testing strategy
 
@@ -43,6 +43,7 @@ Current coverage protects:
 - rejection of unaffordable exact transfers
 - Sizwe’s specific inability to pay 14.4 with 0.5 cash
 - before/after ledger balances for a funded rehousing payment
+- one-time eviction events with no arrears while unhoused
 - lower stress pressure under secure conditions
 - attending-worker transaction limits and turned-away demand
 - economically supported vacancies, constrained expansion, and eventual hiring

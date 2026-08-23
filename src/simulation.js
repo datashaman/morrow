@@ -297,6 +297,7 @@ export class TownSimulation {
     const housing = this.firms.find((firm) => firm.active && firm.sector === "housing");
     if (!housing) return;
     this.people.forEach((person) => {
+      if (!person.housed) person.rentArrears = 0;
       const due = roundMoney(person.housed ? housing.price : housing.price * 3);
       const avoidance = person.housed && person.scarcityError && person.stress > 0.6 && this.runwayDays(person) < 5 && this.random() < 0.38;
       if (avoidance) {
@@ -320,8 +321,9 @@ export class TownSimulation {
         }
         if (person.housed) person.rentArrears += 1;
       }
-      if (person.rentArrears >= 3) {
+      if (person.housed && person.rentArrears >= 3) {
         person.housed = false;
+        person.rentArrears = 0;
         this.note(person, "three missed rents caused eviction", "bad");
       }
     });

@@ -62,6 +62,22 @@ test("a funded rent payment records auditable before and after balances", () => 
   });
 });
 
+test("eviction is recorded once and leaves no rent arrears while unhoused", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  person.cash = 0;
+  person.housed = true;
+  person.rentArrears = 2;
+  person.events = [];
+
+  town.housingPhase();
+  town.housingPhase();
+
+  assert.equal(person.housed, false);
+  assert.equal(person.rentArrears, 0);
+  assert.equal(person.events.filter((event) => event.text === "three missed rents caused eviction").length, 1);
+});
+
 test("secure essentials and recent social contact lower underlying stress pressure", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];
