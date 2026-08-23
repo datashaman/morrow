@@ -2,7 +2,7 @@
 
 ## What this is
 
-Closed Loop Town is an exploratory, individual-level social and economic simulation. Its purpose is to make emergent outcomes observable through the lives of named people, not merely through aggregate charts.
+Morrow is an exploratory, individual-level social and economic simulation. Its purpose is to make emergent outcomes observable through the lives of named people, not merely through aggregate charts.
 
 The user wants to watch people make constrained decisions inside an economy where money, goods, jobs, housing, health, stress, relationships, and needs affect one another. The simulation should produce understandable stories such as unemployment leading to low reserves, stress-related mistakes, missed meals, deteriorating health, missed work, eviction, and difficulty recovering.
 
@@ -39,14 +39,14 @@ The visualization became large enough that it was migrated into this repository.
 
 - A Vite-based browser app runs the simulation.
 - The simulation core is independent of the DOM and can be exercised from tests.
-- Six deterministic regression tests pass.
+- Twelve deterministic regression tests pass.
 - The production build passes.
-- The repository is initialized but has no commits.
+- The repository has an initial commit.
 - Historical single-file previews remain in `work/` and are ignored by Git.
 
-## Naming status
+## Product name
 
-The workspace directory is `i-wan`, an automatic name inherited from the initial prompt. “Morrow” was proposed as a product name, but the user has not explicitly confirmed a rename. Do not rename the folder, package, UI, or documentation without confirming that choice.
+The confirmed product and repository name is “Morrow.” The repository lives at `/Users/marlinf/Projects/datashaman/morrow`.
 
 ## Where to continue
 

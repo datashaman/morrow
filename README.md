@@ -1,4 +1,4 @@
-# Closed Loop Town
+# Morrow
 
 An individual-level social and economic simulation. People work for firms, receive wages, buy food and services, pay rent, form relationships, experience stress and health changes, and sometimes become hungry or unhoused. Every cash transfer stays within the town economy.
 

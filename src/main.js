@@ -8,7 +8,7 @@ app.innerHTML = `
     <header class="town-header">
       <div>
         <p class="eyebrow">Individual lives in a closed economy</p>
-        <h1>Closed Loop Town</h1>
+        <h1>Morrow</h1>
       </div>
       <div class="clock" id="clock"></div>
     </header>
@@ -120,7 +120,7 @@ function updateInterface() {
   elements.money.textContent = `${(state.totalMoney / state.initialMoney * 100).toFixed(2)}%`;
   elements["money-detail"].textContent = `${money(state.totalMoney)} of ${money(state.initialMoney)} remains on ledgers`;
   elements.employment.textContent = `${Math.round(state.employed / simulation.people.length * 100)}%`;
-  elements["employment-detail"].textContent = `${state.employed} employed · ${simulation.people.length - state.employed} seeking`;
+  elements["employment-detail"].textContent = `${state.employed} employed · ${simulation.people.length - state.employed} seeking · ${state.positionsAvailable} position${state.positionsAvailable === 1 ? "" : "s"} available`;
   elements.hardship.textContent = state.hungry + state.unhoused;
   elements["hardship-detail"].textContent = `${state.hungry} without food · ${state.unhoused} without housing`;
   elements.focus.textContent = `${needNames[person.focus]} focus`;

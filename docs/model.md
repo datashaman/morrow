@@ -35,15 +35,23 @@ Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.
 
 Five firms are configured in `src/config.js`:
 
-| Firm | Sector | Price | Base wage | Starting staff | Maximum staff |
-|---|---|---:|---:|---:|---:|
-| Harvest Foods | Food | 2.6 | 6.2 | 6 | 9 |
-| Green Basket | Food | 2.8 | 6.5 | 6 | 9 |
-| HomeWorks | Housing | 4.8 | 7.2 | 4 | 6 |
-| Makers Guild | Goods | 8.5 | 7.8 | 4 | 6 |
-| Common Café | Service | 4.4 | 6.4 | 4 | 6 |
+| Firm | Sector | Price | Base wage | Transactions per worker | Starting staff | Maximum staff |
+|---|---|---:|---:|---:|---:|---:|
+| Harvest Foods | Food | 2.6 | 6.2 | 4 | 6 | 9 |
+| Green Basket | Food | 2.8 | 6.5 | 4 | 6 | 9 |
+| HomeWorks | Housing | 4.8 | 7.2 | 10 | 4 | 6 |
+| Makers Guild | Goods | 8.5 | 7.8 | 3 | 4 | 6 |
+| Common Café | Service | 4.4 | 6.4 | 4 | 4 | 6 |
 
 Every firm begins with 150 cash. Firms track employees, inventory, sales, units sold, demand, vacancies, staffing targets, trouble, and operational status. The first five people are assigned as owners, one per firm; ownership and employment are separate concepts.
+
+### Transaction capacity
+
+An active firm can complete a limited number of transactions each day:
+
+`attending workers × configured transactions per worker`
+
+Only a customer who can cover the exact price and reaches an active firm with the required inventory, where applicable, creates attempted demand. A transaction beyond the firm’s daily capacity is recorded as turned away, moves no cash or inventory, and creates a life event for that customer. Completed and turned-away transactions both contribute to attempted demand, while only completed transactions consume inventory and produce revenue. Daily transaction counters reset during settlement.
 
 ### Treasury
 
@@ -109,7 +117,7 @@ A scarcity error can cause either:
 - choosing the more expensive affordable food seller, or
 - delaying food despite available cash when stress exceeds 0.62 and runway is below five days; this additional delay has a 0.32 probability.
 
-A successful purchase reduces `hungryDays` by one. If recovering from hunger, health rises by 0.004. Failure to buy food adds one hungry day and reduces health by 0.045.
+A shopper tries another affordable food firm when the preferred seller lacks transaction capacity. A successful purchase reduces `hungryDays` by one. If recovering from hunger, health rises by 0.004. Failure to buy food adds one hungry day and reduces health by 0.045.
 
 ### 4. Housing and bills
 
@@ -118,6 +126,7 @@ HomeWorks is the only current housing provider.
 - A housed person owes one rent: 4.8.
 - An unhoused person needs three rents, 14.4, to secure housing again. This represents a deposit plus rent.
 - Both are exact payments; insufficient cash causes no transfer.
+- A payable housing transaction can still fail when HomeWorks has exhausted its attending workers’ transaction capacity.
 - A housed person who misses three rents is evicted.
 - A successful rent resets arrears to zero.
 
@@ -151,9 +160,15 @@ People are sorted by hunger, housing status, and then cash. A person qualifies w
 
 Each firm updates its smoothed demand:
 
-`previous demand × 0.72 + units sold × 0.28`
+`previous demand × 0.72 + attempted transactions × 0.28`
 
-Demand, output per worker, wage, current staffing, cash reserves, and trouble determine whether the firm has a profitable vacancy. Vacancies must persist for two settlement phases before recruitment. Candidates are ranked by skill and reliability and must accept the offered wage relative to a skill-based reservation wage.
+Required staff is the bounded ceiling of smoothed demand divided by configured transactions per worker. The estimated revenue available to support one more worker is:
+
+`min(transactions per worker, demand above current capacity) × price`
+
+A firm approves at most one additional position per settlement when that marginal revenue is at least 108% of the wage, it holds at least six wages in cash, and it remains below maximum staff. Vacancies must persist for two settlement phases before recruitment. Candidates are ranked by skill and reliability and must accept the offered wage relative to a skill-based reservation wage.
+
+The Employment card reports positions available as approved vacancies across active firms: the sum of `targetStaff − current employees`, bounded at zero for each firm. Because `targetStaff` reflects demand, profitability, cash reserves, and current staffing, a layoff or closure does not automatically create an available position. Vacancies must still persist for two settlement phases before recruitment, and a candidate may decline or fail to accept the offered wage.
 
 Overstaffing or sustained cash trouble can produce layoffs after three settlement phases. A firm closes after cash falls below 0.5 while trouble exceeds five; all remaining workers lose their jobs.
 

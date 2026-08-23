@@ -85,6 +85,99 @@ test("secure essentials and recent social contact lower underlying stress pressu
   assert.equal(secure, 0);
 });
 
+test("attending staff cap the number of daily transactions", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms[0];
+  firm.transactionsPerWorker = 2;
+  firm.employees.forEach((id, index) => {
+    town.people[id].attended = index === 0;
+  });
+  const buyers = town.people.slice(-3);
+  buyers.forEach((person) => {
+    person.cash = 20;
+  });
+
+  assert.ok(town.buy(buyers[0], firm, 1, "food") > 0);
+  assert.ok(town.buy(buyers[1], firm, 1, "food") > 0);
+  assert.equal(town.buy(buyers[2], firm, 1, "food"), 0);
+  assert.equal(firm.transactionsToday, 2);
+  assert.equal(firm.attemptedTransactions, 3);
+  assert.equal(firm.turnedAwayTransactions, 1);
+  assert.match(buyers[2].events[0].text, /could not serve/);
+});
+
+test("payable excess demand creates an economically supported position", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.setPolicy("shockRisk", 0);
+  const firm = town.firms[0];
+  firm.demandEMA = firm.employees.length * firm.transactionsPerWorker;
+  firm.attemptedTransactions = firm.demandEMA + 10;
+
+  town.settleFirm(firm);
+
+  assert.equal(town.snapshot().positionsAvailable, 1);
+  assert.equal(firm.targetStaff, firm.employees.length + 1);
+  assert.equal(firm.vacancyAge, 1);
+});
+
+test("sustained excess demand eventually expands staffing", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.setPolicy("shockRisk", 0);
+  const firm = town.firms[0];
+  const startingStaff = firm.employees.length;
+  firm.demandEMA = startingStaff * firm.transactionsPerWorker;
+
+  for (let day = 0; day < 3; day += 1) {
+    firm.attemptedTransactions = firm.employees.length * firm.transactionsPerWorker + 10;
+    town.settleFirm(firm);
+  }
+
+  assert.equal(firm.employees.length, startingStaff + 1);
+});
+
+test("excess demand does not create a position without payroll reserves", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.setPolicy("shockRisk", 0);
+  const firm = town.firms[0];
+  const wage = Math.max(town.policy.minimumWage, firm.wage);
+  firm.cash = wage * 5;
+  firm.demandEMA = firm.employees.length * firm.transactionsPerWorker;
+  firm.attemptedTransactions = firm.demandEMA + 10;
+
+  town.settleFirm(firm);
+
+  assert.equal(firm.targetStaff, firm.employees.length);
+  assert.equal(town.snapshot().positionsAvailable, 0);
+});
+
+test("a weak-demand layoff does not create an available position", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.setPolicy("shockRisk", 0);
+  const firm = town.firms[0];
+  firm.demandEMA = 0;
+  firm.unitsSold = 0;
+  firm.overstaffedDays = 2;
+  const before = town.snapshot();
+
+  town.settleFirm(firm);
+
+  const after = town.snapshot();
+  assert.equal(after.employed, before.employed - 1);
+  assert.equal(after.positionsAvailable, before.positionsAvailable);
+});
+
+test("the snapshot reports positions approved by active firms", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.firms.forEach((firm) => {
+    firm.targetStaff = firm.employees.length;
+  });
+  town.firms[0].targetStaff += 2;
+  town.firms[1].targetStaff += 1;
+  town.firms[1].active = false;
+
+  assert.equal(town.snapshot().positionsAvailable, 2);
+});
+
 test("the same seed produces the same town", () => {
   const first = new TownSimulation({ seed: 2026 });
   const second = new TownSimulation({ seed: 2026 });

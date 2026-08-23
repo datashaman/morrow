@@ -27,6 +27,9 @@ export class TownSimulation {
       employees: [],
       sales: 0,
       unitsSold: 0,
+      transactionsToday: 0,
+      attemptedTransactions: 0,
+      turnedAwayTransactions: 0,
       active: true,
       trouble: 0,
       demandEMA: firm.demand,
@@ -196,9 +199,26 @@ export class TownSimulation {
     this.note(person, `${reason} at ${firm.name}`, "bad");
   }
 
+  transactionCapacity(firm) {
+    const attending = firm.employees.reduce((total, id) => total + (this.people[id].attended ? 1 : 0), 0);
+    return attending * firm.transactionsPerWorker;
+  }
+
+  requestTransaction(firm, person, purpose) {
+    firm.attemptedTransactions += 1;
+    if (firm.transactionsToday >= this.transactionCapacity(firm)) {
+      firm.turnedAwayTransactions += 1;
+      this.note(person, `${firm.name} could not serve the ${purpose} transaction`, "bad");
+      return false;
+    }
+    firm.transactionsToday += 1;
+    return true;
+  }
+
   buy(person, firm, units, purpose) {
     if (!firm?.active || firm.inventory < units) return 0;
     const cost = roundMoney(firm.price * units);
+    if (person.cash + 1e-9 < cost || !this.requestTransaction(firm, person, purpose)) return 0;
     const before = person.cash;
     const paid = this.transfer(person, firm, cost, { exact: true });
     if (paid !== cost) return 0;
@@ -258,8 +278,9 @@ export class TownSimulation {
       person.socialToday = false;
       const affordable = foodFirms.filter((firm) => person.cash >= firm.price && firm.inventory >= 1);
       const delayed = person.scarcityError && person.stress > 0.62 && this.runwayDays(person) < 5 && this.random() < 0.32;
-      const food = delayed ? null : (person.scarcityError && affordable.length > 1 ? affordable.at(-1) : affordable[0]);
-      if (food && this.buy(person, food, 1, "food")) {
+      const sellers = person.scarcityError && affordable.length > 1 ? [...affordable].reverse() : affordable;
+      const paid = delayed ? 0 : sellers.reduce((result, firm) => result || this.buy(person, firm, 1, "food"), 0);
+      if (paid) {
         const recovering = person.hungryDays > 0;
         person.hungryDays = Math.max(0, person.hungryDays - 1);
         if (recovering) person.health = clamp(person.health + 0.004);
@@ -283,7 +304,10 @@ export class TownSimulation {
         this.note(person, `stress-driven avoidance deferred rent to ${housing.name}`, "bad");
       } else {
         const before = person.cash;
-        const paid = this.transfer(person, housing, due, { exact: true });
+        const canPay = person.cash + 1e-9 >= due;
+        const paid = canPay && this.requestTransaction(housing, person, "housing payment")
+          ? this.transfer(person, housing, due, { exact: true })
+          : 0;
         if (paid === due) {
           housing.sales += paid;
           housing.unitsSold += 1;
@@ -365,10 +389,11 @@ export class TownSimulation {
   settleFirm(firm) {
     if (!firm.active) return;
     const wage = Math.max(this.policy.minimumWage, firm.wage);
-    firm.demandEMA = firm.demandEMA * 0.72 + firm.unitsSold * 0.28;
-    const outputPerWorker = firm.sector === "housing" ? 10 : Math.max(0.35, firm.productivity * 0.9);
-    const demandStaff = clamp(Math.ceil(firm.demandEMA / outputPerWorker), firm.sector === "housing" ? 2 : 1, firm.maxStaff);
-    const marginalRevenue = Math.min(outputPerWorker, Math.max(0, firm.demandEMA - firm.employees.length * outputPerWorker)) * firm.price;
+    firm.demandEMA = firm.demandEMA * 0.72 + firm.attemptedTransactions * 0.28;
+    const transactionsPerWorker = firm.transactionsPerWorker;
+    const demandStaff = clamp(Math.ceil(firm.demandEMA / transactionsPerWorker), firm.sector === "housing" ? 2 : 1, firm.maxStaff);
+    const unmetDemand = Math.max(0, firm.demandEMA - firm.employees.length * transactionsPerWorker);
+    const marginalRevenue = Math.min(transactionsPerWorker, unmetDemand) * firm.price;
     const profitableVacancy = marginalRevenue >= wage * 1.08 && firm.cash >= wage * 6 && firm.employees.length < firm.maxStaff;
     firm.targetStaff = profitableVacancy ? Math.min(demandStaff, firm.employees.length + 1) : Math.min(demandStaff, firm.employees.length);
     firm.trouble = firm.cash < wage * Math.max(1, firm.employees.length) * 0.7 ? firm.trouble + 1 : Math.max(0, firm.trouble - 1);
@@ -403,6 +428,9 @@ export class TownSimulation {
     }
     firm.sales = 0;
     firm.unitsSold = 0;
+    firm.transactionsToday = 0;
+    firm.attemptedTransactions = 0;
+    firm.turnedAwayTransactions = 0;
   }
 
   step() {
@@ -434,6 +462,9 @@ export class TownSimulation {
       totalMoney: this.totalMoney(),
       initialMoney: this.initialMoney,
       employed: this.people.filter((person) => person.employer >= 0).length,
+      positionsAvailable: this.firms
+        .filter((firm) => firm.active)
+        .reduce((total, firm) => total + Math.max(0, firm.targetStaff - firm.employees.length), 0),
       hungry: this.people.filter((person) => person.hungryDays > 0).length,
       unhoused: this.people.filter((person) => !person.housed).length,
     };

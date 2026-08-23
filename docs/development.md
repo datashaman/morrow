@@ -31,7 +31,7 @@ npm test
 npm run build
 ```
 
-The current baseline is six passing tests and a successful Vite build.
+The current baseline is twelve passing tests and a successful Vite build.
 
 ## Testing strategy
 
@@ -44,6 +44,8 @@ Current coverage protects:
 - Sizwe’s specific inability to pay 14.4 with 0.5 cash
 - before/after ledger balances for a funded rehousing payment
 - lower stress pressure under secure conditions
+- attending-worker transaction limits and turned-away demand
+- economically supported vacancies, constrained expansion, and eventual hiring
 - deterministic reproduction from a seed
 
 For a random or emergent bug, preserve the seed and reduce the reproduction to the smallest phase or helper possible. Prefer assertions on causal state and ledger entries over screenshots.
@@ -59,7 +61,7 @@ For a random or emergent bug, preserve the seed and reduce the reproduction to t
 
 ## Repository hygiene
 
-- The repository currently has no commits. Create an intentional initial commit before parallel agent work.
+- The repository has an initial commit and lives at `/Users/marlinf/Projects/datashaman/morrow`.
 - `work/` contains historical exported previews. It is ignored and should not be deleted unless the user requests it.
 - `dist/` and `node_modules/` are generated and ignored.
 - The lockfile is tracked to keep the toolchain reproducible.

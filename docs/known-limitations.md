@@ -31,7 +31,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - All money is inside one closed town. There is no external trade, remittance, investment, monetary creation, or destruction.
 - A “shock” moves firm cash to the treasury. It behaves more like a fine or emergency levy than a destructive loss.
 - Firms have no input costs beyond wages and taxes. Food and goods production consumes no raw materials, land, energy, maintenance, or capital.
-- Housing has no capacity, vacancy, construction, maintenance, quality, location, or operating inventory. HomeWorks can house everyone indefinitely.
+- Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely if it can process their payments.
 - Initially housed people receive housing without an initial payment or provider record.
 - Every person consumes at most one food unit per day regardless of body, work, or household.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
@@ -42,6 +42,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 ## Labour simplifications
 
 - Each person can have at most one employer and either attends the whole shift or misses it.
+- Each attending worker contributes a fixed sector-specific number of transactions regardless of skill, health, transaction complexity, or coworker coordination.
 - There are no occupations, schedules, hours, contracts, tenure, credentials, discrimination, commuting cost, care work, informal work, or self-employment.
 - Candidate ranking uses skill and reliability. The richer social referral effect from an earlier version is not present.
 - Reservation wage is based only on skill. It does not reflect housing, dependants, transport, benefits, risk, or alternatives.
@@ -92,7 +93,6 @@ No parameter has been calibrated against real data. There are no sensitivity ana
 
 ## Open design questions
 
-- Should “Morrow” become the confirmed product and repository name?
 - Should the economy remain strictly closed, or gain explicit external sectors?
 - Is a day the right unit, given that wages and rent currently occur every day?
 - Should rent be monthly and wages weekly or monthly, with an explicit calendar?

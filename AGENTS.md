@@ -30,4 +30,18 @@ Start with [CONTEXT.md](./CONTEXT.md), then use [docs/README.md](./docs/README.m
 
 ## Current repository state
 
-The repository has been initialized but has no commits yet. The working name “Morrow” was proposed in conversation but has not been applied; the code and UI still say “Closed Loop Town.”
+The confirmed product and repository name is “Morrow.” The repository lives at `/Users/marlinf/Projects/datashaman/morrow` and has an initial commit.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for `datashaman/morrow`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Use the standard five-label triage vocabulary. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Morrow is a single-context repository. See `docs/agents/domain.md`.
