@@ -98,6 +98,31 @@ test("replenishment cannot exceed a contract's daily quantity", () => {
   assert.equal(contract.shortfallToday, 0);
 });
 
+test("Makers Guild supplies operating stock without inflating saleable inventory", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const guild = town.firms.find((firm) => firm.name === "Makers Guild");
+  const homeWorks = town.firms.find((firm) => firm.name === "HomeWorks");
+  const contract = town.contracts.find((candidate) => candidate.supplier === "Makers Guild" && candidate.buyer === "HomeWorks");
+  town.contracts.filter((candidate) => candidate !== contract).forEach((candidate) => { candidate.active = false; });
+  homeWorks.operatingSupplies = 0;
+  const saleableInventoryBefore = homeWorks.inventory;
+  const buyerCashBefore = homeWorks.cash;
+  const supplierCashBefore = guild.cash;
+  const totalBefore = town.totalMoney();
+
+  town.procurementPhase();
+
+  assert.equal(contract.requestedToday, 1);
+  assert.equal(contract.deliveredToday, 1);
+  assert.equal(homeWorks.operatingSupplies, 1);
+  assert.equal(homeWorks.inventory, saleableInventoryBefore);
+  assert.equal(homeWorks.inputCosts, 5);
+  assert.equal(homeWorks.cash, buyerCashBefore - 5);
+  assert.equal(guild.cash, supplierCashBefore + 5);
+  assert.match(homeWorks.ledger[0].text, /1 kit from Makers Guild/);
+  assert.equal(town.totalMoney(), totalBefore);
+});
+
 test("a vital firm receives at most one finite treasury rescue", () => {
   const town = new TownSimulation({ seed: 42 });
   const farm = town.firms.find((firm) => firm.name === "Morrow Fields");

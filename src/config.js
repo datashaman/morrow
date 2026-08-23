@@ -13,7 +13,7 @@ export const PRODUCTS = {
   budgetFood: { name: "Everyday food", unit: "meal" },
   premiumFood: { name: "High-quality food", unit: "meal" },
   housing: { name: "Weekly housing", unit: "tenancy-week" },
-  learningGoods: { name: "Learning tools", unit: "item" },
+  learningGoods: { name: "Tools and repair kits", unit: "kit" },
   cafeService: { name: "Prepared café service", unit: "visit" },
 };
 
@@ -53,6 +53,11 @@ export const SUPPLY_CONTRACTS = [
   { supplier: "Morrow Fields", buyer: "Harvest Foods", product: "produce", output: "budgetFood", dailyQuantity: 22, unitPrice: 1.1 },
   { supplier: "Morrow Fields", buyer: "Green Basket", product: "produce", output: "premiumFood", dailyQuantity: 14, unitPrice: 1.25 },
   { supplier: "Morrow Fields", buyer: "Common Café", product: "produce", output: "cafeService", dailyQuantity: 3, unitPrice: 1.1 },
+  { supplier: "Makers Guild", buyer: "Harvest Foods", product: "learningGoods", output: "budgetFood", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
+  { supplier: "Makers Guild", buyer: "Green Basket", product: "learningGoods", output: "premiumFood", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
+  { supplier: "Makers Guild", buyer: "HomeWorks", product: "learningGoods", output: "housing", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
+  { supplier: "Makers Guild", buyer: "Common Café", product: "learningGoods", output: "cafeService", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
+  { supplier: "Makers Guild", buyer: "Morrow Fields", product: "learningGoods", output: "produce", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
 ];
 
 export const DEFAULT_POLICY = {

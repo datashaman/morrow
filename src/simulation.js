@@ -48,6 +48,7 @@ export class TownSimulation {
       employees: [],
       sales: 0,
       inputCosts: 0,
+      operatingSupplies: 1,
       unitsSold: 0,
       transactionsToday: 0,
       attemptedTransactions: 0,
@@ -186,7 +187,9 @@ export class TownSimulation {
     this.contracts.forEach((contract) => {
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
-      if (!supplier || !buyer || supplier.sells !== contract.product || buyer.input !== contract.product || buyer.sells !== contract.output) {
+      const validOperatingInput = contract.use === "operations" && buyer.sells === contract.output;
+      const validResaleInput = contract.use !== "operations" && buyer.input === contract.product && buyer.sells === contract.output;
+      if (!supplier || !buyer || supplier.sells !== contract.product || (!validOperatingInput && !validResaleInput)) {
         throw new Error(`Invalid supply contract ${contract.id}`);
       }
     });
@@ -459,7 +462,9 @@ export class TownSimulation {
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
       if (!contract.active || !supplier.active || !buyer.active) return;
-      contract.requestedToday = Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(contract.dailyQuantity * 2 - buyer.inventory)));
+      const buyerStock = contract.use === "operations" ? buyer.operatingSupplies : buyer.inventory;
+      const targetStock = contract.targetStock ?? contract.dailyQuantity * 2;
+      contract.requestedToday = Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(targetStock - buyerStock)));
       const available = Math.floor(supplier.inventory);
       const affordable = Math.floor((buyer.cash + 1e-9) / contract.unitPrice);
       const units = Math.min(contract.requestedToday, available, affordable);
@@ -470,12 +475,15 @@ export class TownSimulation {
         const paid = this.transfer(buyer, supplier, cost, { exact: true });
         if (paid === cost) {
           supplier.inventory -= units;
-          buyer.inventory += units;
+          if (contract.use === "operations") buyer.operatingSupplies += units;
+          else buyer.inventory += units;
           supplier.sales += paid;
           buyer.inputCosts += paid;
           contract.deliveredToday = units;
-          this.ledger(buyer, { direction: "out", amount: paid, text: `${units} ${PRODUCTS[contract.product].unit}s from ${supplier.name}`, before: buyerBefore });
-          this.ledger(supplier, { direction: "in", amount: paid, text: `${units} ${PRODUCTS[contract.product].unit}s to ${buyer.name}`, before: supplierBefore });
+          const unit = PRODUCTS[contract.product].unit;
+          const quantity = `${units} ${unit}${units === 1 ? "" : "s"}`;
+          this.ledger(buyer, { direction: "out", amount: paid, text: `${quantity} from ${supplier.name}`, before: buyerBefore });
+          this.ledger(supplier, { direction: "in", amount: paid, text: `${quantity} to ${buyer.name}`, before: supplierBefore });
         }
       }
       contract.shortfallToday = contract.requestedToday - contract.deliveredToday;

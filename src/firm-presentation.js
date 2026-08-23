@@ -11,5 +11,7 @@ export function describeContract(contract, products) {
   const requested = contract.requestedToday ?? 0;
   const delivered = contract.deliveredToday ?? 0;
   const state = contract.active ? "active" : "ended";
-  return `${contract.supplier} contract ${state} · ${delivered}/${requested} ${products[contract.product].unit}s delivered today at ${contract.unitPrice.toFixed(2)} each`;
+  const unit = products[contract.product].unit;
+  const displayedUnit = Math.max(requested, delivered) === 1 ? unit : `${unit}s`;
+  return `${contract.supplier} contract ${state} · ${delivered}/${requested} ${displayedUnit} delivered today at ${contract.unitPrice.toFixed(2)} each`;
 }

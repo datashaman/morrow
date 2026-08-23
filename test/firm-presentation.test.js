@@ -23,3 +23,18 @@ test("contract descriptions expose requested and delivered quantities", () => {
   assert.match(describeContract(contract, PRODUCTS), /Morrow Fields contract active/);
   assert.match(describeContract(contract, PRODUCTS), /22\/22 crates delivered today at 1.10 each/);
 });
+
+test("Makers Guild exposes its maintenance customers", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const guild = town.firms.find((firm) => firm.name === "Makers Guild");
+  const customerContracts = town.contracts.filter((contract) => contract.supplierId === guild.id);
+
+  assert.deepEqual(customerContracts.map((contract) => contract.buyer), [
+    "Harvest Foods",
+    "Green Basket",
+    "HomeWorks",
+    "Common Café",
+    "Morrow Fields",
+  ]);
+  assert.ok(customerContracts.every((contract) => contract.product === "learningGoods" && contract.use === "operations"));
+});
