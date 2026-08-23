@@ -11,8 +11,10 @@ import {
   MIN_FOOD_QUALITY,
   NAMES,
   PHASES,
+  PRODUCTS,
   RENT_INTERVAL_DAYS,
   STAFFING_REVENUE_BUFFER,
+  SUPPLY_CONTRACTS,
 } from "./config.js";
 import { createRandom } from "./random.js";
 
@@ -41,6 +43,7 @@ export class TownSimulation {
       owner: id,
       employees: [],
       sales: 0,
+      inputCosts: 0,
       unitsSold: 0,
       transactionsToday: 0,
       attemptedTransactions: 0,
@@ -51,7 +54,21 @@ export class TownSimulation {
       targetStaff: firm.initialStaff,
       vacancyAge: 0,
       overstaffedDays: 0,
+      activitySequence: 0,
+      ledger: [],
+      events: [],
     }));
+    this.contracts = SUPPLY_CONTRACTS.map((contract, id) => ({
+      ...contract,
+      id,
+      supplierId: this.firms.findIndex((firm) => firm.name === contract.supplier),
+      buyerId: this.firms.findIndex((firm) => firm.name === contract.buyer),
+      active: true,
+      requestedToday: 0,
+      deliveredToday: 0,
+      shortfallToday: 0,
+    }));
+    this.validateProductGraph();
     this.people = NAMES.map((name, id) => {
       const homeX = 0.68 + this.random() * 0.22;
       const homeY = 0.43 + this.random() * 0.18;
@@ -131,6 +148,23 @@ export class TownSimulation {
       + this.firms.reduce((sum, firm) => sum + firm.cash, 0)
       + this.government.cash,
     );
+  }
+
+  validateProductGraph() {
+    this.firms.forEach((firm) => {
+      if (!PRODUCTS[firm.sells]) throw new Error(`${firm.name} sells an unknown product`);
+      if (firm.input && !PRODUCTS[firm.input]) throw new Error(`${firm.name} uses an unknown input`);
+      if (firm.source && !this.firms.some((supplier) => supplier.name === firm.source && supplier.sells === firm.input)) {
+        throw new Error(`${firm.name} has no valid source for ${firm.input}`);
+      }
+    });
+    this.contracts.forEach((contract) => {
+      const supplier = this.firms[contract.supplierId];
+      const buyer = this.firms[contract.buyerId];
+      if (!supplier || !buyer || supplier.sells !== contract.product || buyer.input !== contract.product || buyer.sells !== contract.output) {
+        throw new Error(`Invalid supply contract ${contract.id}`);
+      }
+    });
   }
 
   note(person, text, kind = "neutral") {
@@ -382,11 +416,45 @@ export class TownSimulation {
       } else person.missedWork = Math.max(0, person.missedWork - 1);
     });
     this.firms.forEach((firm) => {
-      if (!firm.active || firm.sector === "housing") return;
+      if (!firm.active || firm.production !== "direct") return;
       firm.inventory += firm.employees.reduce((sum, id) => {
         const person = this.people[id];
         return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) : 0);
       }, 0);
+    });
+  }
+
+  procurementPhase() {
+    this.contracts.forEach((contract) => {
+      contract.deliveredToday = 0;
+      contract.shortfallToday = 0;
+      contract.requestedToday = 0;
+      const supplier = this.firms[contract.supplierId];
+      const buyer = this.firms[contract.buyerId];
+      if (!contract.active || !supplier.active || !buyer.active) return;
+      contract.requestedToday = Math.max(0, Math.ceil(contract.dailyQuantity * 2 - buyer.inventory));
+      const available = Math.floor(supplier.inventory);
+      const affordable = Math.floor((buyer.cash + 1e-9) / contract.unitPrice);
+      const units = Math.min(contract.requestedToday, available, affordable);
+      const cost = roundMoney(units * contract.unitPrice);
+      if (units > 0) {
+        const buyerBefore = buyer.cash;
+        const supplierBefore = supplier.cash;
+        const paid = this.transfer(buyer, supplier, cost, { exact: true });
+        if (paid === cost) {
+          supplier.inventory -= units;
+          buyer.inventory += units;
+          supplier.sales += paid;
+          buyer.inputCosts += paid;
+          contract.deliveredToday = units;
+          this.ledger(buyer, { direction: "out", amount: paid, text: `${units} ${PRODUCTS[contract.product].unit}s from ${supplier.name}`, before: buyerBefore });
+          this.ledger(supplier, { direction: "in", amount: paid, text: `${units} ${PRODUCTS[contract.product].unit}s to ${buyer.name}`, before: supplierBefore });
+        }
+      }
+      contract.shortfallToday = contract.requestedToday - contract.deliveredToday;
+      if (contract.shortfallToday > 0) {
+        this.note(buyer, `${supplier.name} delivered ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s`, "bad");
+      }
     });
   }
 
@@ -545,7 +613,8 @@ export class TownSimulation {
   settleFirm(firm) {
     if (!firm.active) return;
     const wage = Math.max(this.policy.minimumWage, firm.wage);
-    const revenueSample = firm.sector === "housing" ? (firm.sales > 0 ? firm.sales / RENT_INTERVAL_DAYS : null) : firm.sales;
+    const netSales = Math.max(0, firm.sales - firm.inputCosts);
+    const revenueSample = firm.sector === "housing" ? (firm.sales > 0 ? netSales / RENT_INTERVAL_DAYS : null) : netSales;
     if (revenueSample !== null) firm.revenueEMA = firm.revenueEMA * 0.72 + revenueSample * 0.28;
     const minimumStaff = firm.sector === "housing" ? 2 : 1;
     const incomeSupportedStaff = clamp(Math.floor(firm.revenueEMA / (wage * STAFFING_REVENUE_BUFFER) + 1e-9), minimumStaff, firm.maxStaff);
@@ -584,6 +653,7 @@ export class TownSimulation {
       firm.active = false;
     }
     firm.sales = 0;
+    firm.inputCosts = 0;
     firm.unitsSold = 0;
     firm.transactionsToday = 0;
     firm.attemptedTransactions = 0;
@@ -594,6 +664,7 @@ export class TownSimulation {
     this.flows = [];
     [
       () => this.productionPhase(),
+      () => this.procurementPhase(),
       () => this.payrollPhase(),
       () => this.foodPhase(),
       () => this.housingPhase(),

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PHASES, PRODUCTS } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
 test("money remains inside the closed economy", () => {
@@ -31,6 +32,57 @@ test("every firm begins with its configured owner and staff count", () => {
     assert.equal(town.people[firm.owner].employer, firm.id);
     assert.equal(firm.employees.length, firm.initialStaff);
   });
+});
+
+test("every firm has a valid explicit product pipeline", () => {
+  const town = new TownSimulation({ seed: 42 });
+
+  town.firms.forEach((firm) => {
+    assert.ok(PRODUCTS[firm.sells]);
+    if (firm.input) {
+      assert.ok(PRODUCTS[firm.input]);
+      assert.equal(town.firms.find((supplier) => supplier.name === firm.source)?.sells, firm.input);
+    }
+  });
+  assert.equal(town.firms.find((firm) => firm.sector === "agriculture").name, "Morrow Fields");
+});
+
+test("farm workers produce inputs that immediate-settlement contracts move to retailers", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.setPolicy("shockRisk", 0);
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const farmInventory = farm.inventory;
+  const harvestInventory = harvest.inventory;
+  const farmCash = farm.cash;
+  const harvestCash = harvest.cash;
+  farm.employees.forEach((id) => { town.people[id].attended = true; });
+
+  town.productionPhase();
+  const produced = farm.inventory - farmInventory;
+  town.procurementPhase();
+  const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
+
+  assert.ok(produced > 0);
+  assert.equal(contract.deliveredToday, 22);
+  assert.equal(harvest.inventory, harvestInventory + 22);
+  assert.equal(harvest.cash, harvestCash - 24.2);
+  assert.equal(farm.cash > farmCash, true);
+  assert.equal(harvest.inputCosts, 24.2);
+  assert.match(harvest.ledger[0].text, /22 crates from Morrow Fields/);
+});
+
+test("a supply contract cannot put its buyer into debt", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
+  harvest.cash = 1;
+
+  town.procurementPhase();
+
+  assert.equal(contract.deliveredToday, 0);
+  assert.equal(contract.shortfallToday, contract.requestedToday);
+  assert.equal(harvest.cash, 1);
 });
 
 test("an exact transfer cannot overdraw its sender", () => {
@@ -145,7 +197,7 @@ test("sustainable food production prevents a solvent later shopper from starving
   const person = town.people.find((candidate) => candidate.name === "Sizwe");
 
   for (let day = 0; day < 30; day += 1) {
-    for (let phase = 0; phase < 6; phase += 1) town.step();
+    for (let phase = 0; phase < PHASES.length; phase += 1) town.step();
   }
 
   assert.equal(person.alive, true);
@@ -385,7 +437,7 @@ test("a dead person takes no further economic or social actions", () => {
   const eventsAtDeath = structuredClone(person.events);
   const ledgerAtDeath = structuredClone(person.ledger);
 
-  for (let step = 0; step < 6; step += 1) town.step();
+  for (let step = 0; step < PHASES.length; step += 1) town.step();
 
   assert.equal(person.cash, 0);
   assert.equal(person.hungryDays, 2);

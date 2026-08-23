@@ -22,7 +22,7 @@ src/random.js ──────┘              │
 
 ### `src/config.js`
 
-Owns fixed data and policy defaults: names, firms, phase labels, wages, prices, productivity, inventory, per-worker transaction capacity, staffing, and default policy settings.
+Owns fixed data and policy defaults: names, products, firms, supply contracts, phase labels, wages, prices, productivity, inventory, per-worker transaction capacity, staffing, and default policy settings.
 
 Use this module for starting parameters, not evolving state.
 

@@ -24,9 +24,9 @@ Policy controls should make causal exploration possible. Re-running the same see
 ## In scope
 
 - Named individual agents with heterogeneous starting conditions
-- Firms with sectors, workers, cash, inventory, prices, wages, and owners
+- Firms with sectors, workers, cash, inventory, products, input costs, prices, wages, and owners
 - A treasury that receives taxes and redistributes support
-- Production, payroll, food, housing, discretionary activity, and settlement
+- Agriculture, basic supply contracts and procurement, production, payroll, food, housing, discretionary activity, and settlement
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Hunger, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Friendships and social encounters
@@ -39,7 +39,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Claiming psychological or economic calibration
 - Real currencies, inflation, credit markets, banking, or interest
 - Demographic reproduction, migration, households, or families
-- Land, construction, housing capacity, or physical supply chains
+- Land, construction, housing capacity, or detailed physical logistics
 - A server, database, accounts, multiplayer operation, or saved runs
 - Formal validation against empirical datasets
 

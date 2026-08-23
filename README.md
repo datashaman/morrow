@@ -36,16 +36,17 @@ npm run build
 
 ## Simulation clock
 
-Each day has six phases:
+Each day has seven phases:
 
 1. Production
-2. Payroll
-3. Food shopping
-4. Housing and bills
-5. Personal time
-6. Settlement
+2. Supply and procurement
+3. Payroll
+4. Food shopping
+5. Housing and bills
+6. Personal time
+7. Settlement
 
-Calling `simulation.step()` advances exactly one phase. A full day is six calls.
+Calling `simulation.step()` advances exactly one phase. A full day is seven calls.
 
 ## Accounting rule
 

@@ -4,16 +4,17 @@ This document describes the implementation in `src/simulation.js`. It is descrip
 
 ## Time
 
-One simulated day has six phases. `step()` executes the current phase and advances to the next.
+One simulated day has seven phases. `step()` executes the current phase and advances to the next.
 
 1. Production
-2. Payroll
-3. Food shopping
-4. Housing and bills
-5. Personal time
-6. Settlement
+2. Supply and procurement
+3. Payroll
+4. Food shopping
+5. Housing and bills
+6. Personal time
+7. Settlement
 
-The day counter increments during settlement. A full day therefore requires six calls to `step()`.
+The day counter increments during settlement. A full day therefore requires seven calls to `step()`.
 
 ## Entities
 
@@ -33,19 +34,20 @@ Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.
 
 ### Firms
 
-Five firms are configured in `src/config.js`:
+Six firms are configured in `src/config.js`. The product catalog gives every traded thing a stable identifier, label, and unit; each firm declares the product it sells, its input when it has one, its source, and how its output is obtained.
 
-| Firm | Sector | Price | Food quality | Base wage | Transactions per worker | Starting staff | Maximum staff |
-|---|---|---:|---:|---:|---:|---:|---:|
-| Harvest Foods | Food | 1.8 | 0.55 | 6.2 | 4 | 6 | 9 |
-| Green Basket | Food | 2.0 | 0.85 | 6.5 | 4 | 6 | 9 |
-| HomeWorks | Housing | 6.0 weekly | — | 7.2 | 10 | 4 | 6 |
-| Makers Guild | Goods | 6.0 | — | 7.8 | 3 | 4 | 6 |
-| Common Café | Service | 2.2 | — | 6.4 | 4 | 4 | 6 |
+| Firm | Sells | Made or supplied by | Retail/contract price | Base wage | Starting staff |
+|---|---|---|---:|---:|---:|
+| Harvest Foods | Everyday food | Morrow Fields produce, handled by retail staff | 1.8 | 6.2 | 3 |
+| Green Basket | High-quality food | Higher-grade Morrow Fields produce, selected by retail staff | 2.0 | 6.5 | 2 |
+| HomeWorks | Weekly housing service | Existing dwelling service operated by its staff | 6.0 weekly | 7.2 | 4 |
+| Makers Guild | Learning tools | Made directly by guild workers | 6.0 | 7.8 | 3 |
+| Common Café | Prepared café service | Morrow Fields produce, prepared by café staff | 2.2 | 6.4 | 2 |
+| Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.25 wholesale | 5.8 | 7 |
 
-Every firm begins with 150 cash. Firms track employees, inventory, sales, units sold, smoothed income, vacancies, staffing targets, trouble, and operational status. The first five people are assigned as owners, one per firm; ownership and employment are separate concepts.
+Every firm begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, and operational status. The first six people are assigned as owners, one per firm; ownership and employment are separate concepts.
 
-The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 5.18 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.95 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
+The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 4.85 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.82 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 
 ### Transaction capacity
 
@@ -94,15 +96,21 @@ An employed person misses work with probability:
 
 where `hungryPenalty` is 0.10 if the person has any hungry days. Missing work increases `missedWork`, reduces reliability by 0.018, and produces a life event. Attendance reduces the accumulated missed-work count by one.
 
-For non-housing firms, each attending employee adds inventory according to:
+For direct producers, each attending employee adds inventory according to:
 
 `(0.42 + skill × 0.75) × firmProductivity × health × (1 − stress × 0.32)`
 
-Harvest Foods uses productivity 5.4 and Green Basket 5.1. At healthy attendance levels, their combined starting workforce can produce roughly one town-day of food while realized sales can cover food-sector payroll. These multipliers are balance hypotheses, not empirical production estimates. Lower health, stress, absence, layoffs, and uneven customer access can still reduce available food.
+Morrow Fields applies this rule to farm produce and Makers Guild applies it to learning tools. Food retailers and the café do not create saleable stock during production; they acquire their input in the next phase. These multipliers and the one-input-unit-to-one-output-unit conversion are balance hypotheses, not empirical yields. Lower health, stress, absence, layoffs, and uneven access can still reduce available goods.
 
-HomeWorks does not produce or consume housing inventory.
+HomeWorks operates a fixed service and does not produce or consume housing inventory.
 
-### 2. Payroll
+### 2. Supply and procurement
+
+Morrow Fields has immediate-settlement supply contracts with Harvest Foods, Green Basket, and Common Café. Each buyer requests enough produce to restore two configured days of target stock, up to its daily contract quantity. Delivery is limited to whole units by the farm's inventory and the buyer's available cash.
+
+The buyer pays at the contract unit price at delivery; no accounts payable, debt, or partial cash claim is created. Delivered farm inventory becomes the buyer's saleable inventory one for one. Both firms receive before/after ledger entries, the supplier records contract sales, and the buyer records input costs. An under-delivery records the requested and delivered quantities on the buyer. Contracts currently have fixed counterparties, quantities, prices, and output mappings.
+
+### 3. Payroll
 
 The applicable wage is the greater of the policy minimum wage and the firm’s configured wage.
 
@@ -114,7 +122,7 @@ The firm transfers net wage to the person and employer tax to the treasury. If t
 
 Workers who missed production receive no wage in that payroll phase.
 
-### 3. Food shopping
+### 4. Food shopping
 
 Food firms with inventory are sorted by price. A person normally buys one unit from the cheapest affordable seller.
 
@@ -129,7 +137,7 @@ A scarcity error can cause either:
 
 A shopper tries another affordable food firm when the preferred seller lacks transaction capacity. Consuming a meal reduces `hungryDays` by one and restores health by its effective quality multiplied by 0.006. Harvest Foods is cheaper and has fresh quality 0.55; Green Basket is dearer and has fresh quality 0.85. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy or consume food adds one hungry day and reduces health by 0.045.
 
-### 4. Housing and bills
+### 5. Housing and bills
 
 HomeWorks is the only current housing provider.
 
@@ -144,7 +152,7 @@ A housed person under scarcity pressure may defer rent despite being able to pay
 
 An unhoused person owes no recurring rent and does not accumulate arrears. Rehousing still requires the separate deposit-and-rent payment described above. The citizen summary shows whether rent is due today or how many days remain until the next billing day.
 
-### 5. Personal time
+### 6. Personal time
 
 The current focus is reassessed before choosing an activity. The discretionary-demand policy is the probability that an otherwise eligible optional purchase proceeds: 0% suppresses café and goods purchases, while 100% permits every eligible purchase. It does not affect food or housing.
 
@@ -156,7 +164,7 @@ Social visitors are shuffled and paired. Contact refreshes the pair's contact da
 
 After five days without contact, friendship strength declines by 0.015 per day. A friendship below 0.20 ends symmetrically and both people receive a life event. Friendship strength affects belonging and the social-isolation component of stress; friendships do not yet transfer money, food, housing, care, or job referrals. These decay values are gameplay hypotheses selected to allow visible turnover without erasing the initial network immediately.
 
-### 6. Settlement
+### 7. Settlement
 
 #### Treasury support
 
@@ -168,7 +176,7 @@ People are sorted by hunger, housing status, and then cash. A person qualifies w
 
 #### Firm settlement
 
-Each non-housing firm updates its smoothed realized daily income:
+Each non-housing firm updates its smoothed realized daily net income, where the current day's input purchases are deducted from consumer and contract sales:
 
 `previous income × 0.72 + realized income × 0.28`
 

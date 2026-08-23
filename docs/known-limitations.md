@@ -23,13 +23,14 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - There is no banking, saving account, debt, credit, interest, insurance, bankruptcy process, or negative balance.
 - All money is inside one closed town. There is no external trade, remittance, investment, monetary creation, or destruction.
 - A “shock” moves firm cash to the treasury. It behaves more like a fine or emergency levy than a destructive loss.
-- Firms have no input costs beyond wages and taxes. Food and goods production consumes no raw materials, land, energy, maintenance, or capital.
+- Food retailers and the café buy a single abstract produce input from Morrow Fields, but the one-to-one conversion has no waste, recipes, grades, energy, equipment, transport, storage cost, or handling delay. Agriculture itself consumes no seed, land, water, fertilizer, energy, maintenance, or capital.
+- Supply contracts settle immediately in cash at fixed prices and quantities. There is no negotiation, expiry, priority, alternate supplier, trade credit, invoice, debt, or damages for under-delivery.
 - Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely if it can process their payments.
 - Initially housed people receive housing without an initial payment or provider record.
 - Every person consumes at most one food unit per day regardless of body, work, or household.
 - Citizens use fixed one-to-three-meal reserve targets. They do not forecast rent, prices, attendance, congestion, spoilage, or future income when deciding how much food to store; there are no refrigeration or storage costs.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
-- Owners are the first five people and can also be employees. Ownership cannot be sold or inherited; a firm with a dead owner retains dividends.
+- Owners are the first six people and can also be employees. Ownership cannot be sold or inherited; a firm with a dead owner retains dividends.
 - A deceased person's cash transfers immediately to the treasury as an intestate estate. There are no wills, heirs, probate delays, creditor claims, inheritance taxes, or non-cash estate assets.
 - Firm reopening after closure existed in an earlier visualization but is not implemented in the repository version.
 - A closed housing or food firm can make essential services unavailable with no replacement-entry mechanism.
@@ -66,7 +67,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 ## Simulation and interface limitations
 
-- The canvas moves living people toward employers and deceased people toward the cemetery continuously, not according to the six economic phases. Movement and the cemetery are illustrative rather than causal.
+- The canvas moves living people toward employers and deceased people toward the cemetery continuously, not according to the seven economic phases. Movement and the cemetery are illustrative rather than causal.
 - Person positions are mutated by rendering and live on domain entities, weakening separation between simulation and view state.
 - The UI shows current state and recent events but no town-wide distributions, inequality measures, network graph, or causal trace.
 - Policy changes apply mid-run without being recorded in the event history.
