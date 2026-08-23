@@ -187,8 +187,11 @@ function updateInterface() {
   const pantry = `${person.foodStock.length} meal${person.foodStock.length === 1 ? "" : "s"} stored`;
   const relationships = simulation.relationshipStats(person);
   const relationshipSummary = relationships.count ? `${relationships.count} friendship${relationships.count === 1 ? "" : "s"}; strongest ${percent(relationships.strongest)}` : "no active friendships";
+  const housingFirm = simulation.firms.find((firm) => firm.sector === "housing");
   const rentTiming = simulation.daysUntilRent();
-  const rentSchedule = rentTiming === 0 ? "rent due today" : `rent due in ${rentTiming} day${rentTiming === 1 ? "" : "s"}`;
+  const rentSchedule = housingFirm?.status === "receivership"
+    ? "rent suspended during HomeWorks receivership"
+    : rentTiming === 0 ? "rent due today" : `rent due in ${rentTiming} day${rentTiming === 1 ? "" : "s"}`;
   const provider = person.housed
     ? `${person.rentSeller >= 0 ? `housed through ${simulation.firms[person.rentSeller].name}` : "housed; no payment yet"}; ${rentSchedule}`
     : (person.rentSeller >= 0 ? `unhoused; last provider ${simulation.firms[person.rentSeller].name}` : "unhoused");
@@ -231,7 +234,7 @@ function updateInterface() {
     card.innerHTML = `
       <span class="firm-card-heading"><b>${firm.name}</b><i class="status ${firm.status}">${firm.status}</i></span>
       <span class="pipeline">${describePipeline(firm, PRODUCTS)}</span>
-      <span class="firm-stats">${firm.vital ? "Vital · " : ""}${money(firm.cash)} cash · ${firm.employees.length}/${firm.targetStaff} staff · ${firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""} · ${money(firm.revenueEMA)} smoothed net income${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}</span>
+      <span class="firm-stats">${firm.vital ? "Vital · " : ""}${money(firm.cash)} cash · ${firm.employees.length}/${firm.targetStaff} staff · ${firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""} · ${money(firm.revenueEMA)} smoothed net income${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}</span>
       <span class="owner-choice">Owner choice · wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason} · capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason} · ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason} · ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}</span>
       ${contracts.map((contract) => `<span class="contract${contract.shortfallToday ? " shortfall" : ""}">${describeContract(contract, PRODUCTS)}</span>`).join("")}
     `;

@@ -9,6 +9,10 @@ import {
   FRIENDSHIP_END_THRESHOLD,
   FOOD_HEALTH_RECOVERY,
   FOOD_QUALITY_DECAY_PER_DAY,
+  HOUSING_DISPLACEMENT_RATE,
+  HOUSING_RECEIVERSHIP_GRACE_DAYS,
+  HOUSING_REPLACEMENT_STAFF,
+  HOUSING_RESTART_COST,
   INITIAL_FRIENDSHIP_STRENGTH,
   MAINTENANCE_INTERVAL_DAYS,
   MIN_FOOD_QUALITY,
@@ -53,6 +57,10 @@ export class TownSimulation {
       operatingSupplies: 0,
       operationalReadiness: 1,
       lastMaintenanceDay: 0,
+      receivershipDay: null,
+      receivershipCount: 0,
+      lastDisplacementDay: null,
+      publiclyOperated: false,
       unitsSold: 0,
       transactionsToday: 0,
       attemptedTransactions: 0,
@@ -666,6 +674,7 @@ export class TownSimulation {
   }
 
   settlementPhase() {
+    this.resolveHousingReceivership();
     const budget = this.government.cash * (this.policy.supportRate / 100) * 0.18;
     let spent = 0;
     const vulnerable = this.people.filter((person) => person.alive).sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
@@ -714,13 +723,67 @@ export class TownSimulation {
     if (!firm.active) return false;
     [...firm.employees].forEach((id) => this.fire(firm, this.people[id], "business insolvency ended employment"));
     firm.active = false;
-    firm.status = "insolvent";
+    const entersReceivership = firm.sector === "housing";
+    firm.status = entersReceivership ? "receivership" : "insolvent";
     firm.targetStaff = 0;
+    if (entersReceivership) {
+      firm.receivershipDay = this.day;
+      firm.lastDisplacementDay = null;
+    }
     this.contracts.filter((contract) => contract.supplierId === firm.id || contract.buyerId === firm.id).forEach((contract) => {
       contract.active = false;
     });
-    this.note(firm, reason, "bad");
+    this.note(firm, entersReceivership ? `${reason}; housing operations entered receivership` : reason, "bad");
     return true;
+  }
+
+  resolveHousingReceivership() {
+    const housing = this.firms.find((firm) => firm.sector === "housing" && firm.status === "receivership");
+    if (!housing) return false;
+    const elapsed = this.day - housing.receivershipDay;
+    if (elapsed < HOUSING_RECEIVERSHIP_GRACE_DAYS) return false;
+
+    if (housing.receivershipCount === 0 && this.government.cash + 1e-9 >= HOUSING_RESTART_COST) {
+      const treasuryBefore = this.government.cash;
+      const housingBefore = housing.cash;
+      const paid = this.transfer(this.government, housing, HOUSING_RESTART_COST, { exact: true });
+      if (paid === HOUSING_RESTART_COST) {
+        housing.active = true;
+        housing.status = "operating";
+        housing.receivershipDay = null;
+        housing.receivershipCount += 1;
+        housing.distressDays = 0;
+        housing.trouble = 0;
+        housing.targetStaff = HOUSING_REPLACEMENT_STAFF;
+        housing.publiclyOperated = true;
+        this.contracts.filter((contract) => contract.supplierId === housing.id || contract.buyerId === housing.id).forEach((contract) => {
+          const counterpartyId = contract.supplierId === housing.id ? contract.buyerId : contract.supplierId;
+          contract.active = this.firms[counterpartyId].active;
+        });
+        this.people
+          .filter((person) => person.alive && person.employer < 0)
+          .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))
+          .slice(0, HOUSING_REPLACEMENT_STAFF)
+          .forEach((person) => this.hire(housing, person));
+        housing.targetStaff = Math.max(housing.employees.length, HOUSING_REPLACEMENT_STAFF);
+        this.ledger(this.government, { direction: "out", amount: paid, text: `housing receivership restart to ${housing.name}`, before: treasuryBefore });
+        this.ledger(housing, { direction: "in", amount: paid, text: "housing receivership restart from treasury", before: housingBefore });
+        this.note(housing, "treasury appointed and funded a replacement housing operator", "good");
+        return true;
+      }
+    }
+
+    if (housing.lastDisplacementDay === this.day) return false;
+    const housed = this.people.filter((person) => person.alive && person.housed).sort((a, b) => a.id - b.id);
+    const displaced = housed.slice(0, Math.max(1, Math.ceil(housed.length * HOUSING_DISPLACEMENT_RATE)));
+    displaced.forEach((person) => {
+      person.housed = false;
+      person.rentArrears = 0;
+      this.note(person, "lost housing after HomeWorks receivership failed to secure an operator", "bad");
+    });
+    housing.lastDisplacementDay = this.day;
+    if (displaced.length) this.note(housing, `${displaced.length} unmanaged tenancies failed during receivership`, "bad");
+    return displaced.length > 0;
   }
 
   assessFirmSolvency(firm) {
@@ -768,7 +831,7 @@ export class TownSimulation {
     firm.ownerDecision.continuationDay = this.day;
     if (!firm.active || !owner.alive) {
       firm.ownerDecision.capitalReason = "no living owner of an active firm";
-      firm.ownerDecision.continuation = firm.active ? "continue without owner financing" : "insolvent";
+      firm.ownerDecision.continuation = firm.active ? "continue without owner financing" : firm.status;
       firm.ownerDecision.continuationReason = firm.ownerDecision.capitalReason;
       return 0;
     }
@@ -924,7 +987,7 @@ export class TownSimulation {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
-    if (this.firms.some((firm) => !firm.active && firm.status !== "insolvent")) throw new Error("An inactive firm must be insolvent");
+    if (this.firms.some((firm) => !firm.active && !["insolvent", "receivership"].includes(firm.status))) throw new Error("An inactive firm must be insolvent or in receivership");
     this.people.forEach((person) => {
       this.friendIds(person).forEach((friendId) => {
         const reciprocal = this.people[friendId].relationships[person.id];

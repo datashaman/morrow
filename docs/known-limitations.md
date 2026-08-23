@@ -26,17 +26,17 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Food retailers and the café buy a single abstract produce input from Morrow Fields, but the one-to-one conversion has no waste, recipes, grades, energy, equipment, transport, storage cost, or handling delay. Agriculture itself consumes no seed, land, water, fertilizer, energy, maintenance, or capital.
 - Supply contracts settle immediately in cash at fixed prices and quantities. There is no negotiation, expiry, priority, alternate supplier, trade credit, invoice, debt, or damages for under-delivery.
 - Maintenance is one generic kit every three days for every firm other than Makers Guild. There are no distinct machines, tools, repair skills, depreciation curves, preventive schedules, breakdown types, or capital investment choices; the 65% capacity penalty is a gameplay hypothesis.
-- Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely if it can process their payments.
+- Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely while operating. Its receivership preserves all tenancies for seven days, then uses a fixed restart threshold or deterministic displacement rate rather than modeling property ownership, administrators, courts, lenders, tenant protections, or alternate landlords.
 - Initially housed people receive housing without an initial payment or provider record.
 - Every person consumes at most one food unit per day regardless of body, work, or household.
 - Citizens use fixed one-to-three-meal reserve targets. They do not forecast rent, prices, attendance, congestion, spoilage, or future income when deciding how much food to store; there are no refrigeration or storage costs.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
-- Vital-business classification is fixed in configuration. A vital firm can receive one cash rescue based only on next-day operating need; there is no public-interest assessment, conditionality, political process, alternative operator, repayment, equity stake, creditor review, or performance monitoring.
+- Vital-business classification is fixed in configuration. A vital firm can receive one cash rescue based only on next-day operating need; HomeWorks can additionally receive one fixed-cost receivership restart. There is no public-interest assessment, conditionality, political process, repayment, equity stake, creditor review, or performance monitoring.
 - Owners are the first six people and can also be employees. Working owners make simple runway-based wage-waiver, equity-contribution, voluntary-insolvency, ordinary-dividend, and emergency-distribution decisions. They cannot set arbitrary salary, vary working hours, replace management, lend to the firm, recover contributed equity, sell or transfer ownership, share ownership, or create formal distribution policies. Ownership is not inherited; a firm with a dead owner retains surplus.
 - Owner equity has no shares, valuation, dilution, return calculation, repayment, tax treatment, documentation, or distinction between sole proprietorships and limited companies. Emergency distributions preserve one operating day but do not model directors' duties, creditor protection, fraudulent conveyance, clawbacks, or unlawful distributions.
 - A deceased person's cash transfers immediately to the treasury as an intestate estate. There are no wills, heirs, probate delays, creditor claims, inheritance taxes, or non-cash estate assets.
-- Insolvent firms do not liquidate inventory or other assets, distribute proceeds, reorganize, gain a replacement owner, or reopen.
-- A closed housing or food firm can make essential services unavailable with no replacement-entry mechanism.
+- Insolvent firms do not liquidate inventory or other assets, distribute proceeds, or reorganize. HomeWorks alone can reopen under a treasury-appointed operator; other firms do not gain a replacement owner or reopen.
+- A closed food firm can make essential services unavailable with no replacement-entry mechanism.
 
 ## Labour simplifications
 

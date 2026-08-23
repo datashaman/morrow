@@ -85,7 +85,7 @@ select { padding: 0.45rem 2rem 0.45rem 0.6rem; }
 .firm-card-heading b { font-family: Georgia, "Times New Roman", serif; font-size: 1rem; font-weight: 500; }
 .firm-card .status { padding: 0.2rem 0.45rem; border-radius: 99px; color: var(--muted); background: var(--stage); font-size: 0.65rem; font-style: normal; text-transform: uppercase; }
 .firm-card .status.operating, .firm-card .status.rescued { color: var(--accent); background: var(--accent-soft); }
-.firm-card .status.distressed, .firm-card .status.insolvent { color: var(--danger); }
+.firm-card .status.distressed, .firm-card .status.insolvent, .firm-card .status.receivership { color: var(--danger); }
 .firm-card .pipeline { color: var(--text); font-size: 0.78rem; line-height: 1.4; }
 .firm-card .firm-stats, .firm-card .owner-choice, .firm-card .contract { color: var(--muted); font-size: 0.7rem; line-height: 1.35; }
 .firm-card .owner-choice { color: var(--cash); }

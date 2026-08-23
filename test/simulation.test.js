@@ -484,6 +484,78 @@ test("housing receipts are normalized to daily income", () => {
   assert.ok(Math.abs(housing.revenueEMA - (previousRevenue * 0.72 + 10 * 0.28)) < 1e-9);
 });
 
+test("HomeWorks insolvency preserves tenancies during a seven-day receivership", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const housing = town.firms.find((firm) => firm.name === "HomeWorks");
+  const housedBefore = town.people.filter((person) => person.alive && person.housed).length;
+
+  town.closeFirm(housing);
+  const closureDay = town.day;
+  town.day = closureDay + 6;
+  town.resolveHousingReceivership();
+
+  assert.equal(housing.active, false);
+  assert.equal(housing.status, "receivership");
+  assert.equal(housing.receivershipDay, closureDay);
+  assert.equal(town.people.filter((person) => person.alive && person.housed).length, housedBefore);
+});
+
+test("the treasury can fund and staff a replacement housing operator", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const housing = town.firms.find((firm) => firm.name === "HomeWorks");
+  const tenant = town.people[0];
+  town.closeFirm(housing);
+  town.day = housing.receivershipDay + 7;
+  const treasuryBefore = town.government.cash;
+  const housingBefore = housing.cash;
+  const totalBefore = town.totalMoney();
+
+  town.resolveHousingReceivership();
+
+  assert.equal(housing.active, true);
+  assert.equal(housing.status, "operating");
+  assert.equal(housing.publiclyOperated, true);
+  assert.equal(housing.receivershipCount, 1);
+  assert.equal(housing.employees.length, 2);
+  assert.equal(town.government.cash, treasuryBefore - 90);
+  assert.equal(housing.cash, housingBefore + 90);
+  assert.equal(town.totalMoney(), totalBefore);
+  assert.match(housing.ledger[0].text, /receivership restart from treasury/);
+  assert.match(town.government.ledger[0].text, /housing receivership restart to HomeWorks/);
+
+  tenant.cash = 20;
+  tenant.ledger = [];
+  town.housingPhase();
+  assert.equal(tenant.ledger[0].text, "rent to HomeWorks");
+});
+
+test("an unfunded receivership progressively displaces living tenants", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const housing = town.firms.find((firm) => firm.name === "HomeWorks");
+  const cashHolder = town.firms.find((firm) => firm.name === "Makers Guild");
+  const deceased = town.people[0];
+  town.die(deceased, "test death before housing failure");
+  town.transfer(town.government, cashHolder, town.government.cash, { exact: true });
+  town.closeFirm(housing);
+  town.day = housing.receivershipDay + 7;
+
+  town.resolveHousingReceivership();
+  const firstDayUnhoused = town.people.filter((person) => person.alive && !person.housed).length;
+  town.resolveHousingReceivership();
+
+  assert.equal(firstDayUnhoused, 8);
+  assert.equal(town.people.filter((person) => person.alive && !person.housed).length, 8);
+  assert.equal(deceased.housed, true);
+  assert.match(town.people.find((person) => person.alive && !person.housed).events[0].text, /receivership failed/);
+
+  town.day += 1;
+  town.resolveHousingReceivership();
+
+  assert.equal(town.people.filter((person) => person.alive && !person.housed).length, 15);
+  assert.equal(housing.active, false);
+  assert.equal(housing.status, "receivership");
+});
+
 test("a typical low-wage worker can cover daily-equivalent essentials", () => {
   const town = new TownSimulation({ seed: 42 });
   const lowestWage = Math.min(...town.firms.map((firm) => Math.max(town.policy.minimumWage, firm.wage)));

@@ -59,7 +59,7 @@ Only a customer who can cover the exact price and reaches an active firm with th
 
 ### Treasury
 
-The town treasury begins with 120 cash. It receives employer taxes, intestate estates, and shock transfers, then pays targeted citizen support and eligible one-time vital-business rescues during settlement.
+The town treasury begins with 120 cash. It receives employer taxes, intestate estates, and shock transfers, then pays targeted citizen support, eligible one-time vital-business rescues, and an eligible housing-receivership restart during settlement.
 
 ## Money and accounting
 
@@ -158,6 +158,8 @@ A housed person under scarcity pressure may defer rent despite being able to pay
 
 An unhoused person owes no recurring rent and does not accumulate arrears. Rehousing still requires the separate deposit-and-rent payment described above. The citizen summary shows whether rent is due today or how many days remain until the next billing day.
 
+When HomeWorks becomes insolvent, ordinary rent and rehousing transactions stop and it enters a seven-day receivership. Existing tenants remain housed during this grace period because operator failure does not make dwellings disappear. At the end of the grace period, a treasury holding at least 90 can make one exact restart transfer, appoint two available workers, reactivate viable supply contracts, and resume HomeWorks under a treasury-appointed operator. If that restart cannot be funded—or the replacement later fails—20% of the remaining living housed population, rounded up, loses managed housing per day. Each displacement and restart is recorded. Deceased citizens are ignored. The grace period, restart cost, staffing level, and displacement rate are gameplay hypotheses rather than claims about bankruptcy or housing law.
+
 ### 6. Personal time
 
 The current focus is reassessed before choosing an activity. The discretionary-demand policy is the probability that an otherwise eligible optional purchase proceeds: 0% suppresses café and goods purchases, while 100% permits every eligible purchase. It does not affect food or housing.
@@ -206,7 +208,7 @@ If the owner cannot or does not find recovery attractive, the choice is initiall
 
 After three consecutive distress days, an eligible vital firm may receive its only treasury rescue. The target is three next-day operating needs, but the transfer is capped at 90 and by the treasury's actual cash. The transfer is recorded on both ledgers and conserves total money. A sufficient rescue moves the firm to `rescued` and resets distress; it returns to ordinary operating status after subsequently covering its need. Rescue does not guarantee survival.
 
-After six consecutive distress days, a firm becomes `insolvent`. All employees lose their jobs, staffing targets become zero, and every supply contract involving the firm terminates. Non-vital firms receive no rescue; a vital firm that has already received one cannot receive another. The current rule is administrative closure, not legal bankruptcy: there are no creditor classes, asset sales, claims, liquidation distributions, or reorganization.
+After six consecutive distress days, a firm becomes `insolvent`. All employees lose their jobs, staffing targets become zero, and every supply contract involving the firm terminates. Non-vital firms receive no rescue; a vital firm that has already received one cannot receive another. HomeWorks is the exception to terminal administrative closure: it enters the housing receivership described above, with at most one treasury-appointed restart. The current rule is not legal bankruptcy: there are no creditor classes, asset sales, claims, liquidation distributions, or reorganization.
 
 At the current shock setting, a firm has `shockRisk / 100 × 0.025` probability of transferring a random 12–34 cash to the treasury and gaining trouble.
 

@@ -33,6 +33,10 @@ export const VITAL_RESCUE_RUNWAY_DAYS = 3;
 export const VITAL_RESCUE_CAP = 90;
 export const MAINTENANCE_INTERVAL_DAYS = 3;
 export const MISSED_MAINTENANCE_CAPACITY = 0.65;
+export const HOUSING_RECEIVERSHIP_GRACE_DAYS = 7;
+export const HOUSING_RESTART_COST = 90;
+export const HOUSING_DISPLACEMENT_RATE = 0.2;
+export const HOUSING_REPLACEMENT_STAFF = 2;
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",
