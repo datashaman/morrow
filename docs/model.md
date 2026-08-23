@@ -196,7 +196,7 @@ An additional health setback occurs with probability:
 
 The setback reduces health by a random 0.04–0.13. Settlement health is bounded between 0.08 and 1. A person who remains at the 0.08 critical floor for three consecutive settlement phases dies. Recovery above the floor resets the critical-health counter.
 
-Death is a terminal, recorded life event. The person leaves employment and their reciprocal friendships are removed. They no longer work, receive wages or support, buy food or services, pay rent, socialize, recover, enter hiring pools, or receive owner dividends. The Citizens card reports living, dead, and total citizens; employment and hardship metrics count only living people. The canvas moves deceased citizens to a display-only cemetery and shows its interred count.
+Death is a terminal, recorded life event. The person leaves employment and their reciprocal friendships are removed. They no longer work, receive wages or support, buy food or services, pay rent, socialize, recover, enter hiring pools, or receive owner dividends. Their profile switches to historical wording, hides active needs, and retains the final ledger and life history without adding new entries. The Citizens card reports living, dead, and total citizens; employment and hardship metrics count only living people. The canvas moves deceased citizens to a display-only cemetery and shows its interred count.
 
 ## Stress
 

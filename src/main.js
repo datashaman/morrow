@@ -120,6 +120,9 @@ function updateInterface() {
   const provider = person.housed
     ? `${person.rentSeller >= 0 ? `housed through ${simulation.firms[person.rentSeller].name}` : "housed; no payment yet"}; ${rentSchedule}`
     : (person.rentSeller >= 0 ? `unhoused; last provider ${simulation.firms[person.rentSeller].name}` : "unhoused");
+  const finalHousing = person.housed
+    ? (person.rentSeller >= 0 ? `last housing: housed through ${simulation.firms[person.rentSeller].name}` : "last housing: housed")
+    : (person.rentSeller >= 0 ? `last housing: unhoused; previous provider ${simulation.firms[person.rentSeller].name}` : "last housing: unhoused");
 
   elements.clock.textContent = `Day ${state.day} · ${state.phaseName}`;
   elements.money.textContent = `${(state.totalMoney / state.initialMoney * 100).toFixed(2)}%`;
@@ -131,7 +134,9 @@ function updateInterface() {
   elements.population.textContent = `${state.alive}/${state.totalCitizens}`;
   elements["population-detail"].textContent = `${state.alive} alive · ${state.dead} dead · ${state.totalCitizens} total`;
   elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
-  elements["person-summary"].textContent = `${person.alive ? "Alive" : `Died on day ${person.deathDay}`} · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller} · housing: ${provider}`;
+  elements["person-summary"].textContent = person.alive
+    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller} · housing: ${provider}`
+    : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · final cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller} · ${finalHousing}`;
   elements.needs.hidden = !person.alive;
 
   elements.needs.replaceChildren(...Object.entries(person.needs).map(([name, value]) => {
@@ -151,7 +156,7 @@ function updateInterface() {
     item.textContent = "No transactions yet";
     elements.ledger.append(item);
   }
-  elements.events.textContent = `Life events: ${person.events.slice(0, 3).map((event) => `day ${event.day} — ${event.text}`).join("  ←  ")}`;
+  elements.events.textContent = `${person.alive ? "Life events" : "Life history"}: ${person.events.slice(0, 3).map((event) => `day ${event.day} — ${event.text}`).join("  ←  ")}`;
 }
 
 function resizeCanvas() {

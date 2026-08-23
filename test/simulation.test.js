@@ -176,6 +176,7 @@ test("a dead person takes no further economic or social actions", () => {
   person.housed = false;
   const stress = person.stress;
   town.die(person, "died in a regression scenario");
+  const eventsAtDeath = structuredClone(person.events);
 
   for (let step = 0; step < 6; step += 1) town.step();
 
@@ -185,6 +186,7 @@ test("a dead person takes no further economic or social actions", () => {
   assert.equal(person.stress, stress);
   assert.equal(person.employer, -1);
   assert.equal(person.ledger.length, 0);
+  assert.deepEqual(person.events, eventsAtDeath);
 });
 
 test("attending staff cap the number of daily transactions", () => {
