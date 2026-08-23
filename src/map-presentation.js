@@ -14,14 +14,48 @@ export function firmLandmarkLayout(firm, { width, height = 1, nameWidth = 0, met
 }
 
 export function employeeOrbitTarget(index, count, landmark, viewport) {
+  return firmOrbitTarget(index, count, landmark, viewport, 18);
+}
+
+export function applicantOrbitTarget(index, count, landmark, viewport) {
+  return firmOrbitTarget(index, count, landmark, viewport, 34);
+}
+
+function firmOrbitTarget(index, count, landmark, viewport, clearance) {
   const angle = -Math.PI / 2 + (Math.PI * 2 * index) / Math.max(1, count);
-  const clearance = 18;
   const x = landmark.centerX + Math.cos(angle) * (landmark.width / 2 + clearance);
   const y = landmark.centerY + Math.sin(angle) * (landmark.height / 2 + clearance);
   return {
     x: clamp(x / viewport.width, 6 / viewport.width, 1 - 6 / viewport.width),
     y: clamp(y / viewport.height, 6 / viewport.height, 1 - 6 / viewport.height),
   };
+}
+
+export function applicantFirmId(personId, firms) {
+  const vacancySlots = firms
+    .filter((firm) => firm.active)
+    .flatMap((firm) => Array.from(
+      { length: Math.max(0, firm.targetStaff - firm.employees.length) },
+      () => firm.id,
+    ));
+  return vacancySlots.length ? vacancySlots[personId % vacancySlots.length] : null;
+}
+
+export function parkVisitorTarget(personId, park, elapsedMs = 0) {
+  const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+  const direction = personId % 2 === 0 ? 1 : -1;
+  const angle = personId * goldenAngle + direction * elapsedMs / 24_000;
+  const ring = 0.38 + (personId % 4) * 0.12;
+  return {
+    x: park.x + Math.cos(angle) * park.radiusX * ring,
+    y: park.y + Math.sin(angle) * park.radiusY * ring,
+  };
+}
+
+export function personMapTarget(person, { parkTarget, applicationTarget, employeeTarget, graveTarget }) {
+  if (!person.alive) return graveTarget;
+  if (person.employer >= 0) return employeeTarget;
+  return applicationTarget ?? parkTarget;
 }
 
 export function deceasedMarkerSegments(x, y) {

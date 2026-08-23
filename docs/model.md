@@ -192,6 +192,8 @@ Vacancies must persist for two settlement phases before recruitment. Candidates 
 
 The Employment card reports positions available as approved vacancies across active firms: the sum of `targetStaff − current employees`, bounded at zero for each firm. Because `targetStaff` reflects smoothed income, payroll coverage, cash reserves, and current staffing, a layoff or closure does not automatically create an available position. Vacancies must still persist for two settlement phases before recruitment, and a candidate may decline or fail to accept the offered wage.
 
+The map visualizes this employment state without changing it. Living employees gather around their employer. Unemployed citizens are distributed deterministically among firms with approved vacancies to depict job applications; when there are no approved vacancies, they mill slowly inside the central Common Park. The display does not affect candidate ranking, vacancy age, acceptance, hiring, housing, or any need.
+
 Overstaffing or sustained cash trouble can produce layoffs after three settlement phases. This staffing response is separate from the solvency test.
 
 The next-day operating need is the configured wage for at least one worker, or all current workers when there are more, plus the full daily value of active input contracts. Cash below that need adds one distress day and moves the firm to `distressed`; recovery above the need resets the counter and returns it to `operating`.
@@ -280,4 +282,4 @@ Changing a control affects future phases; it does not rewind or recompute past s
 
 `src/random.js` supplies a seeded Mulberry32-style pseudorandom generator. The default seed is `20260823`. Two simulations with the same seed, policies, and sequence of method calls should produce the same state.
 
-Rendering animation uses no simulation randomness, but it does mutate display positions. Those positions have no effect on economic rules.
+Rendering animation uses no simulation randomness, but it does mutate display positions. Workplace, application, Common Park, and cemetery destinations have no effect on economic rules.

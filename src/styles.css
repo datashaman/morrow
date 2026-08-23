@@ -47,6 +47,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .deceased-dot::before { left: 4px; width: 2px; height: 10px; }
 .deceased-dot::after { top: 3px; left: 1px; width: 8px; height: 2px; }
 .firm-dot { width: 10px; height: 8px; background: var(--text); }
+.park-swatch { width: 14px; height: 8px; border: 1px solid var(--accent); border-radius: 50%; background: var(--accent-soft); }
 .cash-line { width: 15px; height: 2px; background: var(--cash); }
 
 .person-card, .firm-panel, .control-panel { border: 1px solid var(--border); border-top: 0; padding: 1rem; background: var(--surface); }

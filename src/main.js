@@ -2,7 +2,16 @@ import "./styles.css";
 import { PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
 import { describeContract, describePipeline } from "./firm-presentation.js";
-import { deceasedMarkerSegments, employeeOrbitTarget, firmLandmarkLayout, resolveCanvasColor } from "./map-presentation.js";
+import {
+  applicantFirmId,
+  applicantOrbitTarget,
+  deceasedMarkerSegments,
+  employeeOrbitTarget,
+  firmLandmarkLayout,
+  parkVisitorTarget,
+  personMapTarget,
+  resolveCanvasColor,
+} from "./map-presentation.js";
 import { TownSimulation } from "./simulation.js";
 
 const app = document.querySelector("#app");
@@ -24,8 +33,8 @@ app.innerHTML = `
     </section>
 
     <div class="stage-wrap">
-      <canvas id="town" aria-label="Animated map of people and firms in the town"></canvas>
-      <div class="legend" aria-hidden="true"><span><i class="person-dot"></i>Person</span><span><i class="deceased-dot"></i>Deceased</span><span><i class="firm-dot"></i>Firm</span><span><i class="cash-line"></i>Cash transfer</span></div>
+      <canvas id="town" aria-label="Animated map of people, firms, the Common Park, and cemetery in the town"></canvas>
+      <div class="legend" aria-hidden="true"><span><i class="person-dot"></i>Person</span><span><i class="deceased-dot"></i>Deceased</span><span><i class="firm-dot"></i>Firm</span><span><i class="park-swatch"></i>Common Park</span><span><i class="cash-line"></i>Cash transfer</span></div>
     </div>
 
     <section class="person-card" aria-live="polite">
@@ -97,6 +106,7 @@ let lastStep = performance.now();
 const canvas = document.querySelector("#town");
 const context = canvas.getContext("2d");
 const cemetery = { x: 0.88, y: 0.82, columns: 5 };
+const commonPark = { x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 };
 
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
@@ -250,6 +260,7 @@ function drawTown() {
     text: resolveCanvasColor(style.getPropertyValue("--text"), darkMode),
     muted: resolveCanvasColor(style.getPropertyValue("--muted"), darkMode),
     accent: resolveCanvasColor(style.getPropertyValue("--accent"), darkMode),
+    accentSoft: resolveCanvasColor(style.getPropertyValue("--accent-soft"), darkMode),
     cash: resolveCanvasColor(style.getPropertyValue("--cash"), darkMode),
     danger: resolveCanvasColor(style.getPropertyValue("--danger"), darkMode),
   };
@@ -271,6 +282,48 @@ function drawTown() {
     context.font = "700 14px system-ui";
     return [firm.id, firmLandmarkLayout(firm, { width, height, nameWidth, metaWidth })];
   }));
+
+  const parkX = commonPark.x * width;
+  const parkY = commonPark.y * height;
+  const parkRadiusX = commonPark.radiusX * width;
+  const parkRadiusY = commonPark.radiusY * height;
+  context.save();
+  context.beginPath();
+  context.ellipse(parkX, parkY, parkRadiusX, parkRadiusY, 0, 0, Math.PI * 2);
+  context.fillStyle = colors.accentSoft;
+  context.fill();
+  context.clip();
+  context.strokeStyle = colors.background;
+  context.lineWidth = 8;
+  context.globalAlpha = 0.8;
+  context.beginPath();
+  context.moveTo(parkX - parkRadiusX, parkY + parkRadiusY * 0.35);
+  context.quadraticCurveTo(parkX, parkY - parkRadiusY * 0.2, parkX + parkRadiusX, parkY - parkRadiusY * 0.35);
+  context.stroke();
+  context.beginPath();
+  context.moveTo(parkX - parkRadiusX * 0.15, parkY - parkRadiusY);
+  context.quadraticCurveTo(parkX + parkRadiusX * 0.25, parkY, parkX + parkRadiusX * 0.1, parkY + parkRadiusY);
+  context.stroke();
+  context.restore();
+  context.strokeStyle = colors.accent;
+  context.globalAlpha = 0.55;
+  context.lineWidth = 1;
+  context.beginPath();
+  context.ellipse(parkX, parkY, parkRadiusX, parkRadiusY, 0, 0, Math.PI * 2);
+  context.stroke();
+  context.globalAlpha = 1;
+  context.fillStyle = colors.accent;
+  context.textAlign = "center";
+  context.font = "700 10px system-ui";
+  context.fillText("COMMON PARK", parkX, parkY - parkRadiusY - 8);
+
+  const applicationFirmIds = new Map(simulation.people
+    .filter((person) => person.alive && person.employer < 0)
+    .map((person) => [person.id, applicantFirmId(person.id, simulation.firms)]));
+  const applicantsByFirm = new Map(simulation.firms.map((firm) => [
+    firm.id,
+    [...applicationFirmIds].filter(([, firmId]) => firmId === firm.id).map(([personId]) => personId),
+  ]));
 
   simulation.flows.forEach((flow) => {
     const from = flow.from.kind === "person" ? simulation.people[flow.from.id] : flow.from.kind === "firm" ? simulation.firms[flow.from.id] : simulation.government;
@@ -309,10 +362,20 @@ function drawTown() {
     const graveColumn = person.id % cemetery.columns;
     const graveRow = Math.floor(person.id / cemetery.columns);
     const employeeTarget = employer ? employeeOrbitTarget(employer.employees.indexOf(person.id), employer.employees.length, landmark, { width, height }) : null;
-    const targetX = !person.alive ? cemetery.x + (graveColumn - 2) * 0.018 : employeeTarget?.x ?? person.homeX;
-    const targetY = !person.alive ? cemetery.y + (graveRow - 3.5) * 0.012 : employeeTarget?.y ?? person.homeY;
-    person.x += (targetX - person.x) * 0.02;
-    person.y += (targetY - person.y) * 0.02;
+    const applicationFirmId = applicationFirmIds.get(person.id);
+    const applicationLandmark = applicationFirmId === null || applicationFirmId === undefined ? null : landmarks.get(applicationFirmId);
+    const applicantIds = applicationLandmark ? applicantsByFirm.get(applicationFirmId) : [];
+    const applicationTarget = applicationLandmark
+      ? applicantOrbitTarget(applicantIds.indexOf(person.id), applicantIds.length, applicationLandmark, { width, height })
+      : null;
+    const target = personMapTarget(person, {
+      graveTarget: { x: cemetery.x + (graveColumn - 2) * 0.018, y: cemetery.y + (graveRow - 3.5) * 0.012 },
+      employeeTarget,
+      applicationTarget,
+      parkTarget: parkVisitorTarget(person.id, commonPark, performance.now()),
+    });
+    person.x += (target.x - person.x) * 0.02;
+    person.y += (target.y - person.y) * 0.02;
     const x = person.x * width;
     const y = person.y * height;
     if (person.alive) {

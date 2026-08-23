@@ -70,7 +70,7 @@ Uses Node’s built-in test runner. Tests directly exercise the simulation witho
 
 `TownSimulation` owns people, firms, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, playback timing, pause state, speed, and canvas dimensions.
 
-Person `x` and `y` positions are currently mutated by the renderer even though they live on simulation entities. They are display-only and must never influence domain decisions. Moving them into a view model would strengthen the boundary.
+Person `x` and `y` positions are currently mutated by the renderer even though they live on simulation entities. The renderer derives workplace, job-application, Common Park, and cemetery destinations from domain state, but those positions are display-only and must never influence domain decisions. Moving them into a view model would strengthen the boundary.
 
 ## Adding a rule
 

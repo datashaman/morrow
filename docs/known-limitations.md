@@ -69,7 +69,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 ## Simulation and interface limitations
 
-- The canvas moves living people toward employers and deceased people toward the cemetery continuously, not according to the seven economic phases. Movement and the cemetery are illustrative rather than causal.
+- The canvas moves employees toward employers, unemployed people toward firms with approved vacancies or the Common Park, and deceased people toward the cemetery continuously, not according to the seven economic phases. Applications, park movement, and the cemetery are illustrative rather than causal; the park provides no shelter, food, services, or social effects.
 - Person positions are mutated by rendering and live on domain entities, weakening separation between simulation and view state.
 - The UI shows complete citizen and firm histories plus current firm pipelines, but no town-wide distributions, inequality measures, network graph, cross-entity trace query, or aggregate supply-chain history.
 - Policy changes apply mid-run without being recorded in the event history.
