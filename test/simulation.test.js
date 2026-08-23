@@ -189,7 +189,7 @@ test("an owner chooses a dividend only from retained operating surplus", () => {
   const town = new TownSimulation({ seed: 42 });
   const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
   const owner = town.people[firm.owner];
-  owner.cash = 0;
+  owner.cash = town.essentialCost() * 4;
   owner.ledger = [];
   firm.ledger = [];
   firm.cash = 300;
@@ -199,11 +199,91 @@ test("an owner chooses a dividend only from retained operating surplus", () => {
 
   assert.equal(paid, 49.5);
   assert.equal(firm.cash, 250.5);
-  assert.equal(owner.cash, 49.5);
+  assert.equal(owner.cash, Math.round((town.essentialCost() * 4 + 49.5) * 100) / 100);
   assert.equal(firm.ownerDecision.dividend, 49.5);
   assert.match(firm.ownerDecision.dividendReason, /thin owner runway/);
   assert.match(firm.ledger[0].text, /owner dividend to Amina/);
   assert.match(owner.ledger[0].text, /owner dividend from Harvest Foods/);
+});
+
+test("an owner contributes equity when recovery can be funded above a personal reserve", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
+  const owner = town.people[firm.owner];
+  const need = town.nextOperatingNeed(firm);
+  owner.cash = 200;
+  owner.ledger = [];
+  firm.cash = 0;
+  firm.ledger = [];
+  firm.revenueEMA = need * 0.8;
+  const moneyBefore = town.totalMoney();
+
+  const contributed = town.resolveOwnerFinancing(firm);
+
+  assert.equal(contributed, need * 2);
+  assert.equal(firm.cash, need * 2);
+  assert.equal(owner.cash, 200 - need * 2);
+  assert.equal(firm.ownerDecision.capitalContribution, need * 2);
+  assert.equal(firm.ownerDecision.continuation, "continue");
+  assert.match(firm.ledger[0].text, /equity contribution from Amina/);
+  assert.match(owner.ledger[0].text, /equity contribution to Harvest Foods/);
+  assert.equal(town.totalMoney(), moneyBefore);
+});
+
+test("an owner can choose voluntary insolvency instead of exhausting personal reserves", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Makers Guild");
+  const owner = town.people[firm.owner];
+  const protectedCash = town.essentialCost() * 10 + 1;
+  owner.cash = protectedCash;
+  firm.cash = 0;
+  firm.revenueEMA = town.nextOperatingNeed(firm);
+  firm.distressDays = 2;
+
+  town.resolveOwnerFinancing(firm);
+
+  assert.equal(firm.active, false);
+  assert.equal(firm.status, "insolvent");
+  assert.equal(owner.cash, protectedCash);
+  assert.equal(firm.ownerDecision.continuation, "voluntary insolvency");
+  assert.match(firm.ownerDecision.continuationReason, /protect personal reserves/);
+  assert.match(firm.events[0].text, /chose voluntary insolvency/);
+});
+
+test("an owner can prefer insolvency to funding a firm with poor recovery prospects", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Makers Guild");
+  const owner = town.people[firm.owner];
+  owner.cash = 200;
+  firm.cash = 0;
+  firm.revenueEMA = 0;
+  firm.distressDays = 2;
+
+  town.resolveOwnerFinancing(firm);
+
+  assert.equal(firm.status, "insolvent");
+  assert.equal(owner.cash, 200);
+  assert.match(firm.ownerDecision.continuationReason, /funding was unattractive/);
+});
+
+test("acute personal need can trigger an emergency distribution below the dividend buffer", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
+  const owner = town.people[firm.owner];
+  const need = town.nextOperatingNeed(firm);
+  owner.cash = 0;
+  owner.ledger = [];
+  firm.cash = 150;
+  firm.ledger = [];
+  firm.targetStaff = firm.employees.length;
+
+  const paid = town.payOwnerDividend(firm);
+
+  assert.equal(paid, Math.round(town.essentialCost() * 5 * 100) / 100);
+  assert.ok(firm.cash >= need);
+  assert.equal(firm.ownerDecision.dividendType, "emergency distribution");
+  assert.match(firm.ownerDecision.dividendReason, /acute personal need/);
+  assert.match(firm.ledger[0].text, /emergency owner distribution/);
 });
 
 test("expansion and a recent rescue block owner dividends", () => {

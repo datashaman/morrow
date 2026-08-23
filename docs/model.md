@@ -26,7 +26,7 @@ There are 40 named people. Each person carries:
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
-- Personal differences: randomized starting values, a persistent esteem baseline, and a stable 15–31% comfortable-owner dividend preference
+- Personal differences: randomized starting values, a persistent esteem baseline, a stable 15–31% comfortable-owner dividend preference, and a stable 0.60–0.84 minimum recovery ratio for personal firm funding
 - Narrative state: recent life events
 - Display state: home and current map positions
 
@@ -196,6 +196,10 @@ Overstaffing or sustained cash trouble can produce layoffs after three settlemen
 
 The next-day operating need is the configured wage for at least one worker, or all current workers when there are more, plus the full daily value of active input contracts. Cash below that need adds one distress day and moves the firm to `distressed`; recovery above the need resets the counter and returns it to `operating`.
 
+Before formal distress assessment, a living owner considers personal equity financing whenever company cash is below one next-day operating need. Ten days of personal essential-cost runway is protected. The owner contributes only when cash above that reserve can close the immediate gap and the firm's smoothed net income divided by operating need meets the owner's stable 0.60–0.84 recovery threshold; vital firms receive a 0.15 reduction to that threshold. A contribution aims to leave the firm with two operating needs, limited by available owner cash. It is a permanent equity contribution with no automatic repayment, and both ledgers record it.
+
+If the owner cannot or does not find recovery attractive, the choice is initially recorded as waiting. Once the firm already has two distress days, the owner chooses voluntary insolvency rather than further personal funding. This preserves all remaining personal cash while using the normal insolvency consequences for the firm, employees, and supply contracts. A vital firm voluntarily closed this way does not proceed to the later treasury-rescue assessment.
+
 After three consecutive distress days, an eligible vital firm may receive its only treasury rescue. The target is three next-day operating needs, but the transfer is capped at 90 and by the treasury's actual cash. The transfer is recorded on both ledgers and conserves total money. A sufficient rescue moves the firm to `rescued` and resets distress; it returns to ordinary operating status after subsequently covering its need. Rescue does not guarantee survival.
 
 After six consecutive distress days, a firm becomes `insolvent`. All employees lose their jobs, staffing targets become zero, and every supply contract involving the firm terminates. Non-vital firms receive no rescue; a vital firm that has already received one cannot receive another. The current rule is administrative closure, not legal bankruptcy: there are no creditor classes, asset sales, claims, liquidation distributions, or reorganization.
@@ -204,7 +208,9 @@ At the current shock setting, a firm has `shockRisk / 100 × 0.025` probability 
 
 Owner dividends are choices made only after the solvency assessment. The firm first retains the greater of 210 cash or four complete next-day operating needs. No dividend is allowed when the owner is dead, the firm is inactive or non-operating, an approved vacancy is being funded, or a treasury rescue occurred within the previous 14 days.
 
-The living owner's personal runway determines the share of remaining surplus selected: 55% below five days, 35% from five to below 15 days, and the owner's stable 15–31% preference when more secure. The transfer is recorded on both firm and owner ledgers. The firm pipeline card shows the latest wage and dividend choice, day, amount, and reason. These thresholds are behavioral hypotheses designed to produce distinct retention and extraction choices, not claims about observed owner behavior.
+An owner below three personal runway days first considers an emergency distribution even when company cash is below the ordinary four-day/210 dividend buffer. The amount is limited to what raises the owner toward five runway days and must leave the firm with one complete next-day operating need. It remains blocked by non-operating status, approved expansion, and a treasury rescue in the previous 14 days. Because it reduces company protection to one day, it can contribute to later distress or insolvency.
+
+Otherwise, the living owner's personal runway determines the share of ordinary surplus selected: 55% below five days, 35% from five to below 15 days, and the owner's stable 15–31% preference when more secure. Every dividend or emergency distribution is recorded on both firm and owner ledgers. The firm pipeline card shows the latest wage, capital, continuation/insolvency, and distribution choices with their days, amounts, and reasons. These thresholds are behavioral hypotheses designed to produce distinct retention, investment, failure, and extraction choices, not claims about observed owner behavior.
 
 #### Health and stress
 

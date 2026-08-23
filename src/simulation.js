@@ -68,7 +68,14 @@ export class TownSimulation {
         wageReason: "payroll has not run",
         dividendDay: null,
         dividend: 0,
+        dividendType: "none",
         dividendReason: "settlement has not run",
+        capitalDay: null,
+        capitalContribution: 0,
+        capitalReason: "financing has not been assessed",
+        continuationDay: null,
+        continuation: "not assessed",
+        continuationReason: "financing has not been assessed",
       },
       activitySequence: 0,
       ledger: [],
@@ -110,6 +117,7 @@ export class TownSimulation {
         stress: 0.12 + this.random() * 0.25,
         esteemBaseline: 0.05 + this.random() * 0.12,
         dividendPreference: 0.15 + (id % 5) * 0.04,
+        ownerRecoveryThreshold: 0.6 + (id % 4) * 0.08,
         growth: 0.04 + this.random() * 0.15,
         attended: true,
         scarcityError: false,
@@ -714,18 +722,85 @@ export class TownSimulation {
     if (firm.distressDays >= FIRM_INSOLVENCY_DAYS) this.closeFirm(firm);
   }
 
+  resolveOwnerFinancing(firm) {
+    const owner = this.people[firm.owner];
+    firm.ownerDecision.capitalDay = this.day;
+    firm.ownerDecision.capitalContribution = 0;
+    firm.ownerDecision.continuationDay = this.day;
+    if (!firm.active || !owner.alive) {
+      firm.ownerDecision.capitalReason = "no living owner of an active firm";
+      firm.ownerDecision.continuation = firm.active ? "continue without owner financing" : "insolvent";
+      firm.ownerDecision.continuationReason = firm.ownerDecision.capitalReason;
+      return 0;
+    }
+
+    const need = this.nextOperatingNeed(firm);
+    if (firm.cash + 1e-9 >= need) {
+      firm.ownerDecision.capitalReason = "firm already covers its next operating need";
+      firm.ownerDecision.continuation = "continue";
+      firm.ownerDecision.continuationReason = "company cash covers near-term operations";
+      return 0;
+    }
+
+    const protectedPersonalCash = roundMoney(this.essentialCost() * 10);
+    const availablePersonalCash = Math.max(0, roundMoney(owner.cash - protectedPersonalCash));
+    const immediateGap = roundMoney(need - firm.cash);
+    const recoveryRatio = need ? firm.revenueEMA / need : 0;
+    const recoveryThreshold = Math.max(0.35, owner.ownerRecoveryThreshold - (firm.vital ? 0.15 : 0));
+    const recoveryIsCredible = recoveryRatio >= recoveryThreshold;
+    if (availablePersonalCash + 1e-9 >= immediateGap && recoveryIsCredible) {
+      const target = roundMoney(need * 2);
+      const requested = Math.min(availablePersonalCash, roundMoney(target - firm.cash));
+      const ownerBefore = owner.cash;
+      const firmBefore = firm.cash;
+      const paid = this.transfer(owner, firm, requested, { exact: true });
+      if (paid > 0) {
+        firm.ownerDecision.capitalContribution = paid;
+        firm.ownerDecision.capitalReason = `owner funded credible recovery while retaining ${protectedPersonalCash.toFixed(1)} personal cash`;
+        firm.ownerDecision.continuation = "continue";
+        firm.ownerDecision.continuationReason = "equity restored company operating runway";
+        this.ledger(owner, { direction: "out", amount: paid, text: `equity contribution to ${firm.name}`, before: ownerBefore });
+        this.ledger(firm, { direction: "in", amount: paid, text: `equity contribution from ${owner.name}`, before: firmBefore });
+        this.note(firm, `${owner.name} contributed equity to continue operations`, "good");
+        return paid;
+      }
+    }
+
+    firm.ownerDecision.capitalReason = recoveryIsCredible
+      ? `owner protected a ${protectedPersonalCash.toFixed(1)} personal reserve`
+      : `recovery ratio ${recoveryRatio.toFixed(2)} was below the owner's ${recoveryThreshold.toFixed(2)} threshold`;
+    if (firm.distressDays >= 2) {
+      firm.ownerDecision.continuation = "voluntary insolvency";
+      firm.ownerDecision.continuationReason = recoveryIsCredible
+        ? "owner chose to protect personal reserves"
+        : "owner chose insolvency because further funding was unattractive";
+      this.closeFirm(firm, `${owner.name} chose voluntary insolvency rather than further personal funding`);
+      return 0;
+    }
+    firm.ownerDecision.continuation = "wait";
+    firm.ownerDecision.continuationReason = "owner deferred funding while distress develops";
+    return 0;
+  }
+
   ownerDividendDecision(firm, owner) {
-    if (!firm.active || !owner.alive) return { amount: 0, reason: "no living owner of an active firm" };
-    if (firm.status !== "operating") return { amount: 0, reason: `${firm.status} firms retain cash` };
-    if (firm.lastRescueDay !== null && this.day - firm.lastRescueDay < 14) return { amount: 0, reason: "recent treasury rescue requires cash retention" };
-    if (firm.targetStaff > firm.employees.length) return { amount: 0, reason: "approved expansion requires cash retention" };
+    if (!firm.active || !owner.alive) return { amount: 0, type: "none", reason: "no living owner of an active firm" };
+    if (firm.status !== "operating") return { amount: 0, type: "none", reason: `${firm.status} firms retain cash` };
+    if (firm.lastRescueDay !== null && this.day - firm.lastRescueDay < 14) return { amount: 0, type: "none", reason: "recent treasury rescue requires cash retention" };
+    if (firm.targetStaff > firm.employees.length) return { amount: 0, type: "none", reason: "approved expansion requires cash retention" };
+    const operatingNeed = this.nextOperatingNeed(firm);
+    const ownerRunway = this.runwayDays(owner);
+    if (ownerRunway < 3) {
+      const available = Math.max(0, roundMoney(firm.cash - operatingNeed));
+      const personalGap = Math.max(0, roundMoney(this.essentialCost() * 5 - owner.cash));
+      const amount = Math.min(available, personalGap);
+      if (amount > 0) return { amount, type: "emergency distribution", reason: "acute personal need selected cash while preserving one company operating day" };
+    }
     const retainedCash = Math.max(210, roundMoney(this.nextOperatingNeed(firm) * 4));
     const surplus = roundMoney(firm.cash - retainedCash);
-    if (surplus <= 0) return { amount: 0, reason: `no surplus above the ${retainedCash.toFixed(1)} retained operating buffer` };
-    const runway = this.runwayDays(owner);
-    if (runway < 5) return { amount: roundMoney(surplus * 0.55), reason: "thin owner runway selected 55% of surplus" };
-    if (runway < 15) return { amount: roundMoney(surplus * 0.35), reason: "moderate owner runway selected 35% of surplus" };
-    return { amount: roundMoney(surplus * owner.dividendPreference), reason: `secure owner preference selected ${Math.round(owner.dividendPreference * 100)}% of surplus` };
+    if (surplus <= 0) return { amount: 0, type: "none", reason: `no surplus above the ${retainedCash.toFixed(1)} retained operating buffer` };
+    if (ownerRunway < 5) return { amount: roundMoney(surplus * 0.55), type: "dividend", reason: "thin owner runway selected 55% of surplus" };
+    if (ownerRunway < 15) return { amount: roundMoney(surplus * 0.35), type: "dividend", reason: "moderate owner runway selected 35% of surplus" };
+    return { amount: roundMoney(surplus * owner.dividendPreference), type: "dividend", reason: `secure owner preference selected ${Math.round(owner.dividendPreference * 100)}% of surplus` };
   }
 
   payOwnerDividend(firm) {
@@ -733,6 +808,7 @@ export class TownSimulation {
     const decision = this.ownerDividendDecision(firm, owner);
     firm.ownerDecision.dividendDay = this.day;
     firm.ownerDecision.dividend = decision.amount;
+    firm.ownerDecision.dividendType = decision.type;
     firm.ownerDecision.dividendReason = decision.reason;
     if (!decision.amount) return 0;
     const firmBefore = firm.cash;
@@ -740,8 +816,9 @@ export class TownSimulation {
     const paid = this.transfer(firm, owner, decision.amount, { exact: true });
     if (!paid) return 0;
     firm.ownerDecision.dividend = paid;
-    this.ledger(firm, { direction: "out", amount: paid, text: `owner dividend to ${owner.name}`, before: firmBefore });
-    this.ledger(owner, { direction: "in", amount: paid, text: `owner dividend from ${firm.name}`, before: ownerBefore });
+    const purpose = decision.type === "emergency distribution" ? "emergency owner distribution" : "owner dividend";
+    this.ledger(firm, { direction: "out", amount: paid, text: `${purpose} to ${owner.name}`, before: firmBefore });
+    this.ledger(owner, { direction: "in", amount: paid, text: `${purpose} from ${firm.name}`, before: ownerBefore });
     return paid;
   }
 
@@ -775,8 +852,11 @@ export class TownSimulation {
       this.transfer(firm, this.government, Math.min(firm.cash, 12 + this.random() * 22));
       firm.trouble += 1;
     }
-    this.assessFirmSolvency(firm);
-    this.payOwnerDividend(firm);
+    this.resolveOwnerFinancing(firm);
+    if (firm.active) {
+      this.assessFirmSolvency(firm);
+      this.payOwnerDividend(firm);
+    }
     firm.sales = 0;
     firm.inputCosts = 0;
     firm.unitsSold = 0;
