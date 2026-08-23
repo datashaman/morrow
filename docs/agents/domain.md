@@ -1,6 +1,6 @@
 # Domain docs
 
-Morrow is a single-context repository. Engineering skills should read the following before exploring or changing domain behavior:
+Provision is a single-context repository. Engineering skills should read the following before exploring or changing domain behavior:
 
 - `CONTEXT.md` at the repository root
 - relevant accepted decisions under `docs/decisions/`
