@@ -98,6 +98,8 @@ For non-housing firms, each attending employee adds inventory according to:
 
 `(0.42 + skill × 0.75) × firmProductivity × health × (1 − stress × 0.32)`
 
+Harvest Foods uses productivity 5.4 and Green Basket 5.1. At healthy attendance levels, their combined starting workforce can produce roughly one town-day of food while realized sales can cover food-sector payroll. These multipliers are balance hypotheses, not empirical production estimates. Lower health, stress, absence, layoffs, and uneven customer access can still reduce available food.
+
 HomeWorks does not produce or consume housing inventory.
 
 ### 2. Payroll

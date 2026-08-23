@@ -18,7 +18,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 ## Economic simplifications
 
-- Prices, food quality, and configured wages are fixed. There is no inflation, bargaining, price or quality response, scarcity pricing, or wage competition. Food quality and its health-recovery multiplier are uncalibrated gameplay values.
+- Prices, food quality, productivity, and configured wages are fixed. There is no inflation, bargaining, price, quality, or productivity response, scarcity pricing, or wage competition. Food quality, productivity, and health-recovery multipliers are uncalibrated gameplay values.
 - Wages and food operate daily while rent is billed every seven days. This is an internally balanced gameplay calendar, not a claim about real payment schedules.
 - There is no banking, saving account, debt, credit, interest, insurance, bankruptcy process, or negative balance.
 - All money is inside one closed town. There is no external trade, remittance, investment, monetary creation, or destruction.

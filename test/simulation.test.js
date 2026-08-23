@@ -140,6 +140,20 @@ test("a typical low-wage worker can cover daily-equivalent essentials", () => {
   assert.ok(typicalNetWage >= town.essentialCost() * 1.8);
 });
 
+test("sustainable food production prevents a solvent later shopper from starving", () => {
+  const town = new TownSimulation();
+  const person = town.people.find((candidate) => candidate.name === "Sizwe");
+
+  for (let day = 0; day < 30; day += 1) {
+    for (let phase = 0; phase < 6; phase += 1) town.step();
+  }
+
+  assert.equal(person.alive, true);
+  assert.equal(person.hungryDays, 0);
+  assert.ok(person.health > 0.5);
+  assert.ok(person.cash > town.essentialCost());
+});
+
 test("higher-quality food replenishes more health", () => {
   const eatFrom = (sellerName) => {
     const town = new TownSimulation({ seed: 42 });
