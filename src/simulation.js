@@ -61,6 +61,7 @@ export class TownSimulation {
         name,
         alive: true,
         deathDay: null,
+        estateTransferred: 0,
         criticalHealthDays: 0,
         cash: roundMoney(18 + this.random() * 62),
         skill: 0.25 + this.random() * 0.65,
@@ -301,6 +302,16 @@ export class TownSimulation {
     person.attended = false;
     person.socialToday = false;
     person.rentArrears = 0;
+    const estateBefore = person.cash;
+    person.estateTransferred = this.transfer(person, this.government, estateBefore, { exact: true });
+    if (person.estateTransferred > 0) {
+      this.ledger(person, {
+        direction: "out",
+        amount: person.estateTransferred,
+        text: "intestate estate transferred to treasury",
+        before: estateBefore,
+      });
+    }
     this.note(person, reason, "bad");
     return true;
   }

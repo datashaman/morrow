@@ -347,6 +347,8 @@ test("critical health causes a traceable death and updates population counts", (
   const person = town.people.find((candidate) => candidate.id >= 5 && candidate.employer >= 0);
   const firm = town.firms[person.employer];
   const initialMoney = town.totalMoney();
+  const estate = person.cash;
+  const treasuryBefore = town.government.cash;
   person.health = 0.08;
   person.stress = 1;
   person.criticalHealthDays = 2;
@@ -359,6 +361,13 @@ test("critical health causes a traceable death and updates population counts", (
   assert.equal(person.employer, -1);
   assert.equal(firm.employees.includes(person.id), false);
   assert.equal(person.events[0].text, "died after health reached a critical level");
+  assert.equal(person.cash, 0);
+  assert.equal(person.estateTransferred, estate);
+  assert.equal(town.government.cash, Math.round((treasuryBefore + estate) * 100) / 100);
+  assert.deepEqual(
+    (({ direction, amount, text, before, after }) => ({ direction, amount, text, before, after }))(person.ledger[0]),
+    { direction: "out", amount: estate, text: "intestate estate transferred to treasury", before: estate, after: 0 },
+  );
   assert.equal(town.totalMoney(), initialMoney);
   assert.deepEqual(
     (({ alive, dead, totalCitizens }) => ({ alive, dead, totalCitizens }))(town.snapshot()),
@@ -369,12 +378,12 @@ test("critical health causes a traceable death and updates population counts", (
 test("a dead person takes no further economic or social actions", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people.find((candidate) => candidate.id >= 5 && candidate.employer < 0);
-  town.transfer(person, town.government, person.cash, { exact: true });
   person.hungryDays = 2;
   person.housed = false;
   const stress = person.stress;
   town.die(person, "died in a regression scenario");
   const eventsAtDeath = structuredClone(person.events);
+  const ledgerAtDeath = structuredClone(person.ledger);
 
   for (let step = 0; step < 6; step += 1) town.step();
 
@@ -383,7 +392,7 @@ test("a dead person takes no further economic or social actions", () => {
   assert.equal(person.housed, false);
   assert.equal(person.stress, stress);
   assert.equal(person.employer, -1);
-  assert.equal(person.ledger.length, 0);
+  assert.deepEqual(person.ledger, ledgerAtDeath);
   assert.deepEqual(person.events, eventsAtDeath);
 });
 

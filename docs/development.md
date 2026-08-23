@@ -46,7 +46,7 @@ Current coverage protects:
 - one-time eviction events with no arrears while unhoused
 - weekly rent cadence, stable housing demand between bills, and wage-to-essential-cost coverage
 - lower stress pressure under secure conditions
-- critical-health death, terminal inactivity, population counts, and conserved final cash
+- critical-health death, terminal inactivity, population counts, and conserved intestate estate transfers
 - attending-worker transaction limits and turned-away demand
 - economically supported vacancies, constrained expansion, and eventual hiring
 - deterministic reproduction from a seed

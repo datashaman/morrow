@@ -30,7 +30,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Citizens use fixed one-to-three-meal reserve targets. They do not forecast rent, prices, attendance, congestion, spoilage, or future income when deciding how much food to store; there are no refrigeration or storage costs.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
 - Owners are the first five people and can also be employees. Ownership cannot be sold or inherited; a firm with a dead owner retains dividends.
-- Cash held by a deceased person remains inert on their ledger. There is no inheritance, probate, estate tax, or treasury transfer.
+- A deceased person's cash transfers immediately to the treasury as an intestate estate. There are no wills, heirs, probate delays, creditor claims, inheritance taxes, or non-cash estate assets.
 - Firm reopening after closure existed in an earlier visualization but is not implemented in the repository version.
 - A closed housing or food firm can make essential services unavailable with no replacement-entry mechanism.
 

@@ -151,7 +151,7 @@ function updateInterface() {
   elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
   elements["person-summary"].textContent = person.alive
     ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
-    : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · final cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
+    : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · estate ${money(person.estateTransferred)} transferred to treasury · remaining cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
   elements.needs.hidden = !person.alive;
 
   elements.needs.replaceChildren(...Object.entries(person.needs).map(([name, value]) => {

@@ -72,7 +72,7 @@ Money is rounded to cents when transferred. After every phase, `assertInvariants
 
 Individual ledger records store the day, per-person activity sequence, direction, amount, purpose, and cash balance before and after. Life events carry the same sequence so the interface can combine both record types into one newest-first activity stream. The stream defaults to all activity and can be filtered to transactions or life events. The model retains the complete history for the current in-memory run; the interface renders all matching entries inside a scrollable region and preserves the reader's position while new activity arrives.
 
-When a person dies, their final cash remains on their ledger. It is still inside the accounting boundary but becomes economically inactive because inheritance, probate, and estate transfers are not yet modeled.
+When a person dies without a modeled will, their full cash balance transfers immediately to the town treasury as an intestate estate. The deceased person's ledger records the before and after balances, their remaining cash becomes zero, and the transfer does not change total cash inside the accounting boundary. This is a deliberately simple default, not a probate model: there are no heirs, creditor claims, inheritance taxes, delays, or non-cash assets yet.
 
 ## Initial social and employment network
 
@@ -200,7 +200,7 @@ An additional health setback occurs with probability:
 
 The setback reduces health by a random 0.04–0.13. Settlement health is bounded between 0.08 and 1. A person who remains at the 0.08 critical floor for three consecutive settlement phases dies. Recovery above the floor resets the critical-health counter.
 
-Death is a terminal, recorded life event. The person leaves employment and their reciprocal friendships are removed. They no longer work, receive wages or support, buy food or services, pay rent, socialize, recover, enter hiring pools, or receive owner dividends. Their profile switches to historical wording, hides active needs, and retains the final ledger and life history without adding new entries. The Citizens card reports living, dead, and total citizens; employment and hardship metrics count only living people. The canvas moves deceased citizens to a display-only cemetery and shows its interred count.
+Death is a terminal, recorded life event. The person leaves employment, their reciprocal friendships are removed, and their cash estate transfers to the treasury. They no longer work, receive wages or support, buy food or services, pay rent, socialize, recover, enter hiring pools, or receive owner dividends. Their profile switches to historical wording, hides active needs, and retains the completed ledger and life history without adding later entries. The Citizens card reports living, dead, and total citizens; employment and hardship metrics count only living people. The canvas moves deceased citizens to a display-only cemetery and shows its interred count.
 
 ## Stress
 
