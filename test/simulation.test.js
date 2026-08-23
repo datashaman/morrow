@@ -85,6 +85,19 @@ test("a supply contract cannot put its buyer into debt", () => {
   assert.equal(harvest.cash, 1);
 });
 
+test("replenishment cannot exceed a contract's daily quantity", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
+  harvest.inventory = 0;
+
+  town.procurementPhase();
+
+  assert.equal(contract.requestedToday, contract.dailyQuantity);
+  assert.equal(contract.deliveredToday, contract.dailyQuantity);
+  assert.equal(contract.shortfallToday, 0);
+});
+
 test("a vital firm receives at most one finite treasury rescue", () => {
   const town = new TownSimulation({ seed: 42 });
   const farm = town.firms.find((firm) => firm.name === "Morrow Fields");

@@ -74,6 +74,8 @@ Money is rounded to cents when transferred. After every phase, `assertInvariants
 
 Individual ledger records store the day, per-person activity sequence, direction, amount, purpose, and cash balance before and after. Life events carry the same sequence so the interface can combine both record types into one newest-first activity stream. The stream defaults to all activity and can be filtered to transactions or life events. The model retains the complete history for the current in-memory run; the interface renders all matching entries inside a scrollable region and preserves the reader's position while new activity arrives.
 
+Firms and the treasury use the same sequenced ledger and event shape. The firm pipeline panel itemizes every firm's output, production or sourcing method, upstream producer, cash, inventory, staffing, smoothed net income, vital status, rescue history, and current lifecycle state. Supply buyers also show today's requested and delivered contract quantities. Selecting a firm exposes its complete combined transaction and lifecycle-event stream with the same filters and scrolling behavior as a citizen.
+
 When a person dies without a modeled will, their full cash balance transfers immediately to the town treasury as an intestate estate. The deceased person's ledger records the before and after balances, their remaining cash becomes zero, and the transfer does not change total cash inside the accounting boundary. This is a deliberately simple default, not a probate model: there are no heirs, creditor claims, inheritance taxes, delays, or non-cash assets yet.
 
 ## Initial social and employment network

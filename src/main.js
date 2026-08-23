@@ -1,6 +1,7 @@
 import "./styles.css";
-import { PHASES } from "./config.js";
+import { PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
+import { describeContract, describePipeline } from "./firm-presentation.js";
 import { TownSimulation } from "./simulation.js";
 
 const app = document.querySelector("#app");
@@ -48,6 +49,28 @@ app.innerHTML = `
       <ol class="activity-stream" id="activity-stream" tabindex="0" aria-label="Citizen activity, newest first"></ol>
     </section>
 
+    <section class="firm-panel" aria-labelledby="firm-pipelines-title">
+      <div class="firm-panel-heading">
+        <div>
+          <p class="eyebrow">Production and trade</p>
+          <h2 id="firm-pipelines-title">Firm pipelines</h2>
+        </div>
+        <p>Select a firm to inspect its complete economic history.</p>
+      </div>
+      <div class="firm-grid" id="firm-grid"></div>
+      <div class="activity-heading">
+        <h2 id="firm-activity-title">Firm activity</h2>
+        <label>Show
+          <select id="firm-activity-filter">
+            <option value="all" selected>All</option>
+            <option value="transactions">Transactions</option>
+            <option value="events">Life events</option>
+          </select>
+        </label>
+      </div>
+      <ol class="activity-stream" id="firm-activity-stream" tabindex="0" aria-label="Firm activity, newest first"></ol>
+    </section>
+
     <section class="control-panel">
       <div class="playback">
         <button id="pause" type="button">Pause</button>
@@ -67,6 +90,7 @@ app.innerHTML = `
 
 const simulation = new TownSimulation();
 let selected = simulation.people.findIndex((person) => person.name === "Sizwe");
+let selectedFirm = 0;
 let paused = false;
 let lastStep = performance.now();
 const canvas = document.querySelector("#town");
@@ -76,7 +100,7 @@ const cemetery = { x: 0.88, y: 0.82, columns: 5 };
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail",
-  "person-select", "focus", "person-summary", "needs", "activity-filter", "activity-stream", "pause", "step", "reset", "speed", "policy-grid",
+  "person-select", "focus", "person-summary", "needs", "activity-filter", "activity-stream", "firm-grid", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -119,6 +143,28 @@ const money = (value) => value.toFixed(1);
 const percent = (value) => `${Math.round(value * 100)}%`;
 const needNames = { physiological: "Physiological", safety: "Safety", belonging: "Belonging", esteem: "Esteem", growth: "Self-actualization" };
 
+function renderActivity(entity, filter, stream) {
+  const previousScrollHeight = stream.scrollHeight;
+  const previousScrollTop = stream.scrollTop;
+  const followingNewest = previousScrollTop < 2;
+  const activity = activityItems(entity, filter);
+  stream.replaceChildren(...activity.map((entry) => {
+    const item = document.createElement("li");
+    item.className = entry.type === "transaction" ? entry.direction : `event ${entry.kind}`;
+    item.innerHTML = entry.type === "transaction"
+      ? `<time>D${entry.day}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
+      : `<time>D${entry.day}</time><span>${entry.text}</span><b>Life event</b>`;
+    return item;
+  }));
+  if (!activity.length) {
+    const item = document.createElement("li");
+    item.className = "activity-empty";
+    item.textContent = filter === "transactions" ? "No transactions yet" : filter === "events" ? "No life events yet" : "No activity yet";
+    stream.append(item);
+  }
+  if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
+}
+
 function updateInterface() {
   const state = simulation.snapshot();
   const person = simulation.people[selected];
@@ -160,26 +206,27 @@ function updateInterface() {
     return item;
   }));
 
-  const activity = activityItems(person, elements["activity-filter"].value);
-  const activityStream = elements["activity-stream"];
-  const previousScrollHeight = activityStream.scrollHeight;
-  const previousScrollTop = activityStream.scrollTop;
-  const followingNewest = previousScrollTop < 2;
-  activityStream.replaceChildren(...activity.map((entry) => {
-    const item = document.createElement("li");
-    item.className = entry.type === "transaction" ? entry.direction : `event ${entry.kind}`;
-    item.innerHTML = entry.type === "transaction"
-      ? `<time>D${entry.day}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
-      : `<time>D${entry.day}</time><span>${entry.text}</span><b>Life event</b>`;
-    return item;
+  renderActivity(person, elements["activity-filter"].value, elements["activity-stream"]);
+
+  elements["firm-grid"].replaceChildren(...simulation.firms.map((firm) => {
+    const contracts = simulation.contracts.filter((contract) => contract.buyerId === firm.id);
+    const product = PRODUCTS[firm.sells];
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = `firm-card${firm.id === selectedFirm ? " selected" : ""}`;
+    card.dataset.firmId = firm.id;
+    card.setAttribute("aria-pressed", String(firm.id === selectedFirm));
+    card.innerHTML = `
+      <span class="firm-card-heading"><b>${firm.name}</b><i class="status ${firm.status}">${firm.status}</i></span>
+      <span class="pipeline">${describePipeline(firm, PRODUCTS)}</span>
+      <span class="firm-stats">${firm.vital ? "Vital · " : ""}${money(firm.cash)} cash · ${firm.employees.length}/${firm.targetStaff} staff · ${firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`} · ${money(firm.revenueEMA)} smoothed net income${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}</span>
+      ${contracts.map((contract) => `<span class="contract${contract.shortfallToday ? " shortfall" : ""}">${describeContract(contract, PRODUCTS)}</span>`).join("")}
+    `;
+    return card;
   }));
-  if (!activity.length) {
-    const item = document.createElement("li");
-    item.className = "activity-empty";
-    item.textContent = elements["activity-filter"].value === "transactions" ? "No transactions yet" : "No life events yet";
-    activityStream.append(item);
-  }
-  if (!followingNewest) activityStream.scrollTop = previousScrollTop + activityStream.scrollHeight - previousScrollHeight;
+  const firm = simulation.firms[selectedFirm];
+  elements["firm-activity-title"].textContent = `${firm.name} activity`;
+  renderActivity(firm, elements["firm-activity-filter"].value, elements["firm-activity-stream"]);
 }
 
 function resizeCanvas() {
@@ -285,9 +332,17 @@ function step() {
 
 elements["person-select"].addEventListener("change", (event) => { selected = Number(event.target.value); updateInterface(); elements["activity-stream"].scrollTop = 0; drawTown(); });
 elements["activity-filter"].addEventListener("change", () => { updateInterface(); elements["activity-stream"].scrollTop = 0; });
+elements["firm-activity-filter"].addEventListener("change", () => { updateInterface(); elements["firm-activity-stream"].scrollTop = 0; });
+elements["firm-grid"].addEventListener("click", (event) => {
+  const card = event.target.closest("[data-firm-id]");
+  if (!card) return;
+  selectedFirm = Number(card.dataset.firmId);
+  updateInterface();
+  elements["firm-activity-stream"].scrollTop = 0;
+});
 elements.pause.addEventListener("click", () => { paused = !paused; elements.pause.textContent = paused ? "Resume" : "Pause"; });
 elements.step.addEventListener("click", () => { paused = true; elements.pause.textContent = "Resume"; step(); });
-elements.reset.addEventListener("click", () => { simulation.reset(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; updateInterface(); elements["activity-stream"].scrollTop = 0; drawTown(); });
+elements.reset.addEventListener("click", () => { simulation.reset(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); selectedFirm = 0; elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; elements["firm-activity-filter"].value = "all"; updateInterface(); elements["activity-stream"].scrollTop = 0; elements["firm-activity-stream"].scrollTop = 0; drawTown(); });
 
 function animate(now) {
   if (!paused && now - lastStep >= Number(elements.speed.value)) { step(); lastStep = now; }

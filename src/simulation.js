@@ -440,7 +440,7 @@ export class TownSimulation {
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
       if (!contract.active || !supplier.active || !buyer.active) return;
-      contract.requestedToday = Math.max(0, Math.ceil(contract.dailyQuantity * 2 - buyer.inventory));
+      contract.requestedToday = Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(contract.dailyQuantity * 2 - buyer.inventory)));
       const available = Math.floor(supplier.inventory);
       const affordable = Math.floor((buyer.cash + 1e-9) / contract.unitPrice);
       const units = Math.min(contract.requestedToday, available, affordable);

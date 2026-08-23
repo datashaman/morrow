@@ -1,0 +1,15 @@
+export function describePipeline(firm, products) {
+  const output = products[firm.sells];
+  if (firm.production === "sourced") {
+    return `Sells ${output.name}; uses ${products[firm.input].name} from ${firm.source}. ${firm.sourceDescription}.`;
+  }
+  if (firm.production === "direct") return `Makes ${output.name} directly. ${firm.sourceDescription}.`;
+  return `Operates ${output.name}. ${firm.sourceDescription}.`;
+}
+
+export function describeContract(contract, products) {
+  const requested = contract.requestedToday ?? 0;
+  const delivered = contract.deliveredToday ?? 0;
+  const state = contract.active ? "active" : "ended";
+  return `${contract.supplier} contract ${state} · ${delivered}/${requested} ${products[contract.product].unit}s delivered today at ${contract.unitPrice.toFixed(2)} each`;
+}

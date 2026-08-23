@@ -44,9 +44,13 @@ Owns all domain state and causal rules. `TownSimulation` can run without a brows
 
 The class currently combines initialization, accounting, decision rules, phase orchestration, and firm settlement. This is acceptable at the current size but is the main future decomposition candidate.
 
+### `src/firm-presentation.js`
+
+Converts product, pipeline, and supply-contract state into display strings. It contains no economic decisions and is covered by focused Node tests.
+
 ### `src/main.js`
 
-Creates the interface, binds controls, advances the simulation on a timer, converts state into human-readable details, and renders firms, people, treasury, and recent money flows on canvas.
+Creates the interface, binds controls, advances the simulation on a timer, converts state into human-readable details, renders firm pipeline and activity panels, and draws firms, people, treasury, and recent money flows on canvas.
 
 The UI should not decide economic outcomes. It may format or animate state but should call the simulation for changes.
 
