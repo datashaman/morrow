@@ -112,10 +112,6 @@ const needNames = { physiological: "Physiological", safety: "Safety", belonging:
 function updateInterface() {
   const state = simulation.snapshot();
   const person = simulation.people[selected];
-  [...elements["person-select"].options].forEach((option) => {
-    const citizen = simulation.people[Number(option.value)];
-    option.textContent = `${citizen.name}${citizen.alive ? "" : " (dead)"}`;
-  });
   const employer = person.employer >= 0 ? simulation.firms[person.employer].name : "no employer";
   const owned = simulation.firms.find((firm) => firm.active && firm.owner === person.id);
   const foodSeller = person.foodSeller >= 0 ? simulation.firms[person.foodSeller].name : "not yet chosen";
