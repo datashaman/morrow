@@ -50,6 +50,7 @@ Current coverage protects:
 - attending-worker transaction limits and turned-away demand
 - economically supported vacancies, constrained expansion, and eventual hiring
 - agricultural production, cash-settled supply contracts, input costs, insolvency, and conserved one-time vital-business rescue
+- runway-based owner wage waivers and retained-surplus dividend decisions
 - deterministic reproduction from a seed
 
 For a random or emergent bug, preserve the seed and reduce the reproduction to the smallest phase or helper possible. Prefer assertions on causal state and ledger entries over screenshots.

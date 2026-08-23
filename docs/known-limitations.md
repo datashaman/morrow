@@ -31,7 +31,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Citizens use fixed one-to-three-meal reserve targets. They do not forecast rent, prices, attendance, congestion, spoilage, or future income when deciding how much food to store; there are no refrigeration or storage costs.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
 - Vital-business classification is fixed in configuration. A vital firm can receive one cash rescue based only on next-day operating need; there is no public-interest assessment, conditionality, political process, alternative operator, repayment, equity stake, creditor review, or performance monitoring.
-- Owners are the first six people and can also be employees. Ownership cannot be sold or inherited; a firm with a dead owner retains dividends.
+- Owners are the first six people and can also be employees. Working owners make simple runway-based wage-waiver and dividend decisions, but cannot set arbitrary salary, vary working hours, replace management, inject personal capital, lend to the firm, sell or transfer ownership, share ownership, or create formal distribution policies. Ownership is not inherited; a firm with a dead owner retains surplus.
 - A deceased person's cash transfers immediately to the treasury as an intestate estate. There are no wills, heirs, probate delays, creditor claims, inheritance taxes, or non-cash estate assets.
 - Insolvent firms do not liquidate inventory or other assets, distribute proceeds, reorganize, gain a replacement owner, or reopen.
 - A closed housing or food firm can make essential services unavailable with no replacement-entry mechanism.

@@ -26,7 +26,7 @@ There are 40 named people. Each person carries:
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
-- Personal differences: randomized starting values and a persistent esteem baseline
+- Personal differences: randomized starting values, a persistent esteem baseline, and a stable 15–31% comfortable-owner dividend preference
 - Narrative state: recent life events
 - Display state: home and current map positions
 
@@ -122,6 +122,8 @@ If a firm cannot cover all attending workers at that wage, a payroll ratio scale
 
 The firm transfers net wage to the person and employer tax to the treasury. If the payroll ratio is below 0.65, the firm gains trouble and the worker receives a payroll-failure event.
 
+An owner who is also an attending employee makes an explicit wage choice. When firm cash is below its next-day operating need and the owner personally has at least ten days of runway, the owner waives that day's wage to preserve cash for other workers and inputs. An owner below that personal runway still draws pay for attended work. A waiver produces life events for the owner and firm; resuming or drawing a wage remains visible through firm state and the ordinary wage ledger. The owner is excluded from the payroll denominator when waiving, so the choice can improve coworkers' payroll coverage.
+
 Workers who missed production receive no wage in that payroll phase.
 
 ### 4. Food shopping
@@ -200,7 +202,9 @@ After six consecutive distress days, a firm becomes `insolvent`. All employees l
 
 At the current shock setting, a firm has `shockRisk / 100 × 0.025` probability of transferring a random 12–34 cash to the treasury and gaining trouble.
 
-When an operating firm's cash exceeds 230, 35% of the amount above 210 is paid to its living owner as a dividend. A firm retains the money when its owner has died. Distressed and newly rescued firms do not pay dividends.
+Owner dividends are choices made only after the solvency assessment. The firm first retains the greater of 210 cash or four complete next-day operating needs. No dividend is allowed when the owner is dead, the firm is inactive or non-operating, an approved vacancy is being funded, or a treasury rescue occurred within the previous 14 days.
+
+The living owner's personal runway determines the share of remaining surplus selected: 55% below five days, 35% from five to below 15 days, and the owner's stable 15–31% preference when more secure. The transfer is recorded on both firm and owner ledgers. The firm pipeline card shows the latest wage and dividend choice, day, amount, and reason. These thresholds are behavioral hypotheses designed to produce distinct retention and extraction choices, not claims about observed owner behavior.
 
 #### Health and stress
 

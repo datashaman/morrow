@@ -148,6 +148,79 @@ test("a persistently unfunded non-vital firm becomes insolvent", () => {
   assert.match(makers.events[0].text, /sustained insolvency/);
 });
 
+test("a secure working owner can waive wages to preserve a cash-poor firm", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
+  const owner = town.people[firm.owner];
+  const coworker = town.people[firm.employees.find((id) => id !== owner.id)];
+  owner.cash = town.essentialCost() * 12;
+  owner.ledger = [];
+  owner.events = [];
+  coworker.ledger = [];
+  firm.cash = town.nextOperatingNeed(firm) - 1;
+  firm.employees.forEach((id) => { town.people[id].attended = true; });
+
+  town.payrollPhase();
+
+  assert.equal(owner.ledger.length, 0);
+  assert.equal(firm.ownerDecision.wage, "waived");
+  assert.match(firm.ownerDecision.wageReason, /preserve operating cash/);
+  assert.match(owner.events[0].text, /waived owner wage/);
+  assert.match(coworker.ledger[0].text, /wage from Harvest Foods/);
+});
+
+test("a cash-poor owner can still draw wages for attended work", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
+  const owner = town.people[firm.owner];
+  owner.cash = 0;
+  owner.ledger = [];
+  firm.cash = town.nextOperatingNeed(firm) - 1;
+  firm.employees.forEach((id) => { town.people[id].attended = true; });
+
+  town.payrollPhase();
+
+  assert.equal(firm.ownerDecision.wage, "drawn");
+  assert.match(firm.ownerDecision.wageReason, /owner runway is thin/);
+  assert.match(owner.ledger[0].text, /wage from Harvest Foods/);
+});
+
+test("an owner chooses a dividend only from retained operating surplus", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
+  const owner = town.people[firm.owner];
+  owner.cash = 0;
+  owner.ledger = [];
+  firm.ledger = [];
+  firm.cash = 300;
+  firm.targetStaff = firm.employees.length;
+
+  const paid = town.payOwnerDividend(firm);
+
+  assert.equal(paid, 49.5);
+  assert.equal(firm.cash, 250.5);
+  assert.equal(owner.cash, 49.5);
+  assert.equal(firm.ownerDecision.dividend, 49.5);
+  assert.match(firm.ownerDecision.dividendReason, /thin owner runway/);
+  assert.match(firm.ledger[0].text, /owner dividend to Amina/);
+  assert.match(owner.ledger[0].text, /owner dividend from Harvest Foods/);
+});
+
+test("expansion and a recent rescue block owner dividends", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");
+  firm.cash = 300;
+  firm.targetStaff = firm.employees.length + 1;
+
+  assert.equal(town.payOwnerDividend(firm), 0);
+  assert.match(firm.ownerDecision.dividendReason, /approved expansion/);
+
+  firm.targetStaff = firm.employees.length;
+  firm.lastRescueDay = town.day;
+  assert.equal(town.payOwnerDividend(firm), 0);
+  assert.match(firm.ownerDecision.dividendReason, /recent treasury rescue/);
+});
+
 function firmCashIsBounded(cash) {
   return cash <= 90;
 }

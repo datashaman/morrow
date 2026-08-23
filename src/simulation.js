@@ -62,6 +62,14 @@ export class TownSimulation {
       targetStaff: firm.initialStaff,
       vacancyAge: 0,
       overstaffedDays: 0,
+      ownerDecision: {
+        wageDay: null,
+        wage: "not assessed",
+        wageReason: "payroll has not run",
+        dividendDay: null,
+        dividend: 0,
+        dividendReason: "settlement has not run",
+      },
       activitySequence: 0,
       ledger: [],
       events: [],
@@ -101,6 +109,7 @@ export class TownSimulation {
         health: 0.58 + this.random() * 0.36,
         stress: 0.12 + this.random() * 0.25,
         esteemBaseline: 0.05 + this.random() * 0.12,
+        dividendPreference: 0.15 + (id % 5) * 0.04,
         growth: 0.04 + this.random() * 0.15,
         attended: true,
         scarcityError: false,
@@ -471,8 +480,27 @@ export class TownSimulation {
     this.firms.forEach((firm) => {
       const attendees = firm.employees.map((id) => this.people[id]).filter((person) => person.alive && person.attended);
       const wage = Math.max(this.policy.minimumWage, firm.wage);
-      const ratio = attendees.length ? Math.min(1, firm.cash / (wage * attendees.length)) : 1;
-      attendees.forEach((person) => {
+      const compensation = attendees.map((person) => ({
+        person,
+        decision: person.id === firm.owner ? this.ownerWageDecision(firm, person) : { draw: true, reason: "employee wage for attended work" },
+      }));
+      const payable = compensation.filter(({ decision }) => decision.draw);
+      const ratio = payable.length ? Math.min(1, firm.cash / (wage * payable.length)) : 1;
+      compensation.forEach(({ person, decision }) => {
+        if (person.id === firm.owner) {
+          const previousWage = firm.ownerDecision.wage;
+          firm.ownerDecision.wageDay = this.day;
+          firm.ownerDecision.wage = decision.draw ? "drawn" : "waived";
+          firm.ownerDecision.wageReason = decision.reason;
+          if (!decision.draw) {
+            if (previousWage !== "waived") {
+              this.note(person, `waived owner wage from ${firm.name} to preserve operating cash`, "neutral");
+              this.note(firm, `${person.name} waived the owner wage to preserve operating cash`, "good");
+            }
+            return;
+          }
+          if (previousWage === "waived") this.note(firm, `${person.name} resumed drawing an owner wage`, "neutral");
+        }
         const gross = wage * ratio * (0.75 + person.reliability * 0.25);
         const before = person.cash;
         const paid = this.transfer(firm, person, gross * (1 - taxRate));
@@ -484,6 +512,14 @@ export class TownSimulation {
         }
       });
     });
+  }
+
+  ownerWageDecision(firm, owner) {
+    const firmNeedsCash = firm.cash + 1e-9 < this.nextOperatingNeed(firm);
+    const ownerIsSecure = this.runwayDays(owner) >= 10;
+    if (firmNeedsCash && ownerIsSecure) return { draw: false, reason: "secure owner chose to preserve operating cash" };
+    if (firmNeedsCash) return { draw: true, reason: "owner runway is thin despite firm cash pressure" };
+    return { draw: true, reason: "firm can cover its next operating need" };
   }
 
   foodPhase() {
@@ -678,6 +714,37 @@ export class TownSimulation {
     if (firm.distressDays >= FIRM_INSOLVENCY_DAYS) this.closeFirm(firm);
   }
 
+  ownerDividendDecision(firm, owner) {
+    if (!firm.active || !owner.alive) return { amount: 0, reason: "no living owner of an active firm" };
+    if (firm.status !== "operating") return { amount: 0, reason: `${firm.status} firms retain cash` };
+    if (firm.lastRescueDay !== null && this.day - firm.lastRescueDay < 14) return { amount: 0, reason: "recent treasury rescue requires cash retention" };
+    if (firm.targetStaff > firm.employees.length) return { amount: 0, reason: "approved expansion requires cash retention" };
+    const retainedCash = Math.max(210, roundMoney(this.nextOperatingNeed(firm) * 4));
+    const surplus = roundMoney(firm.cash - retainedCash);
+    if (surplus <= 0) return { amount: 0, reason: `no surplus above the ${retainedCash.toFixed(1)} retained operating buffer` };
+    const runway = this.runwayDays(owner);
+    if (runway < 5) return { amount: roundMoney(surplus * 0.55), reason: "thin owner runway selected 55% of surplus" };
+    if (runway < 15) return { amount: roundMoney(surplus * 0.35), reason: "moderate owner runway selected 35% of surplus" };
+    return { amount: roundMoney(surplus * owner.dividendPreference), reason: `secure owner preference selected ${Math.round(owner.dividendPreference * 100)}% of surplus` };
+  }
+
+  payOwnerDividend(firm) {
+    const owner = this.people[firm.owner];
+    const decision = this.ownerDividendDecision(firm, owner);
+    firm.ownerDecision.dividendDay = this.day;
+    firm.ownerDecision.dividend = decision.amount;
+    firm.ownerDecision.dividendReason = decision.reason;
+    if (!decision.amount) return 0;
+    const firmBefore = firm.cash;
+    const ownerBefore = owner.cash;
+    const paid = this.transfer(firm, owner, decision.amount, { exact: true });
+    if (!paid) return 0;
+    firm.ownerDecision.dividend = paid;
+    this.ledger(firm, { direction: "out", amount: paid, text: `owner dividend to ${owner.name}`, before: firmBefore });
+    this.ledger(owner, { direction: "in", amount: paid, text: `owner dividend from ${firm.name}`, before: ownerBefore });
+    return paid;
+  }
+
   settleFirm(firm) {
     if (!firm.active) return;
     const wage = Math.max(this.policy.minimumWage, firm.wage);
@@ -708,15 +775,8 @@ export class TownSimulation {
       this.transfer(firm, this.government, Math.min(firm.cash, 12 + this.random() * 22));
       firm.trouble += 1;
     }
-    if (firm.cash > 230 && firm.status === "operating") {
-      const owner = this.people[firm.owner];
-      if (owner.alive) {
-        const before = owner.cash;
-        const paid = this.transfer(firm, owner, (firm.cash - 210) * 0.35);
-        this.ledger(owner, { direction: "in", amount: paid, text: `owner dividend from ${firm.name}`, before });
-      }
-    }
     this.assessFirmSolvency(firm);
+    this.payOwnerDividend(firm);
     firm.sales = 0;
     firm.inputCosts = 0;
     firm.unitsSold = 0;
