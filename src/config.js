@@ -37,6 +37,10 @@ export const HOUSING_RECEIVERSHIP_GRACE_DAYS = 7;
 export const HOUSING_RESTART_COST = 90;
 export const HOUSING_DISPLACEMENT_RATE = 0.2;
 export const HOUSING_REPLACEMENT_STAFF = 2;
+export const PRICE_REVIEW_DAYS = 7;
+export const PRICE_FLOOR_MULTIPLIER = 0.7;
+export const PRICE_CEILING_MULTIPLIER = 1.4;
+export const PRICE_ADJUSTMENT_RATE = 0.05;
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",

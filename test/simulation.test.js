@@ -902,6 +902,65 @@ test("bulk units contribute their full realized income through one transaction",
   assert.ok(Math.abs(firm.revenueEMA - 5.4 * 0.28) < 1e-9);
 });
 
+test("an owner lowers price after repeated affordability failures", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  town.day = 7;
+  harvest.pricingWindow = { unitsSold: 2, revenue: 3.6, inputCosts: 0, priceRejections: 4, turnedAway: 0 };
+
+  town.reviewOwnerPrice(harvest);
+
+  assert.equal(harvest.price, 1.71);
+  assert.equal(harvest.ownerDecision.priceDecision, "lowered");
+  assert.match(harvest.ownerDecision.priceReason, /4 affordability failures/);
+  assert.match(harvest.events[0].text, /lowered the price from 1.80 to 1.71/);
+});
+
+test("an owner raises price when demand exceeds transaction capacity", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const café = town.firms.find((firm) => firm.name === "Common Café");
+  town.day = 7;
+  café.pricingWindow = { unitsSold: 8, revenue: 17.6, inputCosts: 5, priceRejections: 0, turnedAway: 3 };
+
+  town.reviewOwnerPrice(café);
+
+  assert.equal(café.price, 2.31);
+  assert.equal(café.ownerDecision.priceDecision, "raised");
+  assert.match(café.ownerDecision.priceReason, /3 customers were turned away/);
+});
+
+test("owner pricing remains inside configured bounds", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  town.day = 7;
+  harvest.price = harvest.minimumPrice;
+  harvest.pricingWindow = { unitsSold: 0, revenue: 0, inputCosts: 0, priceRejections: 8, turnedAway: 0 };
+
+  town.reviewOwnerPrice(harvest);
+
+  assert.equal(harvest.price, harvest.minimumPrice);
+  assert.equal(harvest.ownerDecision.priceDecision, "held");
+});
+
+test("a lower owner-set price converts an affordability failure into a purchase", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  person.cash = 1.75;
+  person.ledger = [];
+
+  assert.equal(town.buy(person, harvest, 1, "food"), 0);
+  assert.equal(harvest.priceRejectionsToday, 1);
+  town.day = 7;
+  harvest.pricingWindow = { unitsSold: 0, revenue: 0, inputCosts: 0, priceRejections: 2, turnedAway: 0 };
+  town.reviewOwnerPrice(harvest);
+  const paid = town.buy(person, harvest, 1, "food");
+
+  assert.equal(paid, 1.71);
+  assert.equal(person.cash, 0.04);
+  assert.equal(person.ledger[0].text, "bought 1 food portion from Harvest Foods");
+});
+
 test("sufficient realized income creates an economically supported position", () => {
   const town = new TownSimulation({ seed: 42 });
   town.setPolicy("shockRisk", 0);

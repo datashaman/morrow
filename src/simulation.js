@@ -19,6 +19,10 @@ import {
   MISSED_MAINTENANCE_CAPACITY,
   NAMES,
   PHASES,
+  PRICE_ADJUSTMENT_RATE,
+  PRICE_CEILING_MULTIPLIER,
+  PRICE_FLOOR_MULTIPLIER,
+  PRICE_REVIEW_DAYS,
   PRODUCTS,
   RENT_INTERVAL_DAYS,
   STAFFING_REVENUE_BUFFER,
@@ -50,6 +54,9 @@ export class TownSimulation {
       kind: "firm",
       id,
       cash: 150,
+      basePrice: firm.price,
+      minimumPrice: roundMoney(firm.price * PRICE_FLOOR_MULTIPLIER),
+      maximumPrice: roundMoney(firm.price * PRICE_CEILING_MULTIPLIER),
       owner: id,
       employees: [],
       sales: 0,
@@ -65,6 +72,8 @@ export class TownSimulation {
       transactionsToday: 0,
       attemptedTransactions: 0,
       turnedAwayTransactions: 0,
+      priceRejectionsToday: 0,
+      pricingWindow: { unitsSold: 0, revenue: 0, inputCosts: 0, priceRejections: 0, turnedAway: 0 },
       active: true,
       status: "operating",
       distressDays: 0,
@@ -89,6 +98,11 @@ export class TownSimulation {
         continuationDay: null,
         continuation: "not assessed",
         continuationReason: "financing has not been assessed",
+        priceDay: null,
+        price: firm.price,
+        previousPrice: firm.price,
+        priceDecision: "not reviewed",
+        priceReason: "the first pricing window is still open",
       },
       activitySequence: 0,
       ledger: [],
@@ -430,7 +444,11 @@ export class TownSimulation {
   buy(person, firm, units, purpose) {
     if (!person.alive || !firm?.active || firm.inventory < units) return 0;
     const cost = roundMoney(firm.price * units);
-    if (person.cash + 1e-9 < cost || !this.requestTransaction(firm, person, purpose)) return 0;
+    if (person.cash + 1e-9 < cost) {
+      firm.priceRejectionsToday += 1;
+      return 0;
+    }
+    if (!this.requestTransaction(firm, person, purpose)) return 0;
     const before = person.cash;
     const paid = this.transfer(person, firm, cost, { exact: true });
     if (paid !== cost) return 0;
@@ -585,6 +603,7 @@ export class TownSimulation {
         return;
       }
       const affordable = foodFirms.filter((firm) => person.cash >= firm.price && firm.inventory >= 1);
+      if (!affordable.length && foodFirms.length) foodFirms[0].priceRejectionsToday += 1;
       const delayed = person.scarcityError && person.stress > 0.62 && this.runwayDays(person) < 5 && this.random() < 0.32;
       const sellers = person.scarcityError && affordable.length > 1 ? [...affordable].reverse() : affordable;
       const paid = delayed ? 0 : sellers.reduce((result, firm) => {
@@ -618,6 +637,7 @@ export class TownSimulation {
       } else {
         const before = person.cash;
         const canPay = person.cash + 1e-9 >= due;
+        if (!canPay) housing.priceRejectionsToday += 1;
         const paid = canPay && this.requestTransaction(housing, person, "housing payment")
           ? this.transfer(person, housing, due, { exact: true })
           : 0;
@@ -884,6 +904,47 @@ export class TownSimulation {
     return 0;
   }
 
+  reviewOwnerPrice(firm) {
+    if (this.day % PRICE_REVIEW_DAYS !== 0) return false;
+    const owner = this.people[firm.owner];
+    const window = firm.pricingWindow;
+    const previousPrice = firm.price;
+    let proposedPrice = previousPrice;
+    let decision = "held";
+    let reason = "observed demand and margin did not justify a change";
+
+    if (!owner?.alive) {
+      reason = "no living owner was available to change the price";
+    } else if (window.priceRejections >= 2 && firm.production !== "fixed-service" && firm.inventory >= 1) {
+      proposedPrice *= 1 - PRICE_ADJUSTMENT_RATE;
+      decision = "lowered";
+      reason = `${window.priceRejections} affordability failures signaled price-sensitive demand`;
+    } else if (window.turnedAway >= 2) {
+      proposedPrice *= 1 + PRICE_ADJUSTMENT_RATE;
+      decision = "raised";
+      reason = `${window.turnedAway} customers were turned away at available capacity`;
+    } else if (window.revenue - window.inputCosts < 0 && window.unitsSold > 0) {
+      proposedPrice *= 1 + PRICE_ADJUSTMENT_RATE;
+      decision = "raised";
+      reason = "realized sales did not cover input costs";
+    } else if (window.unitsSold === 0 && firm.production !== "fixed-service" && firm.inventory >= 1) {
+      proposedPrice *= 1 - PRICE_ADJUSTMENT_RATE;
+      decision = "lowered";
+      reason = "inventory remained available without a sale";
+    }
+
+    firm.price = roundMoney(clamp(proposedPrice, firm.minimumPrice, firm.maximumPrice));
+    if (firm.price === previousPrice) decision = "held";
+    firm.ownerDecision.priceDay = this.day;
+    firm.ownerDecision.previousPrice = previousPrice;
+    firm.ownerDecision.price = firm.price;
+    firm.ownerDecision.priceDecision = decision;
+    firm.ownerDecision.priceReason = reason;
+    if (firm.price !== previousPrice) this.note(firm, `${owner.name} ${decision} the price from ${previousPrice.toFixed(2)} to ${firm.price.toFixed(2)} because ${reason}`, "neutral");
+    firm.pricingWindow = { unitsSold: 0, revenue: 0, inputCosts: 0, priceRejections: 0, turnedAway: 0 };
+    return firm.price !== previousPrice;
+  }
+
   ownerDividendDecision(firm, owner) {
     if (!firm.active || !owner.alive) return { amount: 0, type: "none", reason: "no living owner of an active firm" };
     if (firm.status !== "operating") return { amount: 0, type: "none", reason: `${firm.status} firms retain cash` };
@@ -926,6 +987,12 @@ export class TownSimulation {
 
   settleFirm(firm) {
     if (!firm.active) return;
+    firm.pricingWindow.unitsSold += firm.unitsSold;
+    firm.pricingWindow.revenue += firm.sales;
+    firm.pricingWindow.inputCosts += firm.inputCosts;
+    firm.pricingWindow.priceRejections += firm.priceRejectionsToday;
+    firm.pricingWindow.turnedAway += firm.turnedAwayTransactions;
+    this.reviewOwnerPrice(firm);
     const wage = Math.max(this.policy.minimumWage, firm.wage);
     const netSales = Math.max(0, firm.sales - firm.inputCosts);
     const revenueSample = firm.sector === "housing" ? (firm.sales > 0 ? netSales / RENT_INTERVAL_DAYS : null) : netSales;
@@ -965,6 +1032,7 @@ export class TownSimulation {
     firm.transactionsToday = 0;
     firm.attemptedTransactions = 0;
     firm.turnedAwayTransactions = 0;
+    firm.priceRejectionsToday = 0;
   }
 
   step() {
