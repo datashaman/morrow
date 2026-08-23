@@ -2,6 +2,7 @@ import "./styles.css";
 import { PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
 import { describeContract, describePipeline } from "./firm-presentation.js";
+import { deceasedMarkerSegments, employeeOrbitTarget, firmLandmarkLayout, resolveCanvasColor } from "./map-presentation.js";
 import { TownSimulation } from "./simulation.js";
 
 const app = document.querySelector("#app");
@@ -241,14 +242,15 @@ function resizeCanvas() {
 function drawTown() {
   const { width, height } = canvas.getBoundingClientRect();
   const style = getComputedStyle(document.documentElement);
+  const darkMode = window.matchMedia("(prefers-color-scheme: dark)").matches;
   const colors = {
-    background: style.getPropertyValue("--stage").trim(),
-    grid: style.getPropertyValue("--border").trim(),
-    text: style.getPropertyValue("--text").trim(),
-    muted: style.getPropertyValue("--muted").trim(),
-    accent: style.getPropertyValue("--accent").trim(),
-    cash: style.getPropertyValue("--cash").trim(),
-    danger: style.getPropertyValue("--danger").trim(),
+    background: resolveCanvasColor(style.getPropertyValue("--stage"), darkMode),
+    grid: resolveCanvasColor(style.getPropertyValue("--border"), darkMode),
+    text: resolveCanvasColor(style.getPropertyValue("--text"), darkMode),
+    muted: resolveCanvasColor(style.getPropertyValue("--muted"), darkMode),
+    accent: resolveCanvasColor(style.getPropertyValue("--accent"), darkMode),
+    cash: resolveCanvasColor(style.getPropertyValue("--cash"), darkMode),
+    danger: resolveCanvasColor(style.getPropertyValue("--danger"), darkMode),
   };
   context.clearRect(0, 0, width, height);
   context.fillStyle = colors.background;
@@ -259,29 +261,30 @@ function drawTown() {
   for (let y = 28; y < height; y += 56) { context.beginPath(); context.moveTo(0, y); context.lineTo(width, y); context.stroke(); }
   context.globalAlpha = 1;
 
+  const landmarkMeta = (firm) => `${money(firm.cash)} cash · ${firm.employees.length} staff`;
+  context.font = "700 14px system-ui";
+  const landmarks = new Map(simulation.firms.map((firm) => {
+    const nameWidth = context.measureText(firm.name).width;
+    context.font = "500 11px system-ui";
+    const metaWidth = context.measureText(landmarkMeta(firm)).width;
+    context.font = "700 14px system-ui";
+    return [firm.id, firmLandmarkLayout(firm, { width, height, nameWidth, metaWidth })];
+  }));
+
   simulation.flows.forEach((flow) => {
     const from = flow.from.kind === "person" ? simulation.people[flow.from.id] : flow.from.kind === "firm" ? simulation.firms[flow.from.id] : simulation.government;
     const to = flow.to.kind === "person" ? simulation.people[flow.to.id] : flow.to.kind === "firm" ? simulation.firms[flow.to.id] : simulation.government;
     context.strokeStyle = colors.cash;
     context.globalAlpha = flow.from.kind === "person" && flow.from.id === selected || flow.to.kind === "person" && flow.to.id === selected ? 0.9 : 0.2;
     context.lineWidth = context.globalAlpha > 0.5 ? 2 : 1;
-    context.beginPath(); context.moveTo(from.x * width, from.y * height); context.lineTo(to.x * width, to.y * height); context.stroke();
+    const fromLandmark = from.kind === "firm" ? landmarks.get(from.id) : null;
+    const toLandmark = to.kind === "firm" ? landmarks.get(to.id) : null;
+    context.beginPath();
+    context.moveTo(fromLandmark?.centerX ?? from.x * width, fromLandmark?.centerY ?? from.y * height);
+    context.lineTo(toLandmark?.centerX ?? to.x * width, toLandmark?.centerY ?? to.y * height);
+    context.stroke();
   });
   context.globalAlpha = 1;
-
-  simulation.firms.forEach((firm) => {
-    const x = firm.x * width;
-    const y = firm.y * height;
-    context.fillStyle = firm.active ? colors.text : colors.muted;
-    context.fillRect(x - 25, y - 19, 50, 38);
-    context.fillStyle = colors.background;
-    context.font = "700 10px system-ui";
-    context.textAlign = "center";
-    context.fillText(firm.name.split(" ")[0], x, y + 3);
-    context.fillStyle = colors.text;
-    context.font = "11px system-ui";
-    context.fillText(`${money(firm.cash)} · ${firm.employees.length} workers`, x, y + 36);
-  });
 
   const cemeteryX = cemetery.x * width;
   const cemeteryY = cemetery.y * height;
@@ -301,21 +304,43 @@ function drawTown() {
 
   simulation.people.forEach((person) => {
     const employer = person.employer >= 0 ? simulation.firms[person.employer] : null;
+    const landmark = employer ? landmarks.get(employer.id) : null;
     const graveColumn = person.id % cemetery.columns;
     const graveRow = Math.floor(person.id / cemetery.columns);
-    const targetX = !person.alive ? cemetery.x + (graveColumn - 2) * 0.018 : employer ? employer.x : person.homeX;
-    const targetY = !person.alive ? cemetery.y + (graveRow - 3.5) * 0.012 : employer ? employer.y : person.homeY;
+    const employeeTarget = employer ? employeeOrbitTarget(employer.employees.indexOf(person.id), employer.employees.length, landmark, { width, height }) : null;
+    const targetX = !person.alive ? cemetery.x + (graveColumn - 2) * 0.018 : employeeTarget?.x ?? person.homeX;
+    const targetY = !person.alive ? cemetery.y + (graveRow - 3.5) * 0.012 : employeeTarget?.y ?? person.homeY;
     person.x += (targetX - person.x) * 0.02;
     person.y += (targetY - person.y) * 0.02;
-    const x = person.x * width + (person.alive ? Math.sin(person.id * 7) * 18 : 0);
-    const y = person.y * height + (person.alive ? Math.cos(person.id * 11) * 16 : 0);
-    context.beginPath(); context.arc(x, y, person.id === selected ? 7 : 4.5, 0, Math.PI * 2);
-    context.fillStyle = !person.alive ? colors.muted : !person.housed || person.hungryDays ? colors.danger : colors.accent;
-    context.fill();
+    const x = person.x * width;
+    const y = person.y * height;
+    if (person.alive) {
+      context.beginPath(); context.arc(x, y, person.id === selected ? 7 : 5, 0, Math.PI * 2);
+      context.fillStyle = !person.housed || person.hungryDays ? colors.danger : colors.accent;
+      context.fill();
+    } else {
+      context.strokeStyle = colors.muted;
+      context.lineWidth = 2.5;
+      deceasedMarkerSegments(x, y).forEach(([fromX, fromY, toX, toY]) => {
+        context.beginPath(); context.moveTo(fromX, fromY); context.lineTo(toX, toY); context.stroke();
+      });
+    }
     if (person.id === selected) {
-      context.strokeStyle = colors.text; context.lineWidth = 2; context.stroke();
+      context.beginPath(); context.arc(x, y, 9, 0, Math.PI * 2); context.strokeStyle = colors.text; context.lineWidth = 1.5; context.stroke();
       context.fillStyle = colors.text; context.textAlign = "center"; context.font = "600 12px system-ui"; context.fillText(person.name, x, y - 13);
     }
+  });
+
+  simulation.firms.forEach((firm) => {
+    const landmark = landmarks.get(firm.id);
+    context.fillStyle = firm.active ? colors.text : colors.muted;
+    context.fillRect(landmark.centerX - landmark.width / 2, landmark.centerY - landmark.height / 2, landmark.width, landmark.height);
+    context.fillStyle = colors.background;
+    context.textAlign = "center";
+    context.font = "700 14px system-ui";
+    context.fillText(landmark.label, landmark.centerX, landmark.centerY - 5);
+    context.font = "500 11px system-ui";
+    context.fillText(landmarkMeta(firm), landmark.centerX, landmark.centerY + 15);
   });
 
   const treasuryX = simulation.government.x * width;

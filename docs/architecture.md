@@ -48,6 +48,10 @@ The class currently combines initialization, accounting, decision rules, phase o
 
 Converts product, pipeline, and supply-contract state into display strings. It contains no economic decisions and is covered by focused Node tests.
 
+### `src/map-presentation.js`
+
+Owns deterministic canvas presentation geometry: full-name firm landmark bounds, employee orbit targets that clear workplace plaques, the deceased cross-and-base marker, and browser-safe light/dark canvas color resolution. These helpers keep display-only layout testable without moving economic decisions out of the simulation.
+
 ### `src/main.js`
 
 Creates the interface, binds controls, advances the simulation on a timer, converts state into human-readable details, renders firm pipeline and activity panels, and draws firms, people, treasury, and recent money flows on canvas.

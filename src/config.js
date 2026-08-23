@@ -46,7 +46,7 @@ export const FIRMS = [
   { name: "HomeWorks", sector: "housing", vital: true, sells: "housing", input: null, source: null, production: "fixed-service", sourceDescription: "housing staff operate the town's current dwelling service", x: 0.80, y: 0.29, price: 6, wage: 7.2, productivity: 0, transactionsPerWorker: 10, inventory: 0, initialStaff: 4, maxStaff: 6 },
   { name: "Makers Guild", sector: "goods", sells: "learningGoods", input: null, source: null, production: "direct", sourceDescription: "guild workers make learning tools locally", x: 0.25, y: 0.73, price: 6, wage: 7.8, productivity: 2.1, transactionsPerWorker: 3, inventory: 18, initialStaff: 3, maxStaff: 6 },
   { name: "Common Café", sector: "service", sells: "cafeService", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "café staff prepare visits using farm produce", x: 0.69, y: 0.73, price: 2.2, wage: 6.4, productivity: 0, transactionsPerWorker: 4, inventory: 6, initialStaff: 2, maxStaff: 4 },
-  { name: "Morrow Fields", sector: "agriculture", vital: true, sells: "produce", input: null, source: null, production: "direct", sourceDescription: "farm workers grow produce locally", x: 0.08, y: 0.68, price: 1.1, wage: 5.8, productivity: 9, transactionsPerWorker: 8, inventory: 36, initialStaff: 7, maxStaff: 12 },
+  { name: "Morrow Fields", sector: "agriculture", vital: true, sells: "produce", input: null, source: null, production: "direct", sourceDescription: "farm workers grow produce locally", x: 0.08, y: 0.54, price: 1.1, wage: 5.8, productivity: 9, transactionsPerWorker: 8, inventory: 36, initialStaff: 7, maxStaff: 12 },
 ];
 
 export const SUPPLY_CONTRACTS = [
