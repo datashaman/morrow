@@ -22,7 +22,7 @@ app.innerHTML = `
 
     <div class="stage-wrap">
       <canvas id="town" aria-label="Animated map of people and firms in the town"></canvas>
-      <div class="legend" aria-hidden="true"><span><i class="person-dot"></i>Person</span><span><i class="firm-dot"></i>Firm</span><span><i class="cash-line"></i>Cash transfer</span></div>
+      <div class="legend" aria-hidden="true"><span><i class="person-dot"></i>Person</span><span><i class="deceased-dot"></i>Deceased</span><span><i class="firm-dot"></i>Firm</span><span><i class="cash-line"></i>Cash transfer</span></div>
     </div>
 
     <section class="person-card" aria-live="polite">
@@ -61,6 +61,7 @@ let paused = false;
 let lastStep = performance.now();
 const canvas = document.querySelector("#town");
 const context = canvas.getContext("2d");
+const cemetery = { x: 0.88, y: 0.82, columns: 5 };
 
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
@@ -209,14 +210,32 @@ function drawTown() {
     context.fillText(`${money(firm.cash)} · ${firm.employees.length} workers`, x, y + 36);
   });
 
+  const cemeteryX = cemetery.x * width;
+  const cemeteryY = cemetery.y * height;
+  const cemeteryWidth = Math.min(120, width * 0.16);
+  const cemeteryHeight = 90;
+  context.strokeStyle = colors.muted;
+  context.lineWidth = 1;
+  context.globalAlpha = 0.7;
+  context.strokeRect(cemeteryX - cemeteryWidth / 2, cemeteryY - cemeteryHeight / 2, cemeteryWidth, cemeteryHeight);
+  context.fillStyle = colors.muted;
+  context.textAlign = "center";
+  context.font = "700 10px system-ui";
+  context.fillText("CEMETERY", cemeteryX, cemeteryY - cemeteryHeight / 2 - 8);
+  context.font = "11px system-ui";
+  context.fillText(`${simulation.people.filter((person) => !person.alive).length} interred`, cemeteryX, cemeteryY + cemeteryHeight / 2 + 16);
+  context.globalAlpha = 1;
+
   simulation.people.forEach((person) => {
     const employer = person.employer >= 0 ? simulation.firms[person.employer] : null;
-    const targetX = !person.alive ? person.x : employer ? employer.x : person.homeX;
-    const targetY = !person.alive ? person.y : employer ? employer.y : person.homeY;
+    const graveColumn = person.id % cemetery.columns;
+    const graveRow = Math.floor(person.id / cemetery.columns);
+    const targetX = !person.alive ? cemetery.x + (graveColumn - 2) * 0.018 : employer ? employer.x : person.homeX;
+    const targetY = !person.alive ? cemetery.y + (graveRow - 3.5) * 0.012 : employer ? employer.y : person.homeY;
     person.x += (targetX - person.x) * 0.02;
     person.y += (targetY - person.y) * 0.02;
-    const x = person.x * width + Math.sin(person.id * 7) * 18;
-    const y = person.y * height + Math.cos(person.id * 11) * 16;
+    const x = person.x * width + (person.alive ? Math.sin(person.id * 7) * 18 : 0);
+    const y = person.y * height + (person.alive ? Math.cos(person.id * 11) * 16 : 0);
     context.beginPath(); context.arc(x, y, person.id === selected ? 7 : 4.5, 0, Math.PI * 2);
     context.fillStyle = !person.alive ? colors.muted : !person.housed || person.hungryDays ? colors.danger : colors.accent;
     context.fill();

@@ -42,6 +42,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .legend span { display: flex; align-items: center; gap: 0.35rem; }
 .legend i { display: block; }
 .person-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.deceased-dot { width: 8px; height: 8px; border: 1px solid var(--muted); border-radius: 50%; background: var(--muted); }
 .firm-dot { width: 10px; height: 8px; background: var(--text); }
 .cash-line { width: 15px; height: 2px; background: var(--cash); }
 
