@@ -18,13 +18,13 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 ## Economic simplifications
 
-- Prices, food quality, productivity, and configured wages are fixed. There is no inflation, bargaining, price, quality, or productivity response, scarcity pricing, or wage competition. Food quality, productivity, and health-recovery multipliers are uncalibrated gameplay values.
+- Owners adjust prices through one bounded weekly heuristic. There is no inflation, bargaining, competitor forecasting, promotion, product differentiation, price discrimination, explicit demand curve, or wage competition. Food quality, productivity, wages, and health-recovery multipliers remain fixed and uncalibrated.
 - Wages and food operate daily while rent is billed every seven days. This is an internally balanced gameplay calendar, not a claim about real payment schedules.
 - There is no banking, saving account, debt, credit, interest, insurance, or negative balance. Insolvency is an administrative cash-runway rule rather than a legal bankruptcy process.
 - All money is inside one closed town. There is no external trade, remittance, investment, monetary creation, or destruction.
 - A “shock” moves firm cash to the treasury. It behaves more like a fine or emergency levy than a destructive loss.
 - Food retailers and the café buy a single abstract produce input from Morrow Fields, but the one-to-one conversion has no waste, recipes, grades, energy, equipment, transport, storage cost, or handling delay. Agriculture itself consumes no seed, land, water, fertilizer, energy, maintenance, or capital.
-- Supply contracts settle immediately in cash at fixed prices and quantities. There is no negotiation, expiry, priority, alternate supplier, trade credit, invoice, debt, or damages for under-delivery.
+- Supply contracts settle immediately in cash at fixed quantities; prices inherit the supplier's proportional owner adjustment. There is no bilateral negotiation, expiry, priority, alternate supplier, trade credit, invoice, debt, or damages for under-delivery.
 - Maintenance is one generic kit every three days for every firm other than Makers Guild. There are no distinct machines, tools, repair skills, depreciation curves, preventive schedules, breakdown types, or capital investment choices; the 65% capacity penalty is a gameplay hypothesis.
 - Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely while operating. Its receivership preserves all tenancies for seven days, then uses a fixed restart threshold or deterministic displacement rate rather than modeling property ownership, administrators, courts, lenders, tenant protections, or alternate landlords.
 - Initially housed people receive housing without an initial payment or provider record.

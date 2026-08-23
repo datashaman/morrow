@@ -36,12 +36,12 @@ Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.
 
 Six firms are configured in `src/config.js`. The product catalog gives every traded thing a stable identifier, label, and unit; each firm declares the product it sells, its input when it has one, its source, and how its output is obtained.
 
-| Firm | Sells | Made or supplied by | Retail/contract price | Base wage | Starting staff |
+| Firm | Sells | Made or supplied by | Starting retail/contract price | Base wage | Starting staff |
 |---|---|---|---:|---:|---:|
 | Harvest Foods | Everyday food | Morrow Fields produce, handled by retail staff | 1.8 | 6.2 | 3 |
 | Green Basket | High-quality food | Higher-grade Morrow Fields produce, selected by retail staff | 2.0 | 6.5 | 2 |
 | HomeWorks | Weekly housing service | Existing dwelling service operated by its staff | 6.0 weekly | 7.2 | 4 |
-| Makers Guild | Learning tools | Made directly by guild workers | 6.0 | 7.8 | 3 |
+| Makers Guild | Tools and repair kits | Made directly by guild workers | 6.0 | 7.8 | 3 |
 | Common Café | Prepared café service | Morrow Fields produce, prepared by café staff | 2.2 | 6.4 | 2 |
 | Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.25 wholesale | 5.8 | 7 |
 
@@ -112,7 +112,7 @@ Morrow Fields has immediate-settlement supply contracts with Harvest Foods, Gree
 
 Makers Guild has immediate-settlement maintenance contracts with every other starting firm. Each buyer holds one operating kit separately from saleable inventory. Every three days it consumes a kit; procurement then replenishes toward one kit when stock and buyer cash permit. Missing a maintenance cycle reduces direct production and transaction capacity to 65% until a later kit is consumed. This makes locally produced tools an input to agriculture, retail, housing, and café operations while citizen learning-tool purchases remain a secondary market. The three-day interval, one-kit target, price of 5, and 65% constrained capacity are balance hypotheses.
 
-The buyer pays at the contract unit price at delivery; no accounts payable, debt, or partial cash claim is created. Delivered farm inventory becomes the buyer's saleable inventory one for one. Both firms receive before/after ledger entries, the supplier records contract sales, and the buyer records input costs. An under-delivery records the requested and delivered quantities on the buyer. Contracts currently have fixed counterparties, quantities, prices, and output mappings.
+The buyer pays at the current contract unit price at delivery; no accounts payable, debt, or partial cash claim is created. Delivered farm inventory becomes the buyer's saleable inventory one for one. Both firms receive before/after ledger entries, the supplier records contract sales, and the buyer records input costs. An under-delivery records the requested and delivered quantities on the buyer. Contracts have fixed counterparties, quantities, and output mappings. Their starting prices move proportionally with the supplier owner's bounded price decision.
 
 ### 3. Payroll
 
@@ -190,6 +190,18 @@ Each non-housing firm updates its smoothed realized daily net income, where the 
 
 Housing receipts are divided by seven to produce a daily-equivalent income sample. HomeWorks updates its smoothed income only when it receives revenue, so its income does not decay merely because no housed citizen owes rent between bills.
 
+#### Owner pricing
+
+Each firm accumulates a seven-day pricing window containing units sold, revenue, input costs, affordability failures, and customers turned away by capacity. A living owner reviews the window every seventh settlement and changes the consumer price by at most 5%:
+
+- at least two affordability failures and available inventory favor a price cut;
+- at least two capacity turnaways favor a price increase;
+- sales that fail to cover input costs favor an increase;
+- available inventory with no sales favors a cut;
+- otherwise the owner holds the price.
+
+Prices remain between 70% and 140% of their configured starting value. When Morrow Fields or Makers Guild changes price, every outbound contract price moves by the same proportion from its configured starting price. The new price affects exact affordability, seller ordering, contract quantities, realized income, staffing, and solvency from subsequent phases onward. A firm card shows the current price and the latest decision, day, and reason; actual changes also create firm life events. These review periods, signals, step sizes, and bounds are gameplay hypotheses, not calibrated pricing behavior. Owners do not forecast competitor reactions or optimize a demand curve.
+
 Income-supported staff is the bounded floor of smoothed income divided by 108% of the configured wage. Active firms retain a minimum of one worker, or two for housing. A firm approves at most one additional position per settlement when income supports it, the firm holds at least six wages in cash, and it remains below maximum staff.
 
 Vacancies must persist for two settlement phases before recruitment. Candidates are ranked by skill and reliability and must accept the offered wage relative to a skill-based reservation wage. Transaction capacity still limits how many customers attending staff can serve, but transaction count does not determine whether a firm is financially successful.
@@ -216,7 +228,7 @@ Owner dividends are choices made only after the solvency assessment. The firm fi
 
 An owner below three personal runway days first considers an emergency distribution even when company cash is below the ordinary four-day/210 dividend buffer. The amount is limited to what raises the owner toward five runway days and must leave the firm with one complete next-day operating need. It remains blocked by non-operating status, approved expansion, and a treasury rescue in the previous 14 days. Because it reduces company protection to one day, it can contribute to later distress or insolvency.
 
-Otherwise, the living owner's personal runway determines the share of ordinary surplus selected: 55% below five days, 35% from five to below 15 days, and the owner's stable 15–31% preference when more secure. Every dividend or emergency distribution is recorded on both firm and owner ledgers. The firm pipeline card shows the latest wage, capital, continuation/insolvency, and distribution choices with their days, amounts, and reasons. These thresholds are behavioral hypotheses designed to produce distinct retention, investment, failure, and extraction choices, not claims about observed owner behavior.
+Otherwise, the living owner's personal runway determines the share of ordinary surplus selected: 55% below five days, 35% from five to below 15 days, and the owner's stable 15–31% preference when more secure. Every dividend or emergency distribution is recorded on both firm and owner ledgers. The firm pipeline card shows the latest price, wage, capital, continuation/insolvency, and distribution choices with their days, amounts, and reasons. These thresholds are behavioral hypotheses designed to produce distinct retention, investment, failure, and extraction choices, not claims about observed owner behavior.
 
 #### Health and stress
 

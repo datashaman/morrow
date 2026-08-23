@@ -961,6 +961,44 @@ test("a lower owner-set price converts an affordability failure into a purchase"
   assert.equal(person.ledger[0].text, "bought 1 food portion from Harvest Foods");
 });
 
+test("a supplier price decision propagates proportionally to wholesale contracts", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  const harvestContract = town.contracts.find((contract) => contract.supplier === "Morrow Fields" && contract.buyer === "Harvest Foods");
+  const basketContract = town.contracts.find((contract) => contract.supplier === "Morrow Fields" && contract.buyer === "Green Basket");
+  town.day = 7;
+  farm.pricingWindow = { unitsSold: 30, revenue: 34, inputCosts: 0, priceRejections: 0, turnedAway: 3 };
+
+  town.reviewOwnerPrice(farm);
+
+  assert.equal(farm.price, 1.16);
+  assert.equal(harvestContract.unitPrice, 1.16);
+  assert.equal(basketContract.unitPrice, 1.32);
+});
+
+test("procurement settles exactly at the supplier's adjusted wholesale price", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const contract = town.contracts.find((candidate) => candidate.supplier === "Morrow Fields" && candidate.buyer === "Harvest Foods");
+  town.contracts.filter((candidate) => candidate !== contract).forEach((candidate) => { candidate.active = false; });
+  town.day = 7;
+  farm.pricingWindow = { unitsSold: 30, revenue: 34, inputCosts: 0, priceRejections: 0, turnedAway: 3 };
+  town.reviewOwnerPrice(farm);
+  harvest.inventory = 0;
+  const buyerBefore = harvest.cash;
+  const supplierBefore = farm.cash;
+  const totalBefore = town.totalMoney();
+
+  town.procurementPhase();
+
+  assert.equal(contract.deliveredToday, 22);
+  assert.equal(harvest.cash, buyerBefore - 25.52);
+  assert.equal(farm.cash, supplierBefore + 25.52);
+  assert.equal(farm.unitsSold, 22);
+  assert.equal(town.totalMoney(), totalBefore);
+});
+
 test("sufficient realized income creates an economically supported position", () => {
   const town = new TownSimulation({ seed: 42 });
   town.setPolicy("shockRisk", 0);

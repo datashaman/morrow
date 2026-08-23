@@ -111,6 +111,7 @@ export class TownSimulation {
     this.contracts = SUPPLY_CONTRACTS.map((contract, id) => ({
       ...contract,
       id,
+      baseUnitPrice: contract.unitPrice,
       supplierId: this.firms.findIndex((firm) => firm.name === contract.supplier),
       buyerId: this.firms.findIndex((firm) => firm.name === contract.buyer),
       active: true,
@@ -520,6 +521,7 @@ export class TownSimulation {
       const available = Math.floor(supplier.inventory);
       const affordable = Math.floor((buyer.cash + 1e-9) / contract.unitPrice);
       const units = Math.min(contract.requestedToday, available, affordable);
+      supplier.priceRejectionsToday += Math.max(0, Math.min(contract.requestedToday, available) - affordable);
       const cost = roundMoney(units * contract.unitPrice);
       if (units > 0) {
         const buyerBefore = buyer.cash;
@@ -530,6 +532,7 @@ export class TownSimulation {
           if (contract.use === "operations") buyer.operatingSupplies += units;
           else buyer.inventory += units;
           supplier.sales += paid;
+          supplier.unitsSold += units;
           buyer.inputCosts += paid;
           contract.deliveredToday = units;
           const unit = PRODUCTS[contract.product].unit;
@@ -940,6 +943,10 @@ export class TownSimulation {
     firm.ownerDecision.price = firm.price;
     firm.ownerDecision.priceDecision = decision;
     firm.ownerDecision.priceReason = reason;
+    const priceMultiplier = firm.price / firm.basePrice;
+    this.contracts.filter((contract) => contract.supplierId === firm.id).forEach((contract) => {
+      contract.unitPrice = roundMoney(contract.baseUnitPrice * priceMultiplier);
+    });
     if (firm.price !== previousPrice) this.note(firm, `${owner.name} ${decision} the price from ${previousPrice.toFixed(2)} to ${firm.price.toFixed(2)} because ${reason}`, "neutral");
     firm.pricingWindow = { unitsSold: 0, revenue: 0, inputCosts: 0, priceRejections: 0, turnedAway: 0 };
     return firm.price !== previousPrice;
