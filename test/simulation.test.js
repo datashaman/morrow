@@ -446,6 +446,22 @@ test("higher-quality food replenishes more health", () => {
   assert.ok(dearer.health > cheaper.health);
 });
 
+test("a single food purchase uses the same buyer-oriented wording as a bulk purchase", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  person.cash = 20;
+  person.ledger = [];
+
+  town.buy(person, harvest, 1, "food");
+
+  assert.equal(person.ledger[0].direction, "out");
+  assert.equal(person.ledger[0].amount, 1.8);
+  assert.equal(person.ledger[0].before, 20);
+  assert.equal(person.ledger[0].after, 18.2);
+  assert.equal(person.ledger[0].text, "bought 1 food portion from Harvest Foods");
+});
+
 test("a citizen buys food ahead and consumes the reserve as its quality declines", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[2];
@@ -464,7 +480,7 @@ test("a citizen buys food ahead and consumes the reserve as its quality declines
   assert.equal(person.foodStock.length, 2);
   assert.equal(harvest.inventory, startingInventory - 3);
   assert.equal(person.ledger.length, 1);
-  assert.equal(person.ledger[0].text, "3 food portions from Harvest Foods");
+  assert.equal(person.ledger[0].text, "bought 3 food portions from Harvest Foods");
   assert.equal(person.lastFoodAge, 0);
 
   town.day = 2;

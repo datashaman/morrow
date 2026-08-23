@@ -407,7 +407,9 @@ export class TownSimulation {
         person.foodStock.push({ purchasedDay: this.day, quality: firm.quality, seller: firm.id });
       }
     } else person.personalSeller = firm.id;
-    const description = purpose === "food" && units > 1 ? `${units} food portions from ${firm.name}` : `${purpose} to ${firm.name}`;
+    const description = purpose === "food"
+      ? `bought ${units} food portion${units === 1 ? "" : "s"} from ${firm.name}`
+      : `${purpose} to ${firm.name}`;
     this.ledger(person, { direction: "out", amount: paid, text: description, before });
     return paid;
   }
