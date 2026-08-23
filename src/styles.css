@@ -61,7 +61,8 @@ select { padding: 0.45rem 2rem 0.45rem 0.6rem; }
 .activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-top: 1rem; }
 .activity-heading h2 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.15rem; font-weight: 500; }
 .activity-heading label { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 0.78rem; }
-.activity-stream { margin: 0.65rem 0 0; padding: 0; list-style: none; border-top: 1px solid var(--border); }
+.activity-stream { max-height: 28rem; margin: 0.65rem 0 0; padding: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; list-style: none; border-top: 1px solid var(--border); }
+.activity-stream:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .activity-stream li { display: grid; grid-template-columns: 3.2rem 1fr auto; gap: 0.75rem; padding: 0.55rem 0; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
 .activity-stream time, .activity-stream b { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 .activity-stream .in span { color: var(--accent); }

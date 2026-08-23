@@ -70,7 +70,7 @@ Money is rounded to cents when transferred. After every phase, `assertInvariants
 - Every cash balance is finite and non-negative.
 - Total current cash differs from initial cash by no more than 0.1.
 
-Individual ledger records store the day, per-person activity sequence, direction, amount, purpose, and cash balance before and after. Life events carry the same sequence so the interface can combine both record types into one newest-first activity stream. The stream defaults to all activity and can be filtered to transactions or life events. The model retains twelve transactions and eight life events; the interface displays the eight most recent matching entries.
+Individual ledger records store the day, per-person activity sequence, direction, amount, purpose, and cash balance before and after. Life events carry the same sequence so the interface can combine both record types into one newest-first activity stream. The stream defaults to all activity and can be filtered to transactions or life events. The model retains the complete history for the current in-memory run; the interface renders all matching entries inside a scrollable region and preserves the reader's position while new activity arrives.
 
 When a person dies, their final cash remains on their ledger. It is still inside the accounting boundary but becomes economically inactive because inheritance, probate, and estate transfers are not yet modeled.
 

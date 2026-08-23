@@ -68,7 +68,6 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 - The canvas moves living people toward employers and deceased people toward the cemetery continuously, not according to the six economic phases. Movement and the cemetery are illustrative rather than causal.
 - Person positions are mutated by rendering and live on domain entities, weakening separation between simulation and view state.
-- Only recent ledger and life-event history is retained; long-run causal chains are discarded.
 - The UI shows current state and recent events but no town-wide distributions, inequality measures, network graph, or causal trace.
 - Policy changes apply mid-run without being recorded in the event history.
 - There is no visible seed control or reset confirmation.

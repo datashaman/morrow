@@ -45,7 +45,7 @@ app.innerHTML = `
           </select>
         </label>
       </div>
-      <ol class="activity-stream" id="activity-stream"></ol>
+      <ol class="activity-stream" id="activity-stream" tabindex="0" aria-label="Citizen activity, newest first"></ol>
     </section>
 
     <section class="control-panel">
@@ -161,7 +161,11 @@ function updateInterface() {
   }));
 
   const activity = activityItems(person, elements["activity-filter"].value);
-  elements["activity-stream"].replaceChildren(...activity.map((entry) => {
+  const activityStream = elements["activity-stream"];
+  const previousScrollHeight = activityStream.scrollHeight;
+  const previousScrollTop = activityStream.scrollTop;
+  const followingNewest = previousScrollTop < 2;
+  activityStream.replaceChildren(...activity.map((entry) => {
     const item = document.createElement("li");
     item.className = entry.type === "transaction" ? entry.direction : `event ${entry.kind}`;
     item.innerHTML = entry.type === "transaction"
@@ -173,8 +177,9 @@ function updateInterface() {
     const item = document.createElement("li");
     item.className = "activity-empty";
     item.textContent = elements["activity-filter"].value === "transactions" ? "No transactions yet" : "No life events yet";
-    elements["activity-stream"].append(item);
+    activityStream.append(item);
   }
+  if (!followingNewest) activityStream.scrollTop = previousScrollTop + activityStream.scrollHeight - previousScrollHeight;
 }
 
 function resizeCanvas() {
@@ -278,11 +283,11 @@ function step() {
   drawTown();
 }
 
-elements["person-select"].addEventListener("change", (event) => { selected = Number(event.target.value); updateInterface(); drawTown(); });
-elements["activity-filter"].addEventListener("change", updateInterface);
+elements["person-select"].addEventListener("change", (event) => { selected = Number(event.target.value); updateInterface(); elements["activity-stream"].scrollTop = 0; drawTown(); });
+elements["activity-filter"].addEventListener("change", () => { updateInterface(); elements["activity-stream"].scrollTop = 0; });
 elements.pause.addEventListener("click", () => { paused = !paused; elements.pause.textContent = paused ? "Resume" : "Pause"; });
 elements.step.addEventListener("click", () => { paused = true; elements.pause.textContent = "Resume"; step(); });
-elements.reset.addEventListener("click", () => { simulation.reset(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; updateInterface(); drawTown(); });
+elements.reset.addEventListener("click", () => { simulation.reset(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; updateInterface(); elements["activity-stream"].scrollTop = 0; drawTown(); });
 
 function animate(now) {
   if (!paused && now - lastStep >= Number(elements.speed.value)) { step(); lastStep = now; }

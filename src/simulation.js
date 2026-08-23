@@ -134,7 +134,6 @@ export class TownSimulation {
   note(person, text, kind = "neutral") {
     person.activitySequence += 1;
     person.events.unshift({ day: this.day, sequence: person.activitySequence, text, kind });
-    person.events = person.events.slice(0, 8);
   }
 
   ledger(person, { direction, amount, text, before }) {
@@ -148,7 +147,6 @@ export class TownSimulation {
       before: roundMoney(before),
       after: roundMoney(person.cash),
     });
-    person.ledger = person.ledger.slice(0, 12);
   }
 
   transfer(from, to, requested, { exact = false } = {}) {

@@ -9,6 +9,21 @@ test("money remains inside the closed economy", () => {
   assert.ok(Math.abs(town.totalMoney() - initial) <= 0.1);
 });
 
+test("a citizen retains their complete in-memory activity history", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  person.events = [];
+  person.ledger = [];
+
+  for (let index = 0; index < 20; index += 1) {
+    town.note(person, `event ${index}`);
+    town.ledger(person, { direction: "in", amount: 1, text: `transaction ${index}`, before: person.cash });
+  }
+
+  assert.equal(person.events.length, 20);
+  assert.equal(person.ledger.length, 20);
+});
+
 test("every firm begins with its configured owner and staff count", () => {
   const town = new TownSimulation({ seed: 42 });
 

@@ -31,3 +31,14 @@ test("activity can be filtered by record type", () => {
   assert.deepEqual(activityItems(person, "transactions").map(({ text }) => text), ["wage", "food"]);
   assert.deepEqual(activityItems(person, "events").map(({ text }) => text), ["found work", "missed rent", "entered town"]);
 });
+
+test("activity returns the complete matching history", () => {
+  const longHistory = {
+    ledger: Array.from({ length: 15 }, (_, index) => ({ day: index + 1, sequence: index + 1, text: `transaction ${index + 1}` })),
+    events: Array.from({ length: 11 }, (_, index) => ({ day: index + 1, sequence: index + 16, text: `event ${index + 1}` })),
+  };
+
+  assert.equal(activityItems(longHistory).length, 26);
+  assert.equal(activityItems(longHistory, "transactions").length, 15);
+  assert.equal(activityItems(longHistory, "events").length, 11);
+});
