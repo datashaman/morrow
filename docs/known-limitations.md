@@ -35,6 +35,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely if it can process their payments.
 - Initially housed people receive housing without an initial payment or provider record.
 - Every person consumes at most one food unit per day regardless of body, work, or household.
+- Citizens use fixed one-to-three-meal reserve targets. They do not forecast rent, prices, attendance, congestion, spoilage, or future income when deciding how much food to store; there are no refrigeration or storage costs.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
 - Owners are the first five people and can also be employees. Ownership cannot be sold or inherited; a firm with a dead owner retains dividends.
 - Cash held by a deceased person remains inert on their ledger. There is no inheritance, probate, estate tax, or treasury transfer.

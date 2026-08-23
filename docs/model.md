@@ -21,7 +21,7 @@ The day counter increments during settlement. A full day therefore requires six 
 
 There are 40 named people. Each person carries:
 
-- Economic state: cash, employer, seller references, housing status, rent arrears, and transaction ledger
+- Economic state: cash, employer, seller references, food reserve, housing status, rent arrears, and transaction ledger
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Social state: friends, social capacity, and last social contact day
@@ -116,12 +116,16 @@ Workers who missed production receive no wage in that payroll phase.
 
 Food firms with inventory are sorted by price. A person normally buys one unit from the cheapest affordable seller.
 
+A citizen has a deterministic reserve target of one, two, or three meals. When their reserve is empty, they attempt to buy enough portions to reach that target in one transaction, limited by cash and seller inventory. They eat one portion immediately and store the remainder. On later days they consume the oldest stored portion without visiting a seller, which reduces synchronized daily shopping demand.
+
+Stored food loses 0.12 quality per day between purchase and consumption, to a minimum quality of 0.20. Health recovery is based on effective quality at consumption, not quality at purchase. The citizen profile reports the most recent meal's effective quality and age plus the number of stored meals.
+
 A scarcity error can cause either:
 
 - choosing the more expensive affordable food seller, or
 - delaying food despite available cash when stress exceeds 0.62 and runway is below five days; this additional delay has a 0.32 probability.
 
-A shopper tries another affordable food firm when the preferred seller lacks transaction capacity. A successful purchase reduces `hungryDays` by one and restores health by the seller's quality multiplied by 0.006. Harvest Foods is cheaper and has quality 0.55; Green Basket is dearer and has quality 0.85. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy food adds one hungry day and reduces health by 0.045.
+A shopper tries another affordable food firm when the preferred seller lacks transaction capacity. Consuming a meal reduces `hungryDays` by one and restores health by its effective quality multiplied by 0.006. Harvest Foods is cheaper and has fresh quality 0.55; Green Basket is dearer and has fresh quality 0.85. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy or consume food adds one hungry day and reduces health by 0.045.
 
 ### 4. Housing and bills
 

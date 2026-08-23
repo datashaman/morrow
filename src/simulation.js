@@ -1,4 +1,13 @@
-import { DEFAULT_POLICY, FIRMS, FOOD_HEALTH_RECOVERY, NAMES, PHASES, RENT_INTERVAL_DAYS } from "./config.js";
+import {
+  DEFAULT_POLICY,
+  FIRMS,
+  FOOD_HEALTH_RECOVERY,
+  FOOD_QUALITY_DECAY_PER_DAY,
+  MIN_FOOD_QUALITY,
+  NAMES,
+  PHASES,
+  RENT_INTERVAL_DAYS,
+} from "./config.js";
 import { createRandom } from "./random.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
@@ -67,7 +76,10 @@ export class TownSimulation {
         scarcityError: false,
         missedWork: 0,
         foodSeller: -1,
+        foodReserveTarget: 1 + (id % 3),
+        foodStock: [],
         lastFoodQuality: null,
+        lastFoodAge: null,
         personalSeller: -1,
         rentSeller: -1,
         homeX,
@@ -264,11 +276,24 @@ export class TownSimulation {
     firm.unitsSold += units;
     if (purpose === "food") {
       person.foodSeller = firm.id;
-      person.lastFoodQuality = firm.quality;
-    }
-    else person.personalSeller = firm.id;
-    this.ledger(person, { direction: "out", amount: paid, text: `${purpose} to ${firm.name}`, before });
+      for (let unit = 0; unit < units; unit += 1) {
+        person.foodStock.push({ purchasedDay: this.day, quality: firm.quality, seller: firm.id });
+      }
+    } else person.personalSeller = firm.id;
+    const description = purpose === "food" && units > 1 ? `${units} food portions from ${firm.name}` : `${purpose} to ${firm.name}`;
+    this.ledger(person, { direction: "out", amount: paid, text: description, before });
     return paid;
+  }
+
+  consumeFood(person, food) {
+    const age = Math.max(0, this.day - food.purchasedDay);
+    const quality = clamp(food.quality - age * FOOD_QUALITY_DECAY_PER_DAY, MIN_FOOD_QUALITY, 1);
+    person.lastFoodQuality = quality;
+    person.lastFoodAge = age;
+    person.foodSeller = food.seller;
+    person.hungryDays = Math.max(0, person.hungryDays - 1);
+    person.health = clamp(person.health + quality * FOOD_HEALTH_RECOVERY);
+    return quality;
   }
 
   productionPhase() {
@@ -322,13 +347,21 @@ export class TownSimulation {
     this.people.forEach((person) => {
       if (!person.alive) return;
       person.socialToday = false;
+      let meal = person.foodStock.shift();
+      if (meal) {
+        this.consumeFood(person, meal);
+        return;
+      }
       const affordable = foodFirms.filter((firm) => person.cash >= firm.price && firm.inventory >= 1);
       const delayed = person.scarcityError && person.stress > 0.62 && this.runwayDays(person) < 5 && this.random() < 0.32;
       const sellers = person.scarcityError && affordable.length > 1 ? [...affordable].reverse() : affordable;
-      const paid = delayed ? 0 : sellers.reduce((result, firm) => result || this.buy(person, firm, 1, "food"), 0);
+      const paid = delayed ? 0 : sellers.reduce((result, firm) => {
+        const units = Math.min(person.foodReserveTarget, Math.floor(firm.inventory), Math.floor(person.cash / firm.price));
+        return result || this.buy(person, firm, units, "food");
+      }, 0);
       if (paid) {
-        person.hungryDays = Math.max(0, person.hungryDays - 1);
-        person.health = clamp(person.health + person.lastFoodQuality * FOOD_HEALTH_RECOVERY);
+        meal = person.foodStock.shift();
+        this.consumeFood(person, meal);
       } else {
         person.hungryDays += 1;
         person.health = clamp(person.health - 0.045);

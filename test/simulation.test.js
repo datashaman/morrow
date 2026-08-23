@@ -125,6 +125,38 @@ test("higher-quality food replenishes more health", () => {
   assert.ok(dearer.health > cheaper.health);
 });
 
+test("a citizen buys food ahead and consumes the reserve as its quality declines", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[2];
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  town.people.filter((other) => other !== person).forEach((other) => { other.alive = false; });
+  town.firms.filter((firm) => firm.sector === "food" && firm !== harvest).forEach((firm) => { firm.active = false; });
+  person.cash = 20;
+  person.health = 0.5;
+  person.ledger = [];
+  const startingInventory = harvest.inventory;
+
+  town.foodPhase();
+  const healthAfterFreshMeal = person.health;
+
+  assert.equal(person.foodReserveTarget, 3);
+  assert.equal(person.foodStock.length, 2);
+  assert.equal(harvest.inventory, startingInventory - 3);
+  assert.equal(person.ledger.length, 1);
+  assert.equal(person.ledger[0].text, "3 food portions from Harvest Foods");
+  assert.equal(person.lastFoodAge, 0);
+
+  town.day = 2;
+  town.foodPhase();
+
+  assert.equal(person.foodStock.length, 1);
+  assert.equal(person.ledger.length, 1);
+  assert.equal(harvest.inventory, startingInventory - 3);
+  assert.equal(person.lastFoodAge, 1);
+  assert.ok(Math.abs(person.lastFoodQuality - 0.43) < 1e-9);
+  assert.ok(person.health - healthAfterFreshMeal < healthAfterFreshMeal - 0.5);
+});
+
 test("eviction is recorded once and leaves no rent arrears while unhoused", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];

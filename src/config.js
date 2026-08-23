@@ -9,6 +9,8 @@ export const PHASES = [
 
 export const RENT_INTERVAL_DAYS = 7;
 export const FOOD_HEALTH_RECOVERY = 0.006;
+export const FOOD_QUALITY_DECAY_PER_DAY = 0.12;
+export const MIN_FOOD_QUALITY = 0.2;
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",
