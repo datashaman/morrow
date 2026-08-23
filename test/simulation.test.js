@@ -123,6 +123,61 @@ test("Makers Guild supplies operating stock without inflating saleable inventory
   assert.equal(town.totalMoney(), totalBefore);
 });
 
+test("missing and restoring Makers Guild maintenance changes transaction capacity", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  harvest.employees.forEach((id) => { town.people[id].attended = true; });
+  harvest.operatingSupplies = 0;
+  harvest.events = [];
+  town.day = 3;
+
+  town.productionPhase();
+
+  assert.equal(harvest.operationalReadiness, 0.65);
+  assert.equal(town.transactionCapacity(harvest), 15);
+  assert.match(harvest.events[0].text, /missing a maintenance kit/);
+
+  harvest.operatingSupplies = 1;
+  town.day = 4;
+  town.productionPhase();
+
+  assert.equal(harvest.operationalReadiness, 1);
+  assert.equal(town.transactionCapacity(harvest), 24);
+  assert.match(harvest.events[0].text, /restored full operating capacity/);
+});
+
+test("missed maintenance reduces direct production", () => {
+  const maintainedTown = new TownSimulation({ seed: 42 });
+  const constrainedTown = new TownSimulation({ seed: 42 });
+  const maintainedFarm = maintainedTown.firms.find((firm) => firm.name === "Morrow Fields");
+  const constrainedFarm = constrainedTown.firms.find((firm) => firm.name === "Morrow Fields");
+  maintainedTown.day = constrainedTown.day = 3;
+  maintainedFarm.operatingSupplies = 1;
+  constrainedFarm.operatingSupplies = 0;
+  const maintainedBefore = maintainedFarm.inventory;
+  const constrainedBefore = constrainedFarm.inventory;
+
+  maintainedTown.productionPhase();
+  constrainedTown.productionPhase();
+
+  const maintainedProduction = maintainedFarm.inventory - maintainedBefore;
+  const constrainedProduction = constrainedFarm.inventory - constrainedBefore;
+  assert.ok(maintainedProduction > constrainedProduction);
+  assert.ok(Math.abs(constrainedProduction / maintainedProduction - 0.65) < 1e-9);
+});
+
+test("maintenance demand gives Makers Guild recurring seeded revenue", () => {
+  const town = new TownSimulation({ seed: 20260823 });
+  const guild = town.firms.find((firm) => firm.name === "Makers Guild");
+
+  for (let day = 0; day < 30; day += 1) {
+    for (let phase = 0; phase < PHASES.length; phase += 1) town.step();
+  }
+
+  assert.ok(guild.ledger.some((entry) => /kit to/.test(entry.text)));
+  assert.ok(guild.revenueEMA > 0);
+});
+
 test("a vital firm receives at most one finite treasury rescue", () => {
   const town = new TownSimulation({ seed: 42 });
   const farm = town.firms.find((firm) => firm.name === "Morrow Fields");

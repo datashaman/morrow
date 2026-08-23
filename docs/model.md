@@ -102,13 +102,15 @@ For direct producers, each attending employee adds inventory according to:
 
 `(0.42 + skill × 0.75) × firmProductivity × health × (1 − stress × 0.32)`
 
-Morrow Fields applies this rule to farm produce and Makers Guild applies it to learning tools. Food retailers and the café do not create saleable stock during production; they acquire their input in the next phase. These multipliers and the one-input-unit-to-one-output-unit conversion are balance hypotheses, not empirical yields. Lower health, stress, absence, layoffs, and uneven access can still reduce available goods.
+Morrow Fields applies this rule to farm produce and Makers Guild applies it to tools and repair kits. Food retailers and the café do not create saleable stock during production; they acquire their input in the next phase. These multipliers and the one-input-unit-to-one-output-unit conversion are balance hypotheses, not empirical yields. Lower health, stress, absence, layoffs, uneven access, and missed maintenance can still reduce available goods.
 
 HomeWorks operates a fixed service and does not produce or consume housing inventory.
 
 ### 2. Supply and procurement
 
 Morrow Fields has immediate-settlement supply contracts with Harvest Foods, Green Basket, and Common Café. Each buyer requests enough produce to restore two configured days of target stock, up to its daily contract quantity. Delivery is limited to whole units by the farm's inventory and the buyer's available cash.
+
+Makers Guild has immediate-settlement maintenance contracts with every other starting firm. Each buyer holds one operating kit separately from saleable inventory. Every three days it consumes a kit; procurement then replenishes toward one kit when stock and buyer cash permit. Missing a maintenance cycle reduces direct production and transaction capacity to 65% until a later kit is consumed. This makes locally produced tools an input to agriculture, retail, housing, and café operations while citizen learning-tool purchases remain a secondary market. The three-day interval, one-kit target, price of 5, and 65% constrained capacity are balance hypotheses.
 
 The buyer pays at the contract unit price at delivery; no accounts payable, debt, or partial cash claim is created. Delivered farm inventory becomes the buyer's saleable inventory one for one. Both firms receive before/after ledger entries, the supplier records contract sales, and the buyer records input costs. An under-delivery records the requested and delivered quantities on the buyer. Contracts currently have fixed counterparties, quantities, prices, and output mappings.
 
@@ -196,7 +198,7 @@ The map visualizes this employment state without changing it. Living employees g
 
 Overstaffing or sustained cash trouble can produce layoffs after three settlement phases. This staffing response is separate from the solvency test.
 
-The next-day operating need is the configured wage for at least one worker, or all current workers when there are more, plus the full daily value of active input contracts. Cash below that need adds one distress day and moves the firm to `distressed`; recovery above the need resets the counter and returns it to `operating`.
+The next-day operating need is the configured wage for at least one worker, or all current workers when there are more, plus the full daily value of active input contracts. Periodic maintenance contracts contribute their daily-equivalent contract cost. Cash below that need adds one distress day and moves the firm to `distressed`; recovery above the need resets the counter and returns it to `operating`.
 
 Before formal distress assessment, a living owner considers personal equity financing whenever company cash is below one next-day operating need. Ten days of personal essential-cost runway is protected. The owner contributes only when cash above that reserve can close the immediate gap and the firm's smoothed net income divided by operating need meets the owner's stable 0.60–0.84 recovery threshold; vital firms receive a 0.15 reduction to that threshold. A contribution aims to leave the firm with two operating needs, limited by available owner cash. It is a permanent equity contribution with no automatic repayment, and both ledgers record it.
 

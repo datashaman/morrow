@@ -10,7 +10,9 @@ import {
   FOOD_HEALTH_RECOVERY,
   FOOD_QUALITY_DECAY_PER_DAY,
   INITIAL_FRIENDSHIP_STRENGTH,
+  MAINTENANCE_INTERVAL_DAYS,
   MIN_FOOD_QUALITY,
+  MISSED_MAINTENANCE_CAPACITY,
   NAMES,
   PHASES,
   PRODUCTS,
@@ -48,7 +50,9 @@ export class TownSimulation {
       employees: [],
       sales: 0,
       inputCosts: 0,
-      operatingSupplies: 1,
+      operatingSupplies: 0,
+      operationalReadiness: 1,
+      lastMaintenanceDay: 0,
       unitsSold: 0,
       transactionsToday: 0,
       attemptedTransactions: 0,
@@ -92,6 +96,9 @@ export class TownSimulation {
       deliveredToday: 0,
       shortfallToday: 0,
     }));
+    this.contracts.filter((contract) => contract.use === "operations").forEach((contract) => {
+      this.firms[contract.buyerId].operatingSupplies = contract.targetStock;
+    });
     this.validateProductGraph();
     this.people = NAMES.map((name, id) => {
       const homeX = 0.68 + this.random() * 0.22;
@@ -380,7 +387,25 @@ export class TownSimulation {
 
   transactionCapacity(firm) {
     const attending = firm.employees.reduce((total, id) => total + (this.people[id].attended ? 1 : 0), 0);
-    return attending * firm.transactionsPerWorker;
+    return Math.floor(attending * firm.transactionsPerWorker * firm.operationalReadiness);
+  }
+
+  maintainFirm(firm) {
+    if (!firm.active) return;
+    const maintenanceContract = this.contracts.find((contract) => contract.use === "operations" && contract.buyerId === firm.id);
+    if (!maintenanceContract) return;
+    const maintenanceDue = this.day - firm.lastMaintenanceDay >= MAINTENANCE_INTERVAL_DAYS;
+    if (!maintenanceDue && firm.operationalReadiness >= 1) return;
+    if (firm.operatingSupplies >= 1) {
+      const wasConstrained = firm.operationalReadiness < 1;
+      firm.operatingSupplies -= 1;
+      firm.operationalReadiness = 1;
+      firm.lastMaintenanceDay = this.day;
+      if (wasConstrained) this.note(firm, "maintenance supplies restored full operating capacity", "good");
+      return;
+    }
+    if (firm.operationalReadiness >= 1) this.note(firm, "missing a maintenance kit reduced operating capacity", "bad");
+    firm.operationalReadiness = MISSED_MAINTENANCE_CAPACITY;
   }
 
   requestTransaction(firm, person, purpose) {
@@ -429,6 +454,7 @@ export class TownSimulation {
   }
 
   productionPhase() {
+    this.firms.forEach((firm) => this.maintainFirm(firm));
     this.people.forEach((person) => {
       if (!person.alive) {
         person.attended = false;
@@ -449,7 +475,7 @@ export class TownSimulation {
       if (!firm.active || firm.production !== "direct") return;
       firm.inventory += firm.employees.reduce((sum, id) => {
         const person = this.people[id];
-        return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) : 0);
+        return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) * firm.operationalReadiness : 0);
       }, 0);
     });
   }
@@ -680,7 +706,7 @@ export class TownSimulation {
     const payroll = wage * Math.max(1, firm.employees.length);
     const inputs = this.contracts
       .filter((contract) => contract.active && contract.buyerId === firm.id)
-      .reduce((total, contract) => total + contract.dailyQuantity * contract.unitPrice, 0);
+      .reduce((total, contract) => total + contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1), 0);
     return roundMoney(payroll + inputs);
   }
 

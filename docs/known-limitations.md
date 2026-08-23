@@ -25,6 +25,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - A “shock” moves firm cash to the treasury. It behaves more like a fine or emergency levy than a destructive loss.
 - Food retailers and the café buy a single abstract produce input from Morrow Fields, but the one-to-one conversion has no waste, recipes, grades, energy, equipment, transport, storage cost, or handling delay. Agriculture itself consumes no seed, land, water, fertilizer, energy, maintenance, or capital.
 - Supply contracts settle immediately in cash at fixed prices and quantities. There is no negotiation, expiry, priority, alternate supplier, trade credit, invoice, debt, or damages for under-delivery.
+- Maintenance is one generic kit every three days for every firm other than Makers Guild. There are no distinct machines, tools, repair skills, depreciation curves, preventive schedules, breakdown types, or capital investment choices; the 65% capacity penalty is a gameplay hypothesis.
 - Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely if it can process their payments.
 - Initially housed people receive housing without an initial payment or provider record.
 - Every person consumes at most one food unit per day regardless of body, work, or household.

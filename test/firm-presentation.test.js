@@ -20,7 +20,7 @@ test("contract descriptions expose requested and delivered quantities", () => {
   town.procurementPhase();
   const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
 
-  assert.match(describeContract(contract, PRODUCTS), /Morrow Fields contract active/);
+  assert.match(describeContract(contract, PRODUCTS), /Morrow Fields → Harvest Foods contract active/);
   assert.match(describeContract(contract, PRODUCTS), /22\/22 crates delivered today at 1.10 each/);
 });
 
