@@ -10,7 +10,7 @@ app.innerHTML = `
     <header class="town-header">
       <div>
         <p class="eyebrow">Individual lives in a closed economy</p>
-        <h1>Provision</h1>
+        <h1>Morrow</h1>
       </div>
       <div class="clock" id="clock"></div>
     </header>

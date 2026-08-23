@@ -30,7 +30,7 @@ Start with [CONTEXT.md](./CONTEXT.md), then use [docs/README.md](./docs/README.m
 
 ## Current repository state
 
-The confirmed product name is “Provision.” The repository currently lives at `/Users/marlinf/Projects/datashaman/morrow` and has an initial commit.
+The confirmed product name is “Morrow.” The repository lives at `/Users/marlinf/Projects/datashaman/morrow`.
 
 ## Agent skills
 
@@ -44,4 +44,4 @@ Use the standard five-label triage vocabulary. See `docs/agents/triage-labels.md
 
 ### Domain docs
 
-Provision is a single-context repository. See `docs/agents/domain.md`.
+Morrow is a single-context repository. See `docs/agents/domain.md`.
