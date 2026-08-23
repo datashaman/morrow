@@ -1042,7 +1042,12 @@ export class TownSimulation {
     firm.priceRejectionsToday = 0;
   }
 
+  isExtinct() {
+    return !this.people.some((person) => person.alive);
+  }
+
   step() {
+    if (this.isExtinct()) return this.snapshot();
     this.flows = [];
     [
       () => this.productionPhase(),

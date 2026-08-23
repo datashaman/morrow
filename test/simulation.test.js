@@ -1072,6 +1072,23 @@ test("the snapshot reports positions approved by active firms", () => {
   assert.equal(town.snapshot().positionsAvailable, 2);
 });
 
+test("the simulation clock cannot advance after every citizen has died", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.people.forEach((person) => town.die(person, "test extinction"));
+  const before = town.snapshot();
+  const firmCashBefore = town.firms.map((firm) => firm.cash);
+  const treasuryCashBefore = town.government.cash;
+
+  const after = town.step();
+
+  assert.equal(town.isExtinct(), true);
+  assert.equal(after.alive, 0);
+  assert.equal(after.day, before.day);
+  assert.equal(after.phase, before.phase);
+  assert.deepEqual(town.firms.map((firm) => firm.cash), firmCashBefore);
+  assert.equal(town.government.cash, treasuryCashBefore);
+});
+
 test("the same seed produces the same town", () => {
   const first = new TownSimulation({ seed: 2026 });
   const second = new TownSimulation({ seed: 2026 });

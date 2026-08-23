@@ -13,6 +13,7 @@ import {
   resolveCanvasColor,
 } from "./map-presentation.js";
 import { TownSimulation } from "./simulation.js";
+import { playbackPresentation } from "./playback-presentation.js";
 
 const app = document.querySelector("#app");
 app.innerHTML = `
@@ -179,6 +180,12 @@ function renderActivity(entity, filter, stream) {
 
 function updateInterface() {
   const state = simulation.snapshot();
+  const playback = playbackPresentation(state.alive, paused);
+  paused = playback.paused;
+  elements.pause.disabled = playback.pauseDisabled;
+  elements.step.disabled = playback.stepDisabled;
+  elements.reset.disabled = playback.resetDisabled;
+  elements.pause.textContent = playback.pauseLabel;
   const person = simulation.people[selected];
   const employer = person.employer >= 0 ? simulation.firms[person.employer].name : "no employer";
   const owned = simulation.firms.find((firm) => firm.active && firm.owner === person.id);
@@ -200,7 +207,7 @@ function updateInterface() {
     ? (person.rentSeller >= 0 ? `last housing: housed through ${simulation.firms[person.rentSeller].name}` : "last housing: housed")
     : (person.rentSeller >= 0 ? `last housing: unhoused; previous provider ${simulation.firms[person.rentSeller].name}` : "last housing: unhoused");
 
-  elements.clock.textContent = `Day ${state.day} · ${state.phaseName}`;
+  elements.clock.textContent = `Day ${state.day} · ${state.phaseName}${playback.clockSuffix}`;
   elements.money.textContent = `${(state.totalMoney / state.initialMoney * 100).toFixed(2)}%`;
   elements["money-detail"].textContent = `${money(state.totalMoney)} of ${money(state.initialMoney)} remains on ledgers`;
   elements.employment.textContent = `${state.alive ? Math.round(state.employed / state.alive * 100) : 0}%`;
@@ -436,7 +443,7 @@ elements["firm-grid"].addEventListener("click", (event) => {
 });
 elements.pause.addEventListener("click", () => { paused = !paused; elements.pause.textContent = paused ? "Resume" : "Pause"; });
 elements.step.addEventListener("click", () => { paused = true; elements.pause.textContent = "Resume"; step(); });
-elements.reset.addEventListener("click", () => { simulation.reset(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); selectedFirm = 0; elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; elements["firm-activity-filter"].value = "all"; updateInterface(); elements["activity-stream"].scrollTop = 0; elements["firm-activity-stream"].scrollTop = 0; drawTown(); });
+elements.reset.addEventListener("click", () => { simulation.reset(); paused = false; lastStep = performance.now(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); selectedFirm = 0; elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; elements["firm-activity-filter"].value = "all"; updateInterface(); elements["activity-stream"].scrollTop = 0; elements["firm-activity-stream"].scrollTop = 0; drawTown(); });
 
 function animate(now) {
   if (!paused && now - lastStep >= Number(elements.speed.value)) { step(); lastStep = now; }

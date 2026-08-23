@@ -246,6 +246,8 @@ The setback reduces health by a random 0.04–0.13. Settlement health is bounded
 
 Death is a terminal, recorded life event. The person leaves employment, their reciprocal friendships are removed, and their cash estate transfers to the treasury. They no longer work, receive wages or support, buy food or services, pay rent, socialize, recover, enter hiring pools, or receive owner dividends. Their profile switches to historical wording, hides active needs, and retains the completed ledger and life history without adding later entries. The Citizens card reports living, dead, and total citizens; employment and hardship metrics count only living people. The canvas moves deceased citizens to a display-only cemetery and shows its interred count.
 
+When no living citizens remain, the town reaches a terminal extinction state. Further simulation steps return the unchanged snapshot without advancing the phase or day. Automatic playback pauses, playback and manual-step controls are disabled, and Reset remains available so the completed map, cemetery, firm records, estates, and citizen histories can still be reviewed.
+
 ## Stress
 
 ### Financial runway
