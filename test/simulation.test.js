@@ -85,6 +85,60 @@ test("a supply contract cannot put its buyer into debt", () => {
   assert.equal(harvest.cash, 1);
 });
 
+test("a vital firm receives at most one finite treasury rescue", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  const initialMoney = town.totalMoney();
+  town.transfer(farm, town.government, farm.cash, { exact: true });
+  farm.distressDays = 2;
+  const treasuryBefore = town.government.cash;
+
+  town.assessFirmSolvency(farm);
+
+  assert.equal(farm.status, "rescued");
+  assert.equal(farm.rescueCount, 1);
+  assert.equal(farm.lastRescueDay, town.day);
+  assert.ok(farm.cash > 0 && firmCashIsBounded(farm.cash));
+  assert.equal(town.government.cash, treasuryBefore - farm.cash);
+  assert.equal(town.totalMoney(), initialMoney);
+  assert.match(farm.ledger[0].text, /one-time vital-business rescue/);
+});
+
+test("a previously rescued vital firm can become insolvent without a second rescue", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  town.transfer(farm, town.government, farm.cash, { exact: true });
+  farm.rescueCount = 1;
+  farm.status = "distressed";
+  farm.distressDays = 5;
+
+  town.assessFirmSolvency(farm);
+
+  assert.equal(farm.active, false);
+  assert.equal(farm.status, "insolvent");
+  assert.equal(farm.rescueCount, 1);
+  assert.equal(farm.employees.length, 0);
+  assert.ok(town.contracts.filter((contract) => contract.supplierId === farm.id).every((contract) => !contract.active));
+});
+
+test("a persistently unfunded non-vital firm becomes insolvent", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const makers = town.firms.find((firm) => firm.name === "Makers Guild");
+  town.transfer(makers, town.government, makers.cash, { exact: true });
+  makers.distressDays = 5;
+  makers.status = "distressed";
+
+  town.assessFirmSolvency(makers);
+
+  assert.equal(makers.active, false);
+  assert.equal(makers.status, "insolvent");
+  assert.match(makers.events[0].text, /sustained insolvency/);
+});
+
+function firmCashIsBounded(cash) {
+  return cash <= 90;
+}
+
 test("an exact transfer cannot overdraw its sender", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];

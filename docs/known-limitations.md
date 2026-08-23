@@ -20,7 +20,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 
 - Prices, food quality, productivity, and configured wages are fixed. There is no inflation, bargaining, price, quality, or productivity response, scarcity pricing, or wage competition. Food quality, productivity, and health-recovery multipliers are uncalibrated gameplay values.
 - Wages and food operate daily while rent is billed every seven days. This is an internally balanced gameplay calendar, not a claim about real payment schedules.
-- There is no banking, saving account, debt, credit, interest, insurance, bankruptcy process, or negative balance.
+- There is no banking, saving account, debt, credit, interest, insurance, or negative balance. Insolvency is an administrative cash-runway rule rather than a legal bankruptcy process.
 - All money is inside one closed town. There is no external trade, remittance, investment, monetary creation, or destruction.
 - A “shock” moves firm cash to the treasury. It behaves more like a fine or emergency levy than a destructive loss.
 - Food retailers and the café buy a single abstract produce input from Morrow Fields, but the one-to-one conversion has no waste, recipes, grades, energy, equipment, transport, storage cost, or handling delay. Agriculture itself consumes no seed, land, water, fertilizer, energy, maintenance, or capital.
@@ -30,9 +30,10 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Every person consumes at most one food unit per day regardless of body, work, or household.
 - Citizens use fixed one-to-three-meal reserve targets. They do not forecast rent, prices, attendance, congestion, spoilage, or future income when deciding how much food to store; there are no refrigeration or storage costs.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
+- Vital-business classification is fixed in configuration. A vital firm can receive one cash rescue based only on next-day operating need; there is no public-interest assessment, conditionality, political process, alternative operator, repayment, equity stake, creditor review, or performance monitoring.
 - Owners are the first six people and can also be employees. Ownership cannot be sold or inherited; a firm with a dead owner retains dividends.
 - A deceased person's cash transfers immediately to the treasury as an intestate estate. There are no wills, heirs, probate delays, creditor claims, inheritance taxes, or non-cash estate assets.
-- Firm reopening after closure existed in an earlier visualization but is not implemented in the repository version.
+- Insolvent firms do not liquidate inventory or other assets, distribute proceeds, reorganize, gain a replacement owner, or reopen.
 - A closed housing or food firm can make essential services unavailable with no replacement-entry mechanism.
 
 ## Labour simplifications

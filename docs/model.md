@@ -45,7 +45,7 @@ Six firms are configured in `src/config.js`. The product catalog gives every tra
 | Common Café | Prepared café service | Morrow Fields produce, prepared by café staff | 2.2 | 6.4 | 2 |
 | Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.25 wholesale | 5.8 | 7 |
 
-Every firm begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, and operational status. The first six people are assigned as owners, one per firm; ownership and employment are separate concepts.
+Every firm begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first six people are assigned as owners, one per firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, and Morrow Fields are currently marked vital because they provide the lowest-priced food, the only housing service, and the sole agricultural input respectively.
 
 The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 4.85 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.82 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 
@@ -59,7 +59,7 @@ Only a customer who can cover the exact price and reaches an active firm with th
 
 ### Treasury
 
-The town treasury begins with 120 cash. It receives employer taxes and shock transfers, then pays targeted support during settlement.
+The town treasury begins with 120 cash. It receives employer taxes, intestate estates, and shock transfers, then pays targeted citizen support and eligible one-time vital-business rescues during settlement.
 
 ## Money and accounting
 
@@ -188,11 +188,17 @@ Vacancies must persist for two settlement phases before recruitment. Candidates 
 
 The Employment card reports positions available as approved vacancies across active firms: the sum of `targetStaff − current employees`, bounded at zero for each firm. Because `targetStaff` reflects smoothed income, payroll coverage, cash reserves, and current staffing, a layoff or closure does not automatically create an available position. Vacancies must still persist for two settlement phases before recruitment, and a candidate may decline or fail to accept the offered wage.
 
-Overstaffing or sustained cash trouble can produce layoffs after three settlement phases. A firm closes after cash falls below 0.5 while trouble exceeds five; all remaining workers lose their jobs.
+Overstaffing or sustained cash trouble can produce layoffs after three settlement phases. This staffing response is separate from the solvency test.
+
+The next-day operating need is the configured wage for at least one worker, or all current workers when there are more, plus the full daily value of active input contracts. Cash below that need adds one distress day and moves the firm to `distressed`; recovery above the need resets the counter and returns it to `operating`.
+
+After three consecutive distress days, an eligible vital firm may receive its only treasury rescue. The target is three next-day operating needs, but the transfer is capped at 90 and by the treasury's actual cash. The transfer is recorded on both ledgers and conserves total money. A sufficient rescue moves the firm to `rescued` and resets distress; it returns to ordinary operating status after subsequently covering its need. Rescue does not guarantee survival.
+
+After six consecutive distress days, a firm becomes `insolvent`. All employees lose their jobs, staffing targets become zero, and every supply contract involving the firm terminates. Non-vital firms receive no rescue; a vital firm that has already received one cannot receive another. The current rule is administrative closure, not legal bankruptcy: there are no creditor classes, asset sales, claims, liquidation distributions, or reorganization.
 
 At the current shock setting, a firm has `shockRisk / 100 × 0.025` probability of transferring a random 12–34 cash to the treasury and gaining trouble.
 
-When firm cash exceeds 230, 35% of the amount above 210 is paid to its living owner as a dividend. A firm retains the money when its owner has died.
+When an operating firm's cash exceeds 230, 35% of the amount above 210 is paid to its living owner as a dividend. A firm retains the money when its owner has died. Distressed and newly rescued firms do not pay dividends.
 
 #### Health and stress
 

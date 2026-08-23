@@ -1,6 +1,8 @@
 import {
   DEFAULT_POLICY,
   FIRMS,
+  FIRM_DISTRESS_DAYS,
+  FIRM_INSOLVENCY_DAYS,
   FRIENDSHIP_CONTACT_GAIN,
   FRIENDSHIP_DAILY_DECAY,
   FRIENDSHIP_DECAY_GRACE_DAYS,
@@ -15,6 +17,8 @@ import {
   RENT_INTERVAL_DAYS,
   STAFFING_REVENUE_BUFFER,
   SUPPLY_CONTRACTS,
+  VITAL_RESCUE_CAP,
+  VITAL_RESCUE_RUNWAY_DAYS,
 } from "./config.js";
 import { createRandom } from "./random.js";
 
@@ -34,7 +38,7 @@ export class TownSimulation {
     this.day = 1;
     this.phase = 0;
     this.flows = [];
-    this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55 };
+    this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
     this.firms = FIRMS.map((firm, id) => ({
       ...firm,
       kind: "firm",
@@ -49,6 +53,10 @@ export class TownSimulation {
       attemptedTransactions: 0,
       turnedAwayTransactions: 0,
       active: true,
+      status: "operating",
+      distressDays: 0,
+      rescueCount: 0,
+      lastRescueDay: null,
       trouble: 0,
       revenueEMA: firm.initialStaff * firm.wage * STAFFING_REVENUE_BUFFER,
       targetStaff: firm.initialStaff,
@@ -610,6 +618,66 @@ export class TownSimulation {
     this.day += 1;
   }
 
+  nextOperatingNeed(firm) {
+    const wage = Math.max(this.policy.minimumWage, firm.wage);
+    const payroll = wage * Math.max(1, firm.employees.length);
+    const inputs = this.contracts
+      .filter((contract) => contract.active && contract.buyerId === firm.id)
+      .reduce((total, contract) => total + contract.dailyQuantity * contract.unitPrice, 0);
+    return roundMoney(payroll + inputs);
+  }
+
+  closeFirm(firm, reason = "sustained insolvency ended operations") {
+    if (!firm.active) return false;
+    [...firm.employees].forEach((id) => this.fire(firm, this.people[id], "business insolvency ended employment"));
+    firm.active = false;
+    firm.status = "insolvent";
+    firm.targetStaff = 0;
+    this.contracts.filter((contract) => contract.supplierId === firm.id || contract.buyerId === firm.id).forEach((contract) => {
+      contract.active = false;
+    });
+    this.note(firm, reason, "bad");
+    return true;
+  }
+
+  assessFirmSolvency(firm) {
+    if (!firm.active) return;
+    const need = this.nextOperatingNeed(firm);
+    if (firm.cash + 1e-9 >= need) {
+      if (firm.status === "distressed") this.note(firm, "cash recovered above the next-day operating need", "good");
+      firm.distressDays = 0;
+      firm.status = "operating";
+      return;
+    }
+
+    const enteringDistress = firm.status === "operating" || firm.status === "rescued";
+    firm.distressDays += 1;
+    firm.status = "distressed";
+    if (enteringDistress) this.note(firm, `cash fell below the ${need.toFixed(1)} next-day operating need`, "bad");
+
+    if (firm.vital && firm.rescueCount === 0 && firm.distressDays >= FIRM_DISTRESS_DAYS) {
+      const target = roundMoney(need * VITAL_RESCUE_RUNWAY_DAYS);
+      const requested = Math.min(VITAL_RESCUE_CAP, Math.max(0, roundMoney(target - firm.cash)));
+      const treasuryBefore = this.government.cash;
+      const firmBefore = firm.cash;
+      const paid = this.transfer(this.government, firm, requested);
+      if (paid > 0) {
+        firm.rescueCount += 1;
+        firm.lastRescueDay = this.day;
+        this.ledger(this.government, { direction: "out", amount: paid, text: `vital-business rescue to ${firm.name}`, before: treasuryBefore });
+        this.ledger(firm, { direction: "in", amount: paid, text: "one-time vital-business rescue from treasury", before: firmBefore });
+        this.note(firm, `treasury rescue supplied ${paid.toFixed(1)} cash`, "good");
+        if (firm.cash + 1e-9 >= need) {
+          firm.distressDays = 0;
+          firm.status = "rescued";
+          return;
+        }
+      }
+    }
+
+    if (firm.distressDays >= FIRM_INSOLVENCY_DAYS) this.closeFirm(firm);
+  }
+
   settleFirm(firm) {
     if (!firm.active) return;
     const wage = Math.max(this.policy.minimumWage, firm.wage);
@@ -640,7 +708,7 @@ export class TownSimulation {
       this.transfer(firm, this.government, Math.min(firm.cash, 12 + this.random() * 22));
       firm.trouble += 1;
     }
-    if (firm.cash > 230) {
+    if (firm.cash > 230 && firm.status === "operating") {
       const owner = this.people[firm.owner];
       if (owner.alive) {
         const before = owner.cash;
@@ -648,10 +716,7 @@ export class TownSimulation {
         this.ledger(owner, { direction: "in", amount: paid, text: `owner dividend from ${firm.name}`, before });
       }
     }
-    if (firm.cash < 0.5 && firm.trouble > 5) {
-      [...firm.employees].forEach((id) => this.fire(firm, this.people[id], "business closure ended employment"));
-      firm.active = false;
-    }
+    this.assessFirmSolvency(firm);
     firm.sales = 0;
     firm.inputCosts = 0;
     firm.unitsSold = 0;
@@ -680,6 +745,7 @@ export class TownSimulation {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
+    if (this.firms.some((firm) => !firm.active && firm.status !== "insolvent")) throw new Error("An inactive firm must be insolvent");
     this.people.forEach((person) => {
       this.friendIds(person).forEach((friendId) => {
         const reciprocal = this.people[friendId].relationships[person.id];
