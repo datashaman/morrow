@@ -58,6 +58,7 @@ test("a funded rent payment records auditable before and after balances", () => 
   assert.equal(sizwe.cash, 0.5);
   assert.deepEqual(sizwe.ledger[0], {
     day: 1,
+    sequence: 2,
     direction: "out",
     amount: rehousingCost,
     text: "deposit and rent to HomeWorks",

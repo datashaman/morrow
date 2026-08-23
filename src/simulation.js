@@ -73,8 +73,9 @@ export class TownSimulation {
         homeY,
         x: homeX,
         y: homeY,
+        activitySequence: 1,
         ledger: [],
-        events: [{ day: 1, text: "entered the town economy", kind: "neutral" }],
+        events: [{ day: 1, sequence: 1, text: "entered the town economy", kind: "neutral" }],
       };
     });
 
@@ -116,13 +117,16 @@ export class TownSimulation {
   }
 
   note(person, text, kind = "neutral") {
-    person.events.unshift({ day: this.day, text, kind });
+    person.activitySequence += 1;
+    person.events.unshift({ day: this.day, sequence: person.activitySequence, text, kind });
     person.events = person.events.slice(0, 8);
   }
 
   ledger(person, { direction, amount, text, before }) {
+    person.activitySequence += 1;
     person.ledger.unshift({
       day: this.day,
+      sequence: person.activitySequence,
       direction,
       amount: roundMoney(amount),
       text,

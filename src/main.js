@@ -1,5 +1,6 @@
 import "./styles.css";
 import { PHASES } from "./config.js";
+import { activityItems } from "./activity.js";
 import { TownSimulation } from "./simulation.js";
 
 const app = document.querySelector("#app");
@@ -34,8 +35,17 @@ app.innerHTML = `
       </div>
       <p class="person-summary" id="person-summary"></p>
       <div class="needs" id="needs"></div>
-      <ol class="ledger" id="ledger"></ol>
-      <p class="events" id="events"></p>
+      <div class="activity-heading">
+        <h2>Activity</h2>
+        <label>Show
+          <select id="activity-filter">
+            <option value="all" selected>All</option>
+            <option value="transactions">Transactions</option>
+            <option value="events">Life events</option>
+          </select>
+        </label>
+      </div>
+      <ol class="activity-stream" id="activity-stream"></ol>
     </section>
 
     <section class="control-panel">
@@ -66,7 +76,7 @@ const cemetery = { x: 0.88, y: 0.82, columns: 5 };
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail",
-  "person-select", "focus", "person-summary", "needs", "ledger", "events", "pause", "step", "reset", "speed", "policy-grid",
+  "person-select", "focus", "person-summary", "needs", "activity-filter", "activity-stream", "pause", "step", "reset", "speed", "policy-grid",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -145,18 +155,21 @@ function updateInterface() {
     return item;
   }));
 
-  elements.ledger.replaceChildren(...(person.ledger.slice(0, 5).map((entry) => {
+  const activity = activityItems(person, elements["activity-filter"].value);
+  elements["activity-stream"].replaceChildren(...activity.map((entry) => {
     const item = document.createElement("li");
-    item.className = entry.direction;
-    item.innerHTML = `<time>D${entry.day}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`;
+    item.className = entry.type === "transaction" ? entry.direction : `event ${entry.kind}`;
+    item.innerHTML = entry.type === "transaction"
+      ? `<time>D${entry.day}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
+      : `<time>D${entry.day}</time><span>${entry.text}</span><b>Life event</b>`;
     return item;
-  })));
-  if (!person.ledger.length) {
+  }));
+  if (!activity.length) {
     const item = document.createElement("li");
-    item.textContent = "No transactions yet";
-    elements.ledger.append(item);
+    item.className = "activity-empty";
+    item.textContent = elements["activity-filter"].value === "transactions" ? "No transactions yet" : "No life events yet";
+    elements["activity-stream"].append(item);
   }
-  elements.events.textContent = `${person.alive ? "Life events" : "Life history"}: ${person.events.slice(0, 3).map((event) => `day ${event.day} — ${event.text}`).join("  ←  ")}`;
 }
 
 function resizeCanvas() {
@@ -261,9 +274,10 @@ function step() {
 }
 
 elements["person-select"].addEventListener("change", (event) => { selected = Number(event.target.value); updateInterface(); drawTown(); });
+elements["activity-filter"].addEventListener("change", updateInterface);
 elements.pause.addEventListener("click", () => { paused = !paused; elements.pause.textContent = paused ? "Resume" : "Pause"; });
 elements.step.addEventListener("click", () => { paused = true; elements.pause.textContent = "Resume"; step(); });
-elements.reset.addEventListener("click", () => { simulation.reset(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); elements["person-select"].value = String(selected); updateInterface(); drawTown(); });
+elements.reset.addEventListener("click", () => { simulation.reset(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; updateInterface(); drawTown(); });
 
 function animate(now) {
   if (!paused && now - lastStep >= Number(elements.speed.value)) { step(); lastStep = now; }
