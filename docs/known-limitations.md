@@ -4,10 +4,6 @@ These items distinguish intentional simplifications from completed realism. A fu
 
 ## Highest-priority gaps
 
-### The discretionary-demand control is inactive
-
-The policy and UI expose `discretionaryDemand`, but no simulation rule reads it. Moving the slider currently has no effect. Either connect it to optional café/goods purchases or remove the control until implemented.
-
 ### Relationships only grow
 
 People can form friendships at the café, but the repository version does not implement friendship decay, conflict, maintenance costs, practical support, or relationship quality. This can recreate the earlier problem in which everyone appears to keep making friends without meaningful loss or consequence.

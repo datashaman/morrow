@@ -157,6 +157,29 @@ test("a citizen buys food ahead and consumes the reserve as its quality declines
   assert.ok(person.health - healthAfterFreshMeal < healthAfterFreshMeal - 0.5);
 });
 
+test("discretionary demand controls otherwise eligible optional purchases", () => {
+  const runPersonalTime = (discretionaryDemand) => {
+    const town = new TownSimulation({ seed: 42 });
+    const person = town.people[0];
+    town.people.filter((other) => other !== person).forEach((other) => { other.alive = false; });
+    town.setPolicy("discretionaryDemand", discretionaryDemand);
+    person.cash = 20;
+    person.stress = 0.8;
+    person.scarcityError = true;
+    person.ledger = [];
+    town.personalPhase();
+    return person;
+  };
+
+  const suppressed = runPersonalTime(0);
+  const encouraged = runPersonalTime(100);
+
+  assert.equal(suppressed.cash, 20);
+  assert.equal(suppressed.ledger.length, 0);
+  assert.ok(encouraged.cash < 20);
+  assert.match(encouraged.ledger[0].text, /short-term comfort to Common Café/);
+});
+
 test("eviction is recorded once and leaves no rent arrears while unhoused", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];

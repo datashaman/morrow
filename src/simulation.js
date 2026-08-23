@@ -415,13 +415,14 @@ export class TownSimulation {
     this.people.forEach((person) => {
       if (!person.alive) return;
       this.assessNeeds(person);
-      if (person.scarcityError && person.stress > 0.65 && café && this.buy(person, café, 1, "short-term comfort")) {
+      const pursuesDiscretionaryPurchase = this.random() < this.policy.discretionaryDemand / 100;
+      if (pursuesDiscretionaryPurchase && person.scarcityError && person.stress > 0.65 && café && this.buy(person, café, 1, "short-term comfort")) {
         person.stress = clamp(person.stress - 0.035);
         this.note(person, "stress relief spending reduced thin reserves", "bad");
-      } else if (person.focus === "belonging" && café && person.cash > café.price + 7 && this.buy(person, café, 1, "social visit")) {
+      } else if (pursuesDiscretionaryPurchase && person.focus === "belonging" && café && person.cash > café.price + 7 && this.buy(person, café, 1, "social visit")) {
         person.socialToday = true;
         person.lastSocialDay = this.day;
-      } else if (["esteem", "growth"].includes(person.focus) && makers && person.cash > makers.price + 10 && this.buy(person, makers, 1, "learning tools")) {
+      } else if (pursuesDiscretionaryPurchase && ["esteem", "growth"].includes(person.focus) && makers && person.cash > makers.price + 10 && this.buy(person, makers, 1, "learning tools")) {
         person.skill = clamp(person.skill + 0.02);
         person.growth = clamp(person.growth + 0.04);
       }

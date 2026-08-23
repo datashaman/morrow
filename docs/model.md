@@ -144,15 +144,13 @@ An unhoused person owes no recurring rent and does not accumulate arrears. Rehou
 
 ### 5. Personal time
 
-The current focus is reassessed before choosing an activity.
+The current focus is reassessed before choosing an activity. The discretionary-demand policy is the probability that an otherwise eligible optional purchase proceeds: 0% suppresses café and goods purchases, while 100% permits every eligible purchase. It does not affect food or housing.
 
 - A highly stressed person experiencing a scarcity error may buy short-term comfort at the café. This immediately reduces stress by 0.035 but also lowers cash reserves.
 - A person focused on belonging may buy a social visit if they retain more than seven cash after its price.
 - A person focused on esteem or growth may buy learning tools if they retain more than ten cash after the price. This increases skill by 0.02 and growth by 0.04.
 
 Social visitors are shuffled and paired. The pair’s contact dates are refreshed. If they are not already friends and both have capacity, a mutual friendship is created.
-
-The `discretionaryDemand` policy is not currently used; see the limitations document.
 
 ### 6. Settlement
 
@@ -245,7 +243,7 @@ The person focuses on the first of physiological, safety, belonging, or esteem b
 | Minimum wage | 5 | Floors the wage used in payroll and staffing decisions |
 | Employer tax | 12% | Moves part of gross payroll from firms to the treasury |
 | Support budget | 35% | Scales the treasury’s daily support budget |
-| Discretionary demand | 50% | No effect yet |
+| Discretionary demand | 50% | Probability that an eligible optional café or goods purchase proceeds |
 | Economic shocks | 20% | Scales firm-to-treasury shock probability |
 
 Changing a control affects future phases; it does not rewind or recompute past state.
