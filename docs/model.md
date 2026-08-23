@@ -37,13 +37,15 @@ Five firms are configured in `src/config.js`:
 
 | Firm | Sector | Price | Base wage | Transactions per worker | Starting staff | Maximum staff |
 |---|---|---:|---:|---:|---:|---:|
-| Harvest Foods | Food | 2.6 | 6.2 | 4 | 6 | 9 |
-| Green Basket | Food | 2.8 | 6.5 | 4 | 6 | 9 |
-| HomeWorks | Housing | 4.8 | 7.2 | 10 | 4 | 6 |
-| Makers Guild | Goods | 8.5 | 7.8 | 3 | 4 | 6 |
-| Common Café | Service | 4.4 | 6.4 | 4 | 4 | 6 |
+| Harvest Foods | Food | 1.8 | 6.2 | 4 | 6 | 9 |
+| Green Basket | Food | 2.0 | 6.5 | 4 | 6 | 9 |
+| HomeWorks | Housing | 6.0 weekly | 7.2 | 10 | 4 | 6 |
+| Makers Guild | Goods | 6.0 | 7.8 | 3 | 4 | 6 |
+| Common Café | Service | 2.2 | 6.4 | 4 | 4 | 6 |
 
 Every firm begins with 150 cash. Firms track employees, inventory, sales, units sold, demand, vacancies, staffing targets, trouble, and operational status. The first five people are assigned as owners, one per firm; ownership and employment are separate concepts.
+
+The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 5.18 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.95 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 
 ### Transaction capacity
 
@@ -125,8 +127,8 @@ A shopper tries another affordable food firm when the preferred seller lacks tra
 
 HomeWorks is the only current housing provider.
 
-- A housed person owes one rent: 4.8.
-- An unhoused person needs three rents, 14.4, to secure housing again. This represents a deposit plus rent.
+- A housed person owes one rent of 6.0 every seven days, beginning on day 1 and recurring on days 8, 15, and so on.
+- An unhoused person may attempt rehousing on any day and needs three rents, 18.0, to secure housing again. This represents a deposit plus rent.
 - Both are exact payments; insufficient cash causes no transfer.
 - A payable housing transaction can still fail when HomeWorks has exhausted its attending workers’ transaction capacity.
 - A housed person who misses three rents is evicted once; eviction clears the missed-rent counter because post-eviction debt is not modeled.
@@ -134,7 +136,7 @@ HomeWorks is the only current housing provider.
 
 A housed person under scarcity pressure may defer rent despite being able to pay. This requires stress above 0.60, runway below five days, and a 0.38 random result after the scarcity-error flag has been set.
 
-An unhoused person owes no recurring rent and does not accumulate arrears. Rehousing still requires the separate deposit-and-rent payment described above.
+An unhoused person owes no recurring rent and does not accumulate arrears. Rehousing still requires the separate deposit-and-rent payment described above. The citizen summary shows whether rent is due today or how many days remain until the next billing day.
 
 ### 5. Personal time
 
@@ -163,6 +165,8 @@ People are sorted by hunger, housing status, and then cash. A person qualifies w
 Each firm updates its smoothed demand:
 
 `previous demand × 0.72 + attempted transactions × 0.28`
+
+HomeWorks updates this value only on weekly billing days. Its demand does not decay merely because no housed citizen owes rent between bills.
 
 Required staff is the bounded ceiling of smoothed demand divided by configured transactions per worker. The estimated revenue available to support one more worker is:
 
@@ -198,7 +202,7 @@ Death is a terminal, recorded life event. The person leaves employment and their
 
 ### Financial runway
 
-Essential daily cost is the cheapest active food price plus the active housing price. Runway is current cash divided by that cost. It is a liquidity measure, not a forecast of actual spending.
+Essential daily cost is the cheapest active food price plus one-seventh of the active weekly housing price. Runway is current cash divided by that daily-equivalent cost. It is a liquidity measure, not a forecast of actual spending.
 
 ### Underlying pressure
 

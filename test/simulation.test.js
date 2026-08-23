@@ -23,10 +23,11 @@ test("an exact transfer cannot overdraw its sender", () => {
   assert.equal(firm.cash, firmCash);
 });
 
-test("an unhoused person with 0.5 cash cannot pay a 14.4 deposit and rent", () => {
+test("an unhoused person with 0.5 cash cannot pay the full deposit and rent", () => {
   const town = new TownSimulation({ seed: 42 });
   const sizwe = town.people.find((person) => person.name === "Sizwe");
   const homeWorks = town.firms.find((firm) => firm.name === "HomeWorks");
+  const rehousingCost = homeWorks.price * 3;
   sizwe.cash = 0.5;
   sizwe.housed = false;
   sizwe.rentArrears = 3;
@@ -35,6 +36,7 @@ test("an unhoused person with 0.5 cash cannot pay a 14.4 deposit and rent", () =
 
   town.housingPhase();
 
+  assert.ok(rehousingCost > sizwe.cash);
   assert.equal(sizwe.cash, 0.5);
   assert.equal(sizwe.housed, false);
   assert.equal(homeWorks.cash, providerCash + town.people.filter((person) => person !== sizwe && person.housed).length * homeWorks.price);
@@ -44,7 +46,9 @@ test("an unhoused person with 0.5 cash cannot pay a 14.4 deposit and rent", () =
 test("a funded rent payment records auditable before and after balances", () => {
   const town = new TownSimulation({ seed: 42 });
   const sizwe = town.people.find((person) => person.name === "Sizwe");
-  sizwe.cash = 14.9;
+  const homeWorks = town.firms.find((firm) => firm.name === "HomeWorks");
+  const rehousingCost = homeWorks.price * 3;
+  sizwe.cash = rehousingCost + 0.5;
   sizwe.housed = false;
   sizwe.ledger = [];
 
@@ -55,11 +59,49 @@ test("a funded rent payment records auditable before and after balances", () => 
   assert.deepEqual(sizwe.ledger[0], {
     day: 1,
     direction: "out",
-    amount: 14.4,
+    amount: rehousingCost,
     text: "deposit and rent to HomeWorks",
-    before: 14.9,
+    before: rehousingCost + 0.5,
     after: 0.5,
   });
+});
+
+test("housed citizens pay rent weekly rather than daily", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const housing = town.firms.find((firm) => firm.sector === "housing");
+  person.cash = 100;
+  person.ledger = [];
+  town.day = 2;
+
+  town.housingPhase();
+
+  assert.equal(person.cash, 100);
+  assert.equal(person.rentArrears, 0);
+  town.day = 8;
+  town.housingPhase();
+  assert.equal(person.cash, 100 - housing.price);
+  assert.equal(person.ledger[0].text, "rent to HomeWorks");
+});
+
+test("housing demand does not decay between weekly billing days", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.setPolicy("shockRisk", 0);
+  const housing = town.firms.find((firm) => firm.sector === "housing");
+  const demand = housing.demandEMA;
+  town.day = 2;
+
+  town.settleFirm(housing);
+
+  assert.equal(housing.demandEMA, demand);
+});
+
+test("a typical low-wage worker can cover daily-equivalent essentials", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const lowestWage = Math.min(...town.firms.map((firm) => Math.max(town.policy.minimumWage, firm.wage)));
+  const typicalNetWage = lowestWage * (0.75 + 0.8 * 0.25) * (1 - town.policy.taxRate / 100);
+
+  assert.ok(typicalNetWage >= town.essentialCost() * 1.8);
 });
 
 test("eviction is recorded once and leaves no rent arrears while unhoused", () => {
@@ -171,7 +213,7 @@ test("payable excess demand creates an economically supported position", () => {
   town.setPolicy("shockRisk", 0);
   const firm = town.firms[0];
   firm.demandEMA = firm.employees.length * firm.transactionsPerWorker;
-  firm.attemptedTransactions = firm.demandEMA + 10;
+  firm.attemptedTransactions = firm.demandEMA + 14;
 
   town.settleFirm(firm);
 

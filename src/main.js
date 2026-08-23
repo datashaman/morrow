@@ -119,8 +119,10 @@ function updateInterface() {
   const employer = person.employer >= 0 ? simulation.firms[person.employer].name : "no employer";
   const owned = simulation.firms.find((firm) => firm.active && firm.owner === person.id);
   const foodSeller = person.foodSeller >= 0 ? simulation.firms[person.foodSeller].name : "not yet chosen";
+  const rentTiming = simulation.daysUntilRent();
+  const rentSchedule = rentTiming === 0 ? "rent due today" : `rent due in ${rentTiming} day${rentTiming === 1 ? "" : "s"}`;
   const provider = person.housed
-    ? (person.rentSeller >= 0 ? `housed through ${simulation.firms[person.rentSeller].name}` : "housed; no payment yet")
+    ? `${person.rentSeller >= 0 ? `housed through ${simulation.firms[person.rentSeller].name}` : "housed; no payment yet"}; ${rentSchedule}`
     : (person.rentSeller >= 0 ? `unhoused; last provider ${simulation.firms[person.rentSeller].name}` : "unhoused");
 
   elements.clock.textContent = `Day ${state.day} · ${state.phaseName}`;

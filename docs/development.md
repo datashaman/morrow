@@ -31,7 +31,7 @@ npm test
 npm run build
 ```
 
-The current baseline is fifteen passing tests and a successful Vite build.
+The current baseline is eighteen passing tests and a successful Vite build.
 
 ## Testing strategy
 
@@ -41,9 +41,10 @@ Current coverage protects:
 
 - closed-economy money conservation over 600 phase steps
 - rejection of unaffordable exact transfers
-- Sizwe’s specific inability to pay 14.4 with 0.5 cash
+- Sizwe’s specific inability to pay the full rehousing cost with 0.5 cash
 - before/after ledger balances for a funded rehousing payment
 - one-time eviction events with no arrears while unhoused
+- weekly rent cadence, stable housing demand between bills, and wage-to-essential-cost coverage
 - lower stress pressure under secure conditions
 - critical-health death, terminal inactivity, population counts, and conserved final cash
 - attending-worker transaction limits and turned-away demand

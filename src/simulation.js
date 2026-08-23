@@ -1,4 +1,4 @@
-import { DEFAULT_POLICY, FIRMS, NAMES, PHASES } from "./config.js";
+import { DEFAULT_POLICY, FIRMS, NAMES, PHASES, RENT_INTERVAL_DAYS } from "./config.js";
 import { createRandom } from "./random.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
@@ -147,7 +147,15 @@ export class TownSimulation {
   essentialCost() {
     const food = this.firms.filter((firm) => firm.active && firm.sector === "food").sort((a, b) => a.price - b.price)[0];
     const housing = this.firms.find((firm) => firm.active && firm.sector === "housing");
-    return (food?.price ?? 3) + (housing?.price ?? 5);
+    return (food?.price ?? 3) + (housing?.price ?? 5) / RENT_INTERVAL_DAYS;
+  }
+
+  rentDueToday() {
+    return (this.day - 1) % RENT_INTERVAL_DAYS === 0;
+  }
+
+  daysUntilRent() {
+    return (RENT_INTERVAL_DAYS - ((this.day - 1) % RENT_INTERVAL_DAYS)) % RENT_INTERVAL_DAYS;
   }
 
   runwayDays(person) {
@@ -329,6 +337,7 @@ export class TownSimulation {
     this.people.forEach((person) => {
       if (!person.alive) return;
       if (!person.housed) person.rentArrears = 0;
+      if (person.housed && !this.rentDueToday()) return;
       const due = roundMoney(person.housed ? housing.price : housing.price * 3);
       const avoidance = person.housed && person.scarcityError && person.stress > 0.6 && this.runwayDays(person) < 5 && this.random() < 0.38;
       if (avoidance) {
@@ -429,7 +438,9 @@ export class TownSimulation {
   settleFirm(firm) {
     if (!firm.active) return;
     const wage = Math.max(this.policy.minimumWage, firm.wage);
-    firm.demandEMA = firm.demandEMA * 0.72 + firm.attemptedTransactions * 0.28;
+    if (firm.sector !== "housing" || this.rentDueToday()) {
+      firm.demandEMA = firm.demandEMA * 0.72 + firm.attemptedTransactions * 0.28;
+    }
     const transactionsPerWorker = firm.transactionsPerWorker;
     const demandStaff = clamp(Math.ceil(firm.demandEMA / transactionsPerWorker), firm.sector === "housing" ? 2 : 1, firm.maxStaff);
     const unmetDemand = Math.max(0, firm.demandEMA - firm.employees.length * transactionsPerWorker);

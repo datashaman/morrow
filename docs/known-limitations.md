@@ -27,6 +27,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 ## Economic simplifications
 
 - Prices and configured wages are fixed. There is no inflation, bargaining, price response, scarcity pricing, or wage competition.
+- Wages and food operate daily while rent is billed every seven days. This is an internally balanced gameplay calendar, not a claim about real payment schedules.
 - There is no banking, saving account, debt, credit, interest, insurance, bankruptcy process, or negative balance.
 - All money is inside one closed town. There is no external trade, remittance, investment, monetary creation, or destruction.
 - A “shock” moves firm cash to the treasury. It behaves more like a fine or emergency levy than a destructive loss.
@@ -95,8 +96,7 @@ No parameter has been calibrated against real data. There are no sensitivity ana
 ## Open design questions
 
 - Should the economy remain strictly closed, or gain explicit external sectors?
-- Is a day the right unit, given that wages and rent currently occur every day?
-- Should rent be monthly and wages weekly or monthly, with an explicit calendar?
+- Should the current daily-work/weekly-rent cadence gain weekends, months, or other explicit calendar structure?
 - Should people belong to households that share income, food, and housing?
 - What mechanisms should allow recovery from chronic stress and homelessness?
 - Should friendship support be economic, emotional, or both?
