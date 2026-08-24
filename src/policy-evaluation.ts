@@ -1,5 +1,6 @@
 import { MotivationCitizenPolicy, RuleCitizenPolicy, type CitizenPolicy } from "./citizen-policy.ts";
 import { PHASES } from "./config.js";
+import { ShadowCitizenPolicy } from "./neural-policy.ts";
 import { TownSimulation } from "./simulation.js";
 
 export const EVALUATION_SCHEMA_VERSION = 1;
@@ -15,7 +16,7 @@ export type EvaluationConfig = Readonly<{
 
 const defaultPolicyFactories: Readonly<Record<string, PolicyFactory>> = {
   rule: () => new RuleCitizenPolicy(),
-  motivation: () => new MotivationCitizenPolicy(),
+  motivation: () => new ShadowCitizenPolicy(new MotivationCitizenPolicy()),
 };
 
 function addCounts(target: Record<string, number>, source: Record<string, number>) {
@@ -60,8 +61,21 @@ export function evaluatePolicyRun({ seed, days, policyFactory }: { seed: number;
 
   const snapshot = town.snapshot();
   const actionCounts: Record<string, number> = {};
+  const shadowActionCounts: Record<string, number> = {};
+  const shadow = { decisions: 0, divergences: 0, invalidPreferencesBeforeMask: 0 };
+  const outcomeProjections = { missedShiftDelta: 0, essentialSkipDelta: 0, acceptedOfferDelta: 0 };
+  const isEssentialSkip = (action: string) => ["skip-food", "defer-housing", "remain-unhoused"].includes(action);
   town.people.forEach((person: any) => person.decisions.forEach((decision: any) => {
     actionCounts[decision.chosenAction] = (actionCounts[decision.chosenAction] ?? 0) + 1;
+    if (decision.shadow) {
+      shadow.decisions += 1;
+      shadow.divergences += Number(decision.shadow.diverged);
+      shadow.invalidPreferencesBeforeMask += Number(decision.shadow.invalidPreferenceBeforeMask);
+      shadowActionCounts[decision.shadow.action] = (shadowActionCounts[decision.shadow.action] ?? 0) + 1;
+      outcomeProjections.missedShiftDelta += Number(decision.shadow.action === "miss-shift") - Number(decision.chosenAction === "miss-shift");
+      outcomeProjections.essentialSkipDelta += Number(isEssentialSkip(decision.shadow.action)) - Number(isEssentialSkip(decision.chosenAction));
+      outcomeProjections.acceptedOfferDelta += Number(decision.shadow.action === "accept-job-offer") - Number(decision.chosenAction === "accept-job-offer");
+    }
   }));
   const rejectedOffers = actionCounts["decline-job-offer"] ?? 0;
   const inactiveFirms = town.firms.filter((firm: any) => !firm.active).length;
@@ -92,6 +106,13 @@ export function evaluatePolicyRun({ seed, days, policyFactory }: { seed: number;
       conserved: Math.abs(town.totalMoney() - town.initialMoney) <= 0.1,
     },
     actionCounts,
+    shadow: {
+      ...shadow,
+      divergenceRate: shadow.decisions ? shadow.divergences / shadow.decisions : 0,
+      invalidPreferenceRate: shadow.decisions ? shadow.invalidPreferencesBeforeMask / shadow.decisions : 0,
+      actionCounts: shadowActionCounts,
+      outcomeProjections,
+    },
   } as const;
 }
 
@@ -116,6 +137,11 @@ function aggregatePolicy(name: string, runs: ReturnType<typeof evaluatePolicyRun
       rejectedOffers: mean(runs.map((run) => run.rejectedOffers)),
       invalidActions: mean(runs.map((run) => run.invalidActions)),
       cashDifference: mean(runs.map((run) => run.cash.difference)),
+      shadowDivergenceRate: mean(runs.map((run) => run.shadow.divergenceRate)),
+      shadowInvalidPreferenceRate: mean(runs.map((run) => run.shadow.invalidPreferenceRate)),
+      projectedMissedShiftDelta: mean(runs.map((run) => run.shadow.outcomeProjections.missedShiftDelta)),
+      projectedEssentialSkipDelta: mean(runs.map((run) => run.shadow.outcomeProjections.essentialSkipDelta)),
+      projectedAcceptedOfferDelta: mean(runs.map((run) => run.shadow.outcomeProjections.acceptedOfferDelta)),
     },
     actionCounts,
   };
@@ -171,7 +197,7 @@ export function formatEvaluationSummary(report: ReturnType<typeof evaluatePolici
     `Morrow policy evaluation · ${report.metadata.seeds.length} seeds × ${report.metadata.days} days · ${report.status.toUpperCase()}`,
   ];
   Object.values(report.aggregates).forEach((aggregate) => {
-    lines.push(`${aggregate.name} (${aggregate.policyId}): survival ${(aggregate.means.survivalRate * 100).toFixed(1)}% · employed ${(aggregate.means.employmentRate * 100).toFixed(1)}% · hungry ${aggregate.means.hungry.toFixed(1)} · unhoused ${aggregate.means.unhoused.toFixed(1)} · insolvent firms ${aggregate.means.insolventFirms.toFixed(1)} · failures ${aggregate.failures}`);
+    lines.push(`${aggregate.name} (${aggregate.policyId}): survival ${(aggregate.means.survivalRate * 100).toFixed(1)}% · employed ${(aggregate.means.employmentRate * 100).toFixed(1)}% · hungry ${aggregate.means.hungry.toFixed(1)} · unhoused ${aggregate.means.unhoused.toFixed(1)} · insolvent firms ${aggregate.means.insolventFirms.toFixed(1)} · shadow divergence ${(aggregate.means.shadowDivergenceRate * 100).toFixed(1)}% · invalid pre-mask ${(aggregate.means.shadowInvalidPreferenceRate * 100).toFixed(1)}% · failures ${aggregate.failures}`);
   });
   Object.entries(report.comparisons).forEach(([name, comparison]) => {
     lines.push(`${name} − ${comparison.baseline}: survival ${(comparison.deltas.survivalRate * 100).toFixed(1)}pp · employment ${(comparison.deltas.employmentRate * 100).toFixed(1)}pp · hungry ${comparison.deltas.hungry.toFixed(1)} · unhoused ${comparison.deltas.unhoused.toFixed(1)}`);

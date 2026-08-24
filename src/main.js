@@ -230,7 +230,10 @@ function renderDecisions(entity, stream) {
       .filter(([name]) => !decision.legalActions.includes(name))
       .map(([name, value]) => `${name} ${value.toFixed(2)}`)
       .join(" · ");
-    item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""} · ${decision.policy}</small>`;
+    const shadow = decision.shadow
+      ? ` · Neural shadow: ${actionName(decision, decision.shadow.action)}${decision.shadow.diverged ? " (diverged)" : " (agreed)"} · unmasked ${decision.shadow.unmaskedPreference}${decision.shadow.invalidPreferenceBeforeMask ? " (illegal before masking)" : ""}`
+      : "";
+    item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""}${shadow} · ${decision.policy}</small>`;
     return item;
   }));
   if (!entity.decisions.length) {

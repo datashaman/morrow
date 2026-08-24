@@ -27,6 +27,10 @@ test("evaluation reports required outcomes, conserved cash, and action distribut
   assert.equal(run.cash.difference, 0);
   assert.equal(run.invalidActions, 0);
   assert.ok(Object.values(run.actionCounts).reduce((total, count) => total + count, 0) > 0);
+  assert.ok(run.shadow.decisions > 0);
+  assert.ok(run.shadow.divergenceRate >= 0 && run.shadow.divergenceRate <= 1);
+  assert.ok(run.shadow.invalidPreferenceRate >= 0 && run.shadow.invalidPreferenceRate <= 1);
+  assert.ok("missedShiftDelta" in run.shadow.outcomeProjections);
   assert.match(formatEvaluationSummary(report), /Morrow policy evaluation/);
   assert.match(formatEvaluationSummary(report), /motivation − rule/);
 });

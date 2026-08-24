@@ -69,7 +69,7 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 - Short-term comfort spending can occur during unemployment or homelessness, but this is a gameplay hypothesis rather than a calibrated claim about how people experiencing hardship behave.
 - The Maslow-inspired hierarchy uses hard thresholds and weighted sums. It is a gameplay heuristic, not validated psychology.
 - Current focus selects one need category. Stable seed-derived motivation weights now vary attendance, food, housing, personal time, and firm-owner decisions, but citizens still do not plan across days or learn from outcomes. The weights and scoring equations are gameplay hypotheses, not a validated personality model.
-- There is no learned policy yet. The routed domains use deterministic scoring over legal actions and seeded observations; this is an inspectable bridge toward a learned policy, not evidence that citizen motivations have become psychologically realistic.
+- One shared neural network now runs in shadow mode with fixed, deterministic, untrained weights. It never controls consequences. Its schema, masking, divergence, and directional projections test the policy plumbing but do not establish useful learning, realistic motivations, safety, fairness, or calibration.
 
 ## Simulation and interface limitations
 

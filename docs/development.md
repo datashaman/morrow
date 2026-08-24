@@ -33,7 +33,7 @@ npm test
 npm run build
 ```
 
-The current baseline is 101 passing tests and a successful typed Vite build.
+The current baseline is 107 passing tests and a successful typed Vite build.
 
 For a custom headless comparison:
 
@@ -65,6 +65,7 @@ Current coverage protects:
 - owner equity contributions, voluntary insolvency, and constrained emergency distributions
 - deterministic reproduction from a seed
 - deterministic multi-seed policy comparison, machine-readable reports, and hard failure detection
+- shared neural inference reproducibility, schema width, legal masking, illegal pre-mask diagnosis, and non-controlling shadow traces
 
 For a random or emergent bug, preserve the seed and reduce the reproduction to the smallest phase or helper possible. Prefer assertions on causal state and ledger entries over screenshots.
 

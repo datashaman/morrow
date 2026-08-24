@@ -37,13 +37,14 @@ import {
   MotivationCitizenPolicy,
   SKIP_JOB_SEARCH,
 } from "./citizen-policy.ts";
+import { ShadowCitizenPolicy } from "./neural-policy.ts";
 import { createRandom } from "./random.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = new MotivationCitizenPolicy() } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = new ShadowCitizenPolicy(new MotivationCitizenPolicy()) } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -535,6 +536,7 @@ export class TownSimulation {
       chosenAction: decision.action,
       reasons: Array.isArray(decision.reasons) ? [...decision.reasons] : [],
       scores: decision.scores ? { ...decision.scores } : {},
+      shadow: decision.shadow ? structuredClone(decision.shadow) : null,
     });
   }
 

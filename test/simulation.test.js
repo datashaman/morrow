@@ -1484,7 +1484,7 @@ test("personal-time motivations choose only available affordable actions and ret
   assert.equal(person.socialToday, true);
   assert.match(person.ledger[0].text, /social visit to Common Café/);
   assert.equal(person.decisions[0].kind, "personal-time");
-  assert.equal(person.decisions[0].policy, "motivation-v3");
+  assert.equal(person.decisions[0].policy, "motivation-v3+neural-shadow-schema-1");
   assert.equal(person.decisions[0].chosenAction, "social-visit");
   assert.deepEqual(person.decisions[0].legalActions, ["do-nothing", "social-visit"]);
 

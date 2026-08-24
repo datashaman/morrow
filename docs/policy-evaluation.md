@@ -24,9 +24,11 @@ The versioned report records the simulation version, schema version, baseline, p
 - rejected job offers and invalid actions;
 - initial/final cash, difference, and conservation status;
 - a complete chosen-action frequency distribution;
+- neural-shadow decision counts, divergence and invalid pre-mask preference rates, and shadow action distributions;
+- directional missed-shift, essential-skip, and accepted-offer projections where direct action comparison is meaningful;
 - pass/fail status and any failure message.
 
-Aggregates report mean survival, hunger, homelessness, employment, insolvency, rejection, invalid-action, and cash-difference results. Candidate comparisons are expressed as deltas from the deterministic `rule-v2` baseline.
+Aggregates report mean survival, hunger, homelessness, employment, insolvency, rejection, invalid-action, cash-difference, and neural-shadow results. Candidate comparisons are expressed as deltas from the deterministic `rule-v2` baseline. Shadow projections compare immediate action labels only; they are not simulated causal outcomes.
 
 ## Hard failures
 

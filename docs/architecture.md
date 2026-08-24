@@ -46,11 +46,15 @@ The class currently combines initialization, accounting, decision rules, phase o
 
 ### `src/citizen-policy.ts`
 
-Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among legal actions and explains that choice. `RuleCitizenPolicy` is the complete deterministic `rule-v2` evaluation baseline. `MotivationCitizenPolicy` scores attendance, job search and offers, food, housing, personal time, and owner decisions from stable seed-derived weights plus current needs and constraints. Tests inject alternative policies to protect substitutability. Later neural policies must use this boundary rather than bypassing `TownSimulation`.
+Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among legal actions and explains that choice. `RuleCitizenPolicy` is the complete deterministic `rule-v2` evaluation baseline. `MotivationCitizenPolicy` scores attendance, job search and offers, food, housing, personal time, and owner decisions from stable seed-derived weights plus current needs and constraints. Tests inject alternative policies to protect substitutability.
+
+### `src/neural-policy.ts`
+
+Defines versioned observation/action schemas, deterministic fixed shared weights, local MLP inference, legal-action masking, and `ShadowCitizenPolicy`. The default town wraps `motivation-v3`: motivation remains authoritative while one shared network records its masked choice, unmasked preference, divergence, and invalid pre-mask preference. No network action is applied. There is no per-citizen network, runtime Python, or raw citizen-ID input.
 
 ### `src/policy-evaluation.ts`
 
-Runs fresh headless towns across configurable seeds, days, and policy factories. It collects per-run outcomes and action distributions, checks invariants and finite state, aggregates policy results, and computes candidate deltas from a named deterministic baseline. `scripts/evaluate-policies.ts` is the human/JSON command-line adapter.
+Runs fresh headless towns across configurable seeds, days, and policy factories. It collects outcomes, active and shadow action distributions, neural divergence, invalid pre-mask preferences, directional shadow projections, checks invariants and finite state, aggregates results, and computes candidate deltas from a named deterministic baseline. `scripts/evaluate-policies.ts` is the human/JSON command-line adapter.
 
 ### `src/firm-presentation.js`
 

@@ -177,6 +177,8 @@ The simulation constructs the currently legal personal-time actions from living 
 
 The highest-scoring legal action is selected deterministically. `TownSimulation` validates it, performs any exact purchase, and applies consequences. The citizen retains the observation, legal alternatives, scores, chosen action, reasons, and policy version as a decision trace. The selected-citizen panel shows the stable weights and the complete newest-first decision history.
 
+Every default decision also passes through one shared, deterministic, schema-versioned neural network in shadow mode. It scores the concrete legal alternatives plus synthetic illegal action kinds for mask diagnosis. The trace records the neural legal choice, whether it diverged, its unmasked preference, any invalid pre-mask preference, the legal mask, and weights/schema versions. The active `motivation-v3` choice remains the only action applied to production, transfers, health, employment, housing, firms, or relationships. The network has fixed untrained weights and is an architecture probe, not a behavioral model.
+
 - A highly stressed person experiencing a scarcity error may buy short-term comfort at the café. This immediately reduces stress by 0.035 but also lowers cash reserves. Employment and housing status do not block an affordable purchase: an unemployed or unhoused citizen with cash retains the same bounded agency, and the resulting life event names those circumstances.
 - A person focused on belonging may buy a social visit if they retain more than seven cash after its price.
 - A person focused on esteem or growth may buy learning tools if they retain more than ten cash after the price. This increases skill by 0.02 and growth by 0.04.

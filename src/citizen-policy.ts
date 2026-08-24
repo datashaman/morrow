@@ -178,6 +178,18 @@ export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
   reasons: readonly string[];
   scores?: Readonly<Record<string, number>>;
+  shadow?: Readonly<{
+    policy: string;
+    weightsVersion: string;
+    schemaVersion: number;
+    action: CitizenAction;
+    diverged: boolean;
+    unmaskedPreference: string;
+    unmaskedActionKind: string;
+    invalidPreferenceBeforeMask: boolean;
+    legalMask: Readonly<Record<string, boolean>>;
+    scores: Readonly<Record<string, number>>;
+  }>;
 }>;
 
 export type CitizenPolicyInput = Readonly<{

@@ -29,6 +29,7 @@ npm run evaluate
 - `src/config.js` contains people, firms, phases, and policy defaults.
 - `src/random.js` provides seeded randomness for reproducible runs.
 - `src/policy-evaluation.ts` compares policy implementations across reproducible headless runs.
+- `src/neural-policy.ts` runs one shared local neural network in non-controlling shadow mode.
 - `src/main.js` connects the simulation to the interactive interface.
 - `src/styles.css` contains the responsive presentation.
 - `test/simulation.test.js` protects money conservation, exact-payment rules, ledger balances, stress pressure, and deterministic replay.
