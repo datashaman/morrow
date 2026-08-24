@@ -103,6 +103,77 @@ export type SharedNeuralWeights = Readonly<{
   outputBias: number;
 }>;
 
+export type SharedNeuralWeightArtifact = Readonly<{
+  format: "morrow-shared-policy-weights";
+  formatVersion: 1;
+  neuralSchemaVersion: number;
+  weightsVersion: string;
+  architecture: Readonly<{ type: "pair-mlp"; activation: "tanh"; inputSize: number; hiddenSize: number }>;
+  actionKinds: readonly string[];
+  training: Readonly<Record<string, unknown>>;
+  weights: Readonly<{
+    hiddenWeights: readonly (readonly number[])[];
+    hiddenBias: readonly number[];
+    outputWeights: readonly number[];
+    outputBias: number;
+  }>;
+  goldenVectors: readonly Readonly<{ observation: readonly number[]; action: readonly number[]; expectedScore: number }>[];
+}>;
+
+const expectedNeuralInputSize = () => NEURAL_OBSERVATION_SCHEMA.features.length + ACTION_KINDS.length + ACTION_NUMERIC_FEATURES.length;
+
+function finiteVector(value: unknown, length: number, label: string): number[] {
+  if (!Array.isArray(value) || value.length !== length || value.some((item) => typeof item !== "number" || !Number.isFinite(item))) {
+    throw new Error(`Invalid ${label}; expected ${length} finite numbers`);
+  }
+  return [...value];
+}
+
+export function loadSharedNeuralWeightArtifact(value: unknown) {
+  const artifact = value as any;
+  if (!artifact || artifact.format !== "morrow-shared-policy-weights" || artifact.formatVersion !== 1) throw new Error("Unsupported neural weight artifact format");
+  if (artifact.neuralSchemaVersion !== NEURAL_SCHEMA_VERSION) throw new Error(`Neural schema mismatch: expected ${NEURAL_SCHEMA_VERSION}`);
+  if (!Array.isArray(artifact.actionKinds) || artifact.actionKinds.length !== ACTION_KINDS.length || artifact.actionKinds.some((kind: string, index: number) => kind !== ACTION_KINDS[index])) {
+    throw new Error("Neural action-kind schema mismatch");
+  }
+  const architecture = artifact.architecture;
+  const inputSize = expectedNeuralInputSize();
+  if (!architecture || architecture.type !== "pair-mlp" || architecture.activation !== "tanh" || architecture.inputSize !== inputSize || !Number.isInteger(architecture.hiddenSize) || architecture.hiddenSize < 1) {
+    throw new Error("Unsupported neural weight architecture");
+  }
+  const hiddenSize = architecture.hiddenSize;
+  if (!Array.isArray(artifact.weights?.hiddenWeights) || artifact.weights.hiddenWeights.length !== hiddenSize) throw new Error("Invalid hidden-weight matrix height");
+  const hiddenWeights = artifact.weights.hiddenWeights.map((row: unknown, index: number) => finiteVector(row, inputSize, `hiddenWeights[${index}]`));
+  const hiddenBias = finiteVector(artifact.weights.hiddenBias, hiddenSize, "hiddenBias");
+  const outputWeights = finiteVector(artifact.weights.outputWeights, hiddenSize, "outputWeights");
+  if (typeof artifact.weights.outputBias !== "number" || !Number.isFinite(artifact.weights.outputBias)) throw new Error("Invalid outputBias");
+  if (typeof artifact.weightsVersion !== "string" || !artifact.weightsVersion) throw new Error("Missing weightsVersion");
+  if (!Array.isArray(artifact.goldenVectors) || !artifact.goldenVectors.length) throw new Error("Weight artifact requires golden vectors");
+  const goldenVectors = artifact.goldenVectors.map((vector: any, index: number) => ({
+    observation: finiteVector(vector?.observation, NEURAL_OBSERVATION_SCHEMA.features.length, `goldenVectors[${index}].observation`),
+    action: finiteVector(vector?.action, ACTION_KINDS.length + ACTION_NUMERIC_FEATURES.length, `goldenVectors[${index}].action`),
+    expectedScore: typeof vector?.expectedScore === "number" && Number.isFinite(vector.expectedScore)
+      ? vector.expectedScore
+      : (() => { throw new Error(`Invalid goldenVectors[${index}].expectedScore`); })(),
+  }));
+  const weights: SharedNeuralWeights = Object.freeze({
+    version: artifact.weightsVersion,
+    hiddenWeights: Object.freeze(hiddenWeights.map((row: number[]) => Object.freeze(row))),
+    hiddenBias: Object.freeze(hiddenBias),
+    outputWeights: Object.freeze(outputWeights),
+    outputBias: artifact.weights.outputBias,
+  });
+  return Object.freeze({ artifact: artifact as SharedNeuralWeightArtifact, weights, goldenVectors: Object.freeze(goldenVectors) });
+}
+
+export function scoreNeuralInput(weights: SharedNeuralWeights, input: readonly number[]) {
+  if (input.length !== expectedNeuralInputSize() || input.some((value) => !Number.isFinite(value))) throw new Error("Invalid encoded neural input");
+  const hidden = weights.hiddenWeights.map((row, index) => Math.tanh(
+    row.reduce((sum, weight, inputIndex) => sum + weight * input[inputIndex], weights.hiddenBias[index]),
+  ));
+  return hidden.reduce((sum, value, index) => sum + value * weights.outputWeights[index], weights.outputBias);
+}
+
 export function createSharedNeuralWeights(seed = 2901, hiddenSize = 12): SharedNeuralWeights {
   const random = createRandom(seed);
   const inputSize = NEURAL_OBSERVATION_SCHEMA.features.length + ACTION_KINDS.length + ACTION_NUMERIC_FEATURES.length;
@@ -136,10 +207,7 @@ export class SharedNeuralPolicy implements CitizenPolicy {
 
   score(observation: CitizenObservation, action: string) {
     const input = [...encodeNeuralObservation(observation), ...encodeNeuralAction(observation, action)];
-    const hidden = this.weights.hiddenWeights.map((weights, index) => Math.tanh(
-      weights.reduce((sum, weight, inputIndex) => sum + weight * input[inputIndex], this.weights.hiddenBias[index]),
-    ));
-    return hidden.reduce((sum, value, index) => sum + value * this.weights.outputWeights[index], this.weights.outputBias);
+    return scoreNeuralInput(this.weights, input);
   }
 
   infer(observation: CitizenObservation, legalActions: readonly CitizenAction[]): NeuralInference {

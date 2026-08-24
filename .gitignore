@@ -3,3 +3,6 @@ dist/
 .DS_Store
 coverage/
 work/
+__pycache__/
+/morrow-trajectories.json
+/morrow-weights.json

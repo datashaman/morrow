@@ -56,6 +56,10 @@ Defines versioned observation/action schemas, deterministic fixed shared weights
 
 Runs fresh headless towns across configurable seeds, days, and policy factories. It collects outcomes, active and shadow action distributions, neural divergence, invalid pre-mask preferences, directional shadow projections, checks invariants and finite state, aggregates results, and computes candidate deltas from a named deterministic baseline. `scripts/evaluate-policies.ts` is the human/JSON command-line adapter.
 
+### `src/trajectory-export.ts`
+
+Converts complete synthetic decision traces into a deterministic, versioned observation/action/reward dataset without names, histories, external data, or new legal actions. `scripts/export-trajectories.ts` is the JSON command-line adapter. The optional standard-library `scripts/train_shared_policy.py` validates this dataset, trains the same pair-MLP shape, and exports a versioned artifact. TypeScript validates artifact schemas, action order, shapes, finite values, and golden vectors before weights can be constructed.
+
 ### `src/firm-presentation.js`
 
 Converts product, pipeline, and supply-contract state into display strings. It contains no economic decisions and is covered by focused Node tests.

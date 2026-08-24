@@ -21,6 +21,7 @@ npm test          # deterministic domain tests
 npm run typecheck # check TypeScript policy modules
 npm run build     # typecheck and create the production bundle
 npm run evaluate  # compare rule and motivation policies across fixed seeds
+npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.json
 npm run preview   # serve the production bundle locally
 ```
 
@@ -33,7 +34,7 @@ npm test
 npm run build
 ```
 
-The current baseline is 107 passing tests and a successful typed Vite build.
+The current baseline is 110 passing tests and a successful typed Vite build.
 
 For a custom headless comparison:
 
@@ -43,6 +44,8 @@ npm run --silent evaluate -- --seeds 11,22,33 --days 120 --json
 ```
 
 See [policy evaluation](./policy-evaluation.md) for metrics, policy registration, and interpretation limits.
+
+Optional offline training uses only the Python standard library. See [offline training](./offline-training.md) for the versioned dataset, reward hypotheses, artifact contract, and exact command.
 
 ## Testing strategy
 
@@ -66,6 +69,7 @@ Current coverage protects:
 - deterministic reproduction from a seed
 - deterministic multi-seed policy comparison, machine-readable reports, and hard failure detection
 - shared neural inference reproducibility, schema width, legal masking, illegal pre-mask diagnosis, and non-controlling shadow traces
+- deterministic synthetic trajectory export, strict weight-artifact validation, and Python/TypeScript golden inference compatibility
 
 For a random or emergent bug, preserve the seed and reduce the reproduction to the smallest phase or helper possible. Prefer assertions on causal state and ledger entries over screenshots.
 

@@ -35,4 +35,4 @@ The interface shows this comparison in citizen and selected-firm decision stream
 
 The headless evaluator reports shadow divergence, illegal pre-mask preference rates, shadow action distributions, and three directional—not causal—projections: changes in missed shifts, essential skips, and accepted job offers if shadow choices had replaced active choices. Outcomes are not projected by mutating the same run because that would change future state and randomness. A later activation-gate slice will run bounded controlled-policy comparisons.
 
-The current network is not trained and its weights have no behavioral meaning. Shadow agreement is not a quality target by itself, and technical reproducibility is not evidence of realism, safety, fairness, or calibration.
+The default network is not trained and its weights have no behavioral meaning. Compatible offline-trained artifacts can be validated and loaded into a shadow network, but this does not authorize control. Shadow agreement is not a quality target by itself, and technical reproducibility is not evidence of realism, safety, fairness, or calibration. See [offline training](./offline-training.md).
