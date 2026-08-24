@@ -5,17 +5,17 @@
 The project is a client-side Vite application with no server or persistent storage.
 
 ```text
-src/config.js ───────┐
-                    ├──> src/simulation.js ──> state snapshots
-src/random.js ──────┘              │
-                                   v
-                            src/main.js
-                              │     │
-                              v     v
-                         DOM details  Canvas town
-                              │
-                              v
-                        src/styles.css
+src/config.js ─────────┐
+src/random.js ─────────┼──> src/simulation.js ──> state snapshots
+src/citizen-policy.ts ─┘              │
+                                      v
+                               src/main.js
+                                 │     │
+                                 v     v
+                            DOM details  Canvas town
+                                 │
+                                 v
+                           src/styles.css
 ```
 
 ## Modules
@@ -43,6 +43,10 @@ Owns all domain state and causal rules. `TownSimulation` can run without a brows
 - `stressPressure()`, `updateStress()`, and `assessNeeds()`
 
 The class currently combines initialization, accounting, decision rules, phase orchestration, and firm settlement. This is acceptable at the current size but is the main future decomposition candidate.
+
+### `src/citizen-policy.ts`
+
+Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among the legal actions and explains that choice. The first tracer bullet covers job-offer acceptance. `RuleCitizenPolicy` preserves the existing seeded heuristic, while tests inject a second policy to protect substitutability. Later motivation or neural policies should extend this boundary one decision domain at a time rather than bypassing `TownSimulation`.
 
 ### `src/firm-presentation.js`
 

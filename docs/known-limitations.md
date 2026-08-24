@@ -44,7 +44,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Each attending worker contributes a fixed sector-specific number of transactions regardless of skill, health, transaction complexity, or coworker coordination.
 - There are no occupations, schedules, hours, contracts, tenure, credentials, discrimination, commuting cost, care work, informal work, or self-employment.
 - Candidate ranking uses skill and reliability. The richer social referral effect from an earlier version is not present.
-- Reservation wage is based only on skill. It does not reflect housing, dependants, transport, benefits, risk, or alternatives.
+- Job-offer acceptance is the only decision currently routed through the typed citizen-policy boundary. Its default reservation wage is based only on skill, and acceptance probability only on reliability; it does not reflect housing, dependants, transport, benefits, risk, alternatives, or a richer motivation profile. Food, housing, attendance, personal-time, and ownership choices still use their direct simulation heuristics.
 - Production by housing employees is not used to constrain housing supply.
 - Missed shifts create events but no distinct wage-ledger entry because no money moves.
 
@@ -68,6 +68,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Short-term comfort spending can occur during unemployment or homelessness, but this is a gameplay hypothesis rather than a calibrated claim about how people experiencing hardship behave.
 - The Maslow-inspired hierarchy uses hard thresholds and weighted sums. It is a gameplay heuristic, not validated psychology.
 - Current focus selects one need category but does not plan across days or learn from outcomes.
+- There is no learned policy yet. The current policy seam is a behavior-preserving architecture boundary, not evidence that citizen motivations have become psychologically realistic.
 
 ## Simulation and interface limitations
 

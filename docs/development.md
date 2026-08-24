@@ -18,7 +18,8 @@ Open the local HTTP address printed by Vite. Do not open `index.html` directly w
 
 ```sh
 npm test          # deterministic domain tests
-npm run build     # production bundle
+npm run typecheck # check TypeScript policy modules
+npm run build     # typecheck and create the production bundle
 npm run preview   # serve the production bundle locally
 ```
 
@@ -31,11 +32,11 @@ npm test
 npm run build
 ```
 
-The current baseline is eighteen passing tests and a successful Vite build.
+The current baseline is eighty-one passing tests and a successful typed Vite build.
 
 ## Testing strategy
 
-Tests use Node’s built-in `node:test` runner and import `TownSimulation` directly.
+Tests use Node’s built-in `node:test` API through `tsx`, allowing the existing JavaScript simulation and incremental TypeScript policy modules to run in one suite. Tests import `TownSimulation` directly.
 
 Current coverage protects:
 

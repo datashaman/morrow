@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { RuleCitizenPolicy } from "../src/citizen-policy.ts";
 import { PHASES, PRODUCTS } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
@@ -1012,6 +1013,105 @@ test("sufficient realized income creates an economically supported position", ()
   assert.equal(town.snapshot().positionsAvailable, 1);
   assert.equal(firm.targetStaff, firm.employees.length + 1);
   assert.equal(firm.vacancyAge, 1);
+});
+
+test("the rule citizen policy preserves reservation-wage and reliability acceptance", () => {
+  const citizenPolicy = new RuleCitizenPolicy();
+  let randomCalls = 0;
+  const observation = {
+    kind: "job-offer",
+    citizenId: 9,
+    citizenName: "Candidate",
+    firmId: 0,
+    firmName: "Harvest Foods",
+    offeredWage: 6,
+    reservationWage: 6.5,
+    skill: 0.7,
+    reliability: 0.8,
+    acceptanceProbability: 0.78,
+  };
+  const legalActions = ["accept-job-offer", "decline-job-offer"];
+
+  const belowReservation = citizenPolicy.decide({
+    observation,
+    legalActions,
+    random: () => { randomCalls += 1; return 0; },
+  });
+  const accepted = citizenPolicy.decide({
+    observation: { ...observation, offeredWage: 6.5 },
+    legalActions,
+    random: () => 0.77,
+  });
+  const declined = citizenPolicy.decide({
+    observation: { ...observation, offeredWage: 6.5 },
+    legalActions,
+    random: () => 0.78,
+  });
+
+  assert.equal(belowReservation.action, "decline-job-offer");
+  assert.equal(randomCalls, 0);
+  assert.equal(accepted.action, "accept-job-offer");
+  assert.equal(declined.action, "decline-job-offer");
+});
+
+test("an injected citizen policy can decline a job offer and records its decision trace", () => {
+  const citizenPolicy = {
+    id: "test-always-decline",
+    decide: () => ({
+      action: "decline-job-offer",
+      reasons: ["test policy preferred remaining unemployed"],
+      scores: { decline: 1, accept: 0 },
+    }),
+  };
+  const town = new TownSimulation({ seed: 42, citizenPolicy });
+  town.setPolicy("shockRisk", 0);
+  const firm = town.firms[0];
+  const startingStaff = firm.employees.length;
+  const wage = Math.max(town.policy.minimumWage, firm.wage);
+  const candidate = town.people
+    .filter((person) => person.alive && person.employer < 0)
+    .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
+  firm.revenueEMA = wage * 1.08 * (startingStaff + 1);
+  firm.sales = firm.revenueEMA;
+  firm.vacancyAge = 1;
+
+  town.settleFirm(firm);
+
+  assert.equal(firm.employees.length, startingStaff);
+  assert.equal(candidate.employer, -1);
+  assert.deepEqual(
+    (({ day, phase, policy, kind, legalActions, chosenAction, reasons, scores }) => (
+      { day, phase, policy, kind, legalActions, chosenAction, reasons, scores }
+    ))(candidate.decisions[0]),
+    {
+      day: 1,
+      phase: "Settlement",
+      policy: "test-always-decline",
+      kind: "job-offer",
+      legalActions: ["accept-job-offer", "decline-job-offer"],
+      chosenAction: "decline-job-offer",
+      reasons: ["test policy preferred remaining unemployed"],
+      scores: { decline: 1, accept: 0 },
+    },
+  );
+  assert.equal(candidate.decisions[0].observation.offeredWage, wage);
+  assert.equal(candidate.decisions[0].observation.reservationWage, 3.2 + candidate.skill * 4.5);
+});
+
+test("the simulation rejects an illegal citizen-policy action", () => {
+  const town = new TownSimulation({
+    seed: 42,
+    citizenPolicy: { id: "invalid-test", decide: () => ({ action: "invent-a-job", reasons: [] }) },
+  });
+  const firm = town.firms[0];
+  const candidate = town.people.find((person) => person.alive && person.employer < 0);
+
+  assert.throws(
+    () => town.considerJobOffer(firm, candidate, firm.wage),
+    /chose an illegal job-offer action/,
+  );
+  assert.equal(candidate.employer, -1);
+  assert.equal(candidate.decisions.length, 0);
 });
 
 test("sustained income eventually expands staffing", () => {

@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run typecheck && vite build",
     "preview": "vite preview",
-    "test": "node --test"
+    "test": "tsx --test",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
     "vite": "^7.1.3"
   }
 }

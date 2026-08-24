@@ -30,15 +30,17 @@ import {
   VITAL_RESCUE_CAP,
   VITAL_RESCUE_RUNWAY_DAYS,
 } from "./config.js";
+import { JOB_OFFER_ACTIONS, RuleCitizenPolicy } from "./citizen-policy.ts";
 import { createRandom } from "./random.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {} } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = new RuleCitizenPolicy() } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
+    this.citizenPolicy = citizenPolicy;
     this.reset();
   }
 
@@ -165,6 +167,8 @@ export class TownSimulation {
         x: homeX,
         y: homeY,
         activitySequence: 1,
+        decisionSequence: 0,
+        decisions: [],
         ledger: [],
         events: [{ day: 1, sequence: 1, text: "entered the town economy", kind: "neutral" }],
       };
@@ -375,6 +379,42 @@ export class TownSimulation {
     firm.employees = firm.employees.filter((id) => id !== person.id);
     person.employer = -1;
     this.note(person, `${reason} at ${firm.name}`, "bad");
+  }
+
+  considerJobOffer(firm, candidate, offeredWage) {
+    if (!firm.active || !candidate.alive || candidate.employer >= 0) return false;
+    const observation = Object.freeze({
+      kind: "job-offer",
+      citizenId: candidate.id,
+      citizenName: candidate.name,
+      firmId: firm.id,
+      firmName: firm.name,
+      offeredWage,
+      reservationWage: 3.2 + candidate.skill * 4.5,
+      skill: candidate.skill,
+      reliability: candidate.reliability,
+      acceptanceProbability: 0.5 + candidate.reliability * 0.35,
+    });
+    const legalActions = Object.freeze([...JOB_OFFER_ACTIONS]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal job-offer action`);
+    }
+    candidate.decisionSequence += 1;
+    candidate.decisions.unshift({
+      day: this.day,
+      phase: "Settlement",
+      sequence: candidate.decisionSequence,
+      policy: this.citizenPolicy.id ?? "unknown",
+      kind: observation.kind,
+      observation: { ...observation },
+      legalActions: [...legalActions],
+      chosenAction: decision.action,
+      reasons: Array.isArray(decision.reasons) ? [...decision.reasons] : [],
+      scores: decision.scores ? { ...decision.scores } : {},
+    });
+    if (decision.action !== "accept-job-offer") return false;
+    return this.hire(firm, candidate);
   }
 
   die(person, reason = "died after health reached a critical level") {
@@ -1019,8 +1059,7 @@ export class TownSimulation {
     firm.vacancyAge = vacancies ? firm.vacancyAge + 1 : 0;
     if (vacancies && firm.vacancyAge >= 2) {
       const candidate = this.people.filter((person) => person.alive && person.employer < 0).sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
-      if (candidate && wage >= 3.2 + candidate.skill * 4.5 && this.random() < 0.5 + candidate.reliability * 0.35) {
-        this.hire(firm, candidate);
+      if (candidate && this.considerJobOffer(firm, candidate, wage)) {
         firm.vacancyAge = 0;
       }
     }
