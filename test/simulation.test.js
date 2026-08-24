@@ -1058,6 +1058,91 @@ test("the rule citizen policy preserves reservation-wage and reliability accepta
   assert.equal(declined.action, "decline-job-offer");
 });
 
+test("attendance motivations respond differently to security and physical strain", () => {
+  const citizenPolicy = new MotivationCitizenPolicy();
+  const profile = {
+    comfort: 1,
+    connection: 1,
+    mastery: 1,
+    security: 1.3,
+    foodQuality: 1,
+    planning: 1,
+    avoidance: 0.7,
+  };
+  const observation = {
+    kind: "attendance",
+    citizenId: 9,
+    citizenName: "Candidate",
+    firmId: 0,
+    firmName: "Harvest Foods",
+    health: 0.35,
+    stress: 0.9,
+    hungryDays: 2,
+    runwayDays: 1,
+    reliability: 0.7,
+    missedWork: 1,
+    baselineMissChance: 0.35,
+    attendanceDraw: 0,
+    profile,
+  };
+  const legalActions = ["attend-shift", "miss-shift"];
+
+  const securityChoice = citizenPolicy.decide({ observation, legalActions, random: () => 0 });
+  const avoidanceChoice = citizenPolicy.decide({
+    observation: { ...observation, profile: { ...profile, security: 0.7, mastery: 0.7, avoidance: 1.3 } },
+    legalActions,
+    random: () => 0,
+  });
+
+  assert.equal(securityChoice.action, "attend-shift");
+  assert.equal(avoidanceChoice.action, "miss-shift");
+  assert.ok(securityChoice.scores["attend-shift"] > securityChoice.scores["miss-shift"]);
+  assert.ok(avoidanceChoice.scores["miss-shift"] > avoidanceChoice.scores["attend-shift"]);
+});
+
+test("a missed shift and later attendance are applied and traced through policy decisions", () => {
+  let attendanceAction = "miss-shift";
+  const citizenPolicy = {
+    id: "test-attendance",
+    decide: ({ observation }) => {
+      assert.equal(observation.kind, "attendance");
+      return { action: attendanceAction, reasons: [`test selected ${attendanceAction}`], scores: { [attendanceAction]: 1 } };
+    },
+  };
+  const town = new TownSimulation({ seed: 42, citizenPolicy });
+  const firm = town.firms[0];
+  const person = town.people[firm.employees[0]];
+  const startingReliability = person.reliability;
+
+  assert.equal(town.considerAttendance(person, firm), false);
+  assert.equal(person.missedWork, 1);
+  assert.equal(person.reliability, startingReliability - 0.018);
+  assert.match(person.events[0].text, /missed a shift/);
+  assert.equal(person.decisions[0].phase, "Production");
+  assert.equal(person.decisions[0].chosenAction, "miss-shift");
+  assert.deepEqual(person.decisions[0].legalActions, ["attend-shift", "miss-shift"]);
+
+  attendanceAction = "attend-shift";
+  assert.equal(town.considerAttendance(person, firm), true);
+  assert.equal(person.missedWork, 0);
+  assert.equal(person.decisions[0].chosenAction, "attend-shift");
+});
+
+test("the simulation rejects an illegal attendance action", () => {
+  const town = new TownSimulation({
+    seed: 42,
+    citizenPolicy: { id: "invalid-attendance", decide: () => ({ action: "leave-town", reasons: [] }) },
+  });
+  const firm = town.firms[0];
+  const person = town.people[firm.employees[0]];
+
+  assert.throws(
+    () => town.considerAttendance(person, firm),
+    /chose an illegal attendance action/,
+  );
+  assert.equal(person.decisions.length, 0);
+});
+
 test("an injected citizen policy can decline a job offer and records its decision trace", () => {
   const citizenPolicy = {
     id: "test-always-decline",
@@ -1180,7 +1265,7 @@ test("personal-time motivations choose only available affordable actions and ret
   assert.equal(person.socialToday, true);
   assert.match(person.ledger[0].text, /social visit to Common Café/);
   assert.equal(person.decisions[0].kind, "personal-time");
-  assert.equal(person.decisions[0].policy, "motivation-v2");
+  assert.equal(person.decisions[0].policy, "motivation-v3");
   assert.equal(person.decisions[0].chosenAction, "social-visit");
   assert.deepEqual(person.decisions[0].legalActions, ["do-nothing", "social-visit"]);
 

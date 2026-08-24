@@ -44,7 +44,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Each attending worker contributes a fixed sector-specific number of transactions regardless of skill, health, transaction complexity, or coworker coordination.
 - There are no occupations, schedules, hours, contracts, tenure, credentials, discrimination, commuting cost, care work, informal work, or self-employment.
 - Candidate ranking uses skill and reliability. The richer social referral effect from an earlier version is not present.
-- Job-offer acceptance retains a skill-only reservation wage and reliability-only probability inside the typed policy boundary; it does not yet use housing, dependants, transport, benefits, risk, alternatives, or the motivation profile. Attendance and ownership choices still use direct simulation heuristics, while food, housing, and personal time use deterministic motivation scoring.
+- Attendance is routed through the motivation policy using health, hunger, stress, runway, reliability, a baseline absence chance, and a seeded daily draw. It remains an all-or-nothing daily shift with no schedules, partial capacity, paid leave, illness categories, transport, care obligations, or employer attendance policy. Job-offer acceptance still retains a skill-only reservation wage and reliability-only probability; richer job seeking and acceptance are the next policy boundary.
 - Production by housing employees is not used to constrain housing supply.
 - Missed shifts create events but no distinct wage-ledger entry because no money moves.
 
@@ -67,7 +67,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Scarcity errors are generic and probabilistic; they should not be interpreted as a clinical claim about people in poverty.
 - Short-term comfort spending can occur during unemployment or homelessness, but this is a gameplay hypothesis rather than a calibrated claim about how people experiencing hardship behave.
 - The Maslow-inspired hierarchy uses hard thresholds and weighted sums. It is a gameplay heuristic, not validated psychology.
-- Current focus selects one need category. Stable seed-derived motivation weights now vary food, housing, and personal-time scoring, but citizens still do not plan across days or learn from outcomes. The weights and scoring equations are gameplay hypotheses, not a validated personality model.
+- Current focus selects one need category. Stable seed-derived motivation weights now vary attendance, food, housing, and personal-time scoring, but citizens still do not plan across days or learn from outcomes. The weights and scoring equations are gameplay hypotheses, not a validated personality model.
 - There is no learned policy yet. Job offers retain the original rule and the other routed domains use a deterministic scorer; neither is evidence that citizen motivations have become psychologically realistic.
 
 ## Simulation and interface limitations

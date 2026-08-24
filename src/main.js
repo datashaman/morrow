@@ -166,6 +166,8 @@ const motivationNames = { comfort: "Comfort", connection: "Connection", mastery:
 const staticActionNames = {
   "accept-job-offer": "Accepted job offer",
   "decline-job-offer": "Declined job offer",
+  "attend-shift": "Attended shift",
+  "miss-shift": "Missed shift",
   "do-nothing": "Did nothing",
   "buy-comfort": "Bought short-term comfort",
   "social-visit": "Made a social visit",

@@ -31,6 +31,7 @@ import {
   VITAL_RESCUE_RUNWAY_DAYS,
 } from "./config.js";
 import {
+  ATTENDANCE_ACTIONS,
   createMotivationProfile,
   JOB_OFFER_ACTIONS,
   MotivationCitizenPolicy,
@@ -410,6 +411,40 @@ export class TownSimulation {
     return this.hire(firm, candidate);
   }
 
+  considerAttendance(person, firm) {
+    if (!person.alive || person.employer !== firm.id || !firm.active) return false;
+    const baselineMissChance = 0.015 + person.stress * 0.1 + (1 - person.health) * 0.22 + (person.hungryDays ? 0.1 : 0);
+    const observation = Object.freeze({
+      kind: "attendance",
+      citizenId: person.id,
+      citizenName: person.name,
+      firmId: firm.id,
+      firmName: firm.name,
+      health: person.health,
+      stress: person.stress,
+      hungryDays: person.hungryDays,
+      runwayDays: this.runwayDays(person),
+      reliability: person.reliability,
+      missedWork: person.missedWork,
+      baselineMissChance,
+      attendanceDraw: this.random(),
+      profile: person.motivationProfile,
+    });
+    const legalActions = Object.freeze([...ATTENDANCE_ACTIONS]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal attendance action`);
+    }
+    this.recordDecision(person, observation, legalActions, decision, "Production");
+    person.attended = decision.action === "attend-shift";
+    if (!person.attended) {
+      person.missedWork += 1;
+      person.reliability = clamp(person.reliability - 0.018);
+      this.note(person, "missed a shift and earned no wage", "bad");
+    } else person.missedWork = Math.max(0, person.missedWork - 1);
+    return person.attended;
+  }
+
   recordDecision(person, observation, legalActions, decision, phase) {
     person.decisionSequence += 1;
     person.decisions.unshift({
@@ -544,13 +579,7 @@ export class TownSimulation {
       }
       person.scarcityError = this.random() < person.stress ** 2 * 0.24;
       if (person.employer < 0) return void (person.attended = false);
-      const missChance = 0.015 + person.stress * 0.1 + (1 - person.health) * 0.22 + (person.hungryDays ? 0.1 : 0);
-      person.attended = this.random() >= missChance;
-      if (!person.attended) {
-        person.missedWork += 1;
-        person.reliability = clamp(person.reliability - 0.018);
-        this.note(person, "missed a shift and earned no wage", "bad");
-      } else person.missedWork = Math.max(0, person.missedWork - 1);
+      this.considerAttendance(person, this.firms[person.employer]);
     });
     this.firms.forEach((firm) => {
       if (!firm.active || firm.production !== "direct") return;

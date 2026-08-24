@@ -1,13 +1,15 @@
 import { createRandom } from "./random.js";
 
 export const JOB_OFFER_ACTIONS = ["accept-job-offer", "decline-job-offer"] as const;
+export const ATTENDANCE_ACTIONS = ["attend-shift", "miss-shift"] as const;
 export const PERSONAL_TIME_ACTIONS = ["do-nothing", "buy-comfort", "social-visit", "buy-learning-tools"] as const;
 
 export type JobOfferAction = (typeof JOB_OFFER_ACTIONS)[number];
+export type AttendanceAction = (typeof ATTENDANCE_ACTIONS)[number];
 export type PersonalTimeAction = (typeof PERSONAL_TIME_ACTIONS)[number];
 export type FoodAction = "skip-food" | `eat-stored-food:${number}` | `buy-food:${number}:${number}`;
 export type HousingAction = "defer-housing" | "remain-unhoused" | `pay-housing:${number}` | `secure-housing:${number}`;
-export type CitizenAction = JobOfferAction | PersonalTimeAction | FoodAction | HousingAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | PersonalTimeAction | FoodAction | HousingAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -30,6 +32,23 @@ export type JobOfferObservation = Readonly<{
   skill: number;
   reliability: number;
   acceptanceProbability: number;
+}>;
+
+export type AttendanceObservation = Readonly<{
+  kind: "attendance";
+  citizenId: number;
+  citizenName: string;
+  firmId: number;
+  firmName: string;
+  health: number;
+  stress: number;
+  hungryDays: number;
+  runwayDays: number;
+  reliability: number;
+  missedWork: number;
+  baselineMissChance: number;
+  attendanceDraw: number;
+  profile: MotivationProfile;
 }>;
 
 export type PersonalTimeObservation = Readonly<{
@@ -93,7 +112,7 @@ export type HousingObservation = Readonly<{
   options: readonly HousingOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | PersonalTimeObservation | FoodObservation | HousingObservation;
+export type CitizenObservation = JobOfferObservation | AttendanceObservation | PersonalTimeObservation | FoodObservation | HousingObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -164,11 +183,12 @@ export class RuleCitizenPolicy implements CitizenPolicy {
 }
 
 export class MotivationCitizenPolicy implements CitizenPolicy {
-  readonly id = "motivation-v2";
+  readonly id = "motivation-v3";
   readonly jobOfferPolicy = new RuleCitizenPolicy();
 
   decide(input: CitizenPolicyInput): CitizenPolicyDecision {
     if (input.observation.kind === "job-offer") return this.jobOfferPolicy.decide(input);
+    if (input.observation.kind === "attendance") return this.decideAttendance(input.observation, input.legalActions);
     if (input.observation.kind === "food") return this.decideFood(input.observation, input.legalActions);
     if (input.observation.kind === "housing") return this.decideHousing(input.observation, input.legalActions);
 
@@ -198,6 +218,27 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
       reasons: [`${actionReasons[action as PersonalTimeAction]} had the highest score among the currently legal personal-time actions.`],
       scores: roundedScores,
     };
+  }
+
+  decideAttendance(observation: AttendanceObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const scarcity = clamp(1 - observation.runwayDays / 12);
+    const healthGap = 1 - observation.health;
+    const hungerPressure = observation.hungryDays > 0 ? Math.min(1, observation.hungryDays / 2) : 0;
+    const unluckyDraw = observation.attendanceDraw < observation.baselineMissChance
+      ? 1 + (observation.baselineMissChance - observation.attendanceDraw) / Math.max(0.01, observation.baselineMissChance)
+      : 0;
+    const scores: Record<string, number> = {
+      "attend-shift": observation.profile.security * (0.55 + scarcity * 0.45)
+        + observation.profile.mastery * 0.18
+        + observation.reliability * 0.24,
+      "miss-shift": observation.profile.avoidance * (
+        unluckyDraw * 0.52
+        + observation.stress * 0.28
+        + healthGap * 0.55
+        + hungerPressure * 0.38
+      ),
+    };
+    return this.highestScoringDecision(legalActions, scores, "attendance");
   }
 
   decideFood(observation: FoodObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
