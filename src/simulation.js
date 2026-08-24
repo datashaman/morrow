@@ -1298,29 +1298,59 @@ export class TownSimulation {
     const owner = this.people[firm.owner];
     const window = firm.pricingWindow;
     const previousPrice = firm.price;
-    let proposedPrice = previousPrice;
     let decision = "held";
     let reason = "observed demand and margin did not justify a change";
-
-    if (!owner?.alive) {
-      reason = "no living owner was available to change the price";
-    } else if (window.priceRejections >= 2 && firm.production !== "fixed-service" && firm.inventory >= 1) {
-      proposedPrice *= 1 - PRICE_ADJUSTMENT_RATE;
-      decision = "lowered";
-      reason = `${window.priceRejections} affordability failures signaled price-sensitive demand`;
-    } else if (window.turnedAway >= 2) {
-      proposedPrice *= 1 + PRICE_ADJUSTMENT_RATE;
-      decision = "raised";
-      reason = `${window.turnedAway} customers were turned away at available capacity`;
-    } else if (window.revenue - window.inputCosts < 0 && window.unitsSold > 0) {
-      proposedPrice *= 1 + PRICE_ADJUSTMENT_RATE;
-      decision = "raised";
-      reason = "realized sales did not cover input costs";
-    } else if (window.unitsSold === 0 && firm.production !== "fixed-service" && firm.inventory >= 1) {
-      proposedPrice *= 1 - PRICE_ADJUSTMENT_RATE;
-      decision = "lowered";
-      reason = "inventory remained available without a sale";
-    }
+    let proposedPrice = previousPrice;
+    if (owner?.alive) {
+      const affordabilitySignal = window.priceRejections >= 2 && firm.production !== "fixed-service" && firm.inventory >= 1;
+      const idleInventorySignal = window.unitsSold === 0 && firm.production !== "fixed-service" && firm.inventory >= 1;
+      const capacitySignal = window.turnedAway >= 2;
+      const lossSignal = window.revenue - window.inputCosts < 0 && window.unitsSold > 0;
+      const lowerPrice = roundMoney(clamp(previousPrice * (1 - PRICE_ADJUSTMENT_RATE), firm.minimumPrice, firm.maximumPrice));
+      const higherPrice = roundMoney(clamp(previousPrice * (1 + PRICE_ADJUSTMENT_RATE), firm.minimumPrice, firm.maximumPrice));
+      const options = [{
+        action: "hold-owner-price",
+        label: `Hold price at ${previousPrice.toFixed(2)}`,
+        resultingPrice: previousPrice,
+        personalSafety: 0.5,
+        firmContinuity: affordabilitySignal || idleInventorySignal || capacitySignal || lossSignal ? 0.2 : 1,
+        workerProtection: 0.5,
+        growth: 0.3,
+        extraction: 0.2,
+        exitRelief: 0.2,
+      }];
+      if (lowerPrice < previousPrice) options.push({
+        action: "lower-owner-price",
+        label: `Lower price to ${lowerPrice.toFixed(2)}`,
+        resultingPrice: lowerPrice,
+        personalSafety: 0.25,
+        firmContinuity: affordabilitySignal || idleInventorySignal ? 1 : 0.1,
+        workerProtection: affordabilitySignal ? 0.8 : 0.35,
+        growth: affordabilitySignal || idleInventorySignal ? 1 : 0.2,
+        extraction: 0,
+        exitRelief: 0,
+      });
+      if (higherPrice > previousPrice) options.push({
+        action: "raise-owner-price",
+        label: `Raise price to ${higherPrice.toFixed(2)}`,
+        resultingPrice: higherPrice,
+        personalSafety: 0.45,
+        firmContinuity: capacitySignal || lossSignal ? 1 : 0.1,
+        workerProtection: lossSignal ? 0.65 : 0.25,
+        growth: capacitySignal || lossSignal ? 0.8 : 0.2,
+        extraction: 1,
+        exitRelief: 0,
+      });
+      const choice = this.considerOwnerAction(owner, firm, "pricing", options, "Settlement");
+      proposedPrice = choice.option.resultingPrice;
+      decision = choice.option.action === "lower-owner-price" ? "lowered" : choice.option.action === "raise-owner-price" ? "raised" : "held";
+      if (decision === "lowered") reason = affordabilitySignal
+        ? `${window.priceRejections} affordability failures signaled price-sensitive demand`
+        : "inventory remained available without a sale";
+      if (decision === "raised") reason = capacitySignal
+        ? `${window.turnedAway} customers were turned away at available capacity`
+        : lossSignal ? "realized sales did not cover input costs" : "owner preferred a higher return within the price bound";
+    } else reason = "no living owner was available to change the price";
 
     firm.price = roundMoney(clamp(proposedPrice, firm.minimumPrice, firm.maximumPrice));
     if (firm.price === previousPrice) decision = "held";
@@ -1340,23 +1370,68 @@ export class TownSimulation {
 
   ownerDividendDecision(firm, owner) {
     if (!firm.active || !owner.alive) return { amount: 0, type: "none", reason: "no living owner of an active firm" };
-    if (firm.status !== "operating") return { amount: 0, type: "none", reason: `${firm.status} firms retain cash` };
-    if (firm.lastRescueDay !== null && this.day - firm.lastRescueDay < 14) return { amount: 0, type: "none", reason: "recent treasury rescue requires cash retention" };
-    if (firm.targetStaff > firm.employees.length) return { amount: 0, type: "none", reason: "approved expansion requires cash retention" };
+    const constraintReason = firm.status !== "operating"
+      ? `${firm.status} firms retain cash`
+      : firm.lastRescueDay !== null && this.day - firm.lastRescueDay < 14
+        ? "recent treasury rescue requires cash retention"
+        : firm.targetStaff > firm.employees.length
+          ? "approved expansion requires cash retention"
+          : null;
     const operatingNeed = this.nextOperatingNeed(firm);
     const ownerRunway = this.runwayDays(owner);
-    if (ownerRunway < 3) {
+    let amount = 0;
+    let type = "none";
+    let distributionReason = "no legal distribution above the retained operating buffer";
+    if (!constraintReason && ownerRunway < 3) {
       const available = Math.max(0, roundMoney(firm.cash - operatingNeed));
       const personalGap = Math.max(0, roundMoney(this.essentialCost() * 5 - owner.cash));
-      const amount = Math.min(available, personalGap);
-      if (amount > 0) return { amount, type: "emergency distribution", reason: "acute personal need selected cash while preserving one company operating day" };
+      amount = Math.min(available, personalGap);
+      if (amount > 0) {
+        type = "emergency distribution";
+        distributionReason = "acute personal need selected cash while preserving one company operating day";
+      }
     }
-    const retainedCash = Math.max(210, roundMoney(this.nextOperatingNeed(firm) * 4));
+    const retainedCash = Math.max(210, roundMoney(operatingNeed * 4));
     const surplus = roundMoney(firm.cash - retainedCash);
-    if (surplus <= 0) return { amount: 0, type: "none", reason: `no surplus above the ${retainedCash.toFixed(1)} retained operating buffer` };
-    if (ownerRunway < 5) return { amount: roundMoney(surplus * 0.55), type: "dividend", reason: "thin owner runway selected 55% of surplus" };
-    if (ownerRunway < 15) return { amount: roundMoney(surplus * 0.35), type: "dividend", reason: "moderate owner runway selected 35% of surplus" };
-    return { amount: roundMoney(surplus * owner.dividendPreference), type: "dividend", reason: `secure owner preference selected ${Math.round(owner.dividendPreference * 100)}% of surplus` };
+    if (!constraintReason && !amount && surplus > 0) {
+      const share = ownerRunway < 5 ? 0.55 : ownerRunway < 15 ? 0.35 : owner.dividendPreference;
+      amount = roundMoney(surplus * share);
+      type = "dividend";
+      distributionReason = ownerRunway < 5
+        ? "thin owner runway selected 55% of surplus"
+        : ownerRunway < 15
+          ? "moderate owner runway selected 35% of surplus"
+          : `secure owner preference selected ${Math.round(owner.dividendPreference * 100)}% of surplus`;
+    }
+    const options = [{
+      action: "retain-owner-cash",
+      label: `Retain company cash above the ${retainedCash.toFixed(1)} buffer`,
+      amount: 0,
+      personalSafety: amount ? 0.15 : 0.75,
+      firmContinuity: 1,
+      workerProtection: 1,
+      growth: 0.65,
+      extraction: 0,
+      exitRelief: 0.1,
+    }];
+    if (amount > 0) options.push({
+      action: "take-owner-distribution",
+      label: `Take ${amount.toFixed(2)} as ${type}`,
+      amount,
+      personalSafety: ownerRunway < 5 ? 1 : 0.55,
+      firmContinuity: type === "emergency distribution" ? 0.2 : 0.65,
+      workerProtection: type === "emergency distribution" ? 0.15 : 0.5,
+      growth: 0.1,
+      extraction: 1,
+      exitRelief: 0.2,
+    });
+    const choice = this.considerOwnerAction(owner, firm, "distribution", options, "Settlement");
+    if (choice.option.action === "retain-owner-cash") return {
+      amount: 0,
+      type: "none",
+      reason: constraintReason ?? (surplus <= 0 && type === "none" ? `no surplus above the ${retainedCash.toFixed(1)} retained operating buffer` : "owner chose to retain available cash in the company"),
+    };
+    return { amount: choice.option.amount, type, reason: distributionReason };
   }
 
   payOwnerDividend(firm) {

@@ -129,7 +129,7 @@ If a firm cannot cover all attending workers at that wage, a payroll ratio scale
 
 The firm transfers net wage to the person and employer tax to the treasury. If the payroll ratio is below 0.65, the firm gains trouble and the worker receives a payroll-failure event.
 
-An owner who is also an attending employee makes an explicit wage choice. When firm cash is below its next-day operating need and the owner personally has at least ten days of runway, the owner waives that day's wage to preserve cash for other workers and inputs. An owner below that personal runway still draws pay for attended work. A waiver produces life events for the owner and firm; resuming or drawing a wage remains visible through firm state and the ordinary wage ledger. The owner is excluded from the payroll denominator when waiving, so the choice can improve coworkers' payroll coverage.
+An owner who is also an attending employee receives two legal policy actions: draw or waive that day's owner wage. `motivation-v3` scores personal safety and extraction against company continuity and worker protection using the owner's stable profile, personal runway, and the firm's next operating need. The simulation validates the choice and retains it on both the owner and firm. A waiver produces life events for the owner and firm; the owner is excluded from the payroll denominator, so the choice can improve coworkers' payroll coverage.
 
 Workers who missed production receive no wage in that payroll phase.
 
@@ -205,7 +205,7 @@ Housing receipts are divided by seven to produce a daily-equivalent income sampl
 
 #### Owner pricing
 
-Each firm accumulates a seven-day pricing window containing units sold, revenue, input costs, affordability failures, and customers turned away by capacity. A living owner reviews the window every seventh settlement and changes the consumer price by at most 5%:
+Each firm accumulates a seven-day pricing window containing units sold, revenue, input costs, affordability failures, and customers turned away by capacity. Every seventh settlement, a living owner chooses among the price movements that remain inside the configured bounds: hold, lower by at most 5%, or raise by at most 5%. The policy scores those legal alternatives using continuity, workers, growth, extraction, and the owner's profile. The observed signals shape those option features:
 
 - at least two affordability failures and available inventory favor a price cut;
 - at least two capacity turnaways favor a price increase;
@@ -231,9 +231,9 @@ Overstaffing or sustained cash trouble can produce layoffs after three settlemen
 
 The next-day operating need is the configured wage for at least one worker, or all current workers when there are more, plus the full daily value of active input contracts. Periodic maintenance contracts contribute their daily-equivalent contract cost. Cash below that need adds one distress day and moves the firm to `distressed`; recovery above the need resets the counter and returns it to `operating`.
 
-Before formal distress assessment, a living owner considers personal equity financing whenever company cash is below one next-day operating need. Ten days of personal essential-cost runway is protected. The owner contributes only when cash above that reserve can close the immediate gap and the firm's smoothed net income divided by operating need meets the owner's stable 0.60–0.84 recovery threshold; vital firms receive a 0.15 reduction to that threshold. A contribution aims to leave the firm with two operating needs, limited by available owner cash. It is a permanent equity contribution with no automatic repayment, and both ledgers record it.
+Before formal distress assessment, a living owner considers personal equity financing whenever company cash is below one next-day operating need. Ten days of personal essential-cost runway is protected. Contributing is a legal action only when cash above that reserve can close the immediate gap and the firm's smoothed net income divided by operating need meets the owner's stable 0.60–0.84 recovery threshold; vital firms receive a 0.15 reduction to that threshold. The exact bounded amount aims to leave the firm with two operating needs. Waiting is always legal, and voluntary insolvency becomes legal only after two distress days. The motivation policy weighs personal safety and avoidance against continuity, worker obligations, and credible growth; the simulation alone performs any exact contribution or closure.
 
-If the owner cannot or does not find recovery attractive, the choice is initially recorded as waiting. Once the firm already has two distress days, the owner chooses voluntary insolvency rather than further personal funding. This preserves all remaining personal cash while using the normal insolvency consequences for the firm, employees, and supply contracts. A vital firm voluntarily closed this way does not proceed to the later treasury-rescue assessment.
+Waiting preserves personal cash while distress develops. Voluntary insolvency preserves all remaining personal cash while using the normal insolvency consequences for the firm, employees, and supply contracts. A vital firm voluntarily closed this way does not proceed to the later treasury-rescue assessment.
 
 After three consecutive distress days, an eligible vital firm may receive its only treasury rescue. The target is three next-day operating needs, but the transfer is capped at 90 and by the treasury's actual cash. The transfer is recorded on both ledgers and conserves total money. A sufficient rescue moves the firm to `rescued` and resets distress; it returns to ordinary operating status after subsequently covering its need. Rescue does not guarantee survival.
 
@@ -241,11 +241,11 @@ After six consecutive distress days, a firm becomes `insolvent`. All employees l
 
 At the current shock setting, a firm has `shockRisk / 100 × 0.025` probability of transferring a random 12–34 cash to the treasury and gaining trouble.
 
-Owner dividends are choices made only after the solvency assessment. The firm first retains the greater of 210 cash or four complete next-day operating needs. No dividend is allowed when the owner is dead, the firm is inactive or non-operating, an approved vacancy is being funded, or a treasury rescue occurred within the previous 14 days.
+Owner distributions are choices made only after the solvency assessment. Retaining cash is always legal for a living owner of an active firm. A distribution option exists only after the simulation enforces lifecycle state, the greater of 210 cash or four complete next-day operating needs, approved expansion, and the 14-day post-rescue restriction. The policy can choose only the exact amount offered by the simulation.
 
 An owner below three personal runway days first considers an emergency distribution even when company cash is below the ordinary four-day/210 dividend buffer. The amount is limited to what raises the owner toward five runway days and must leave the firm with one complete next-day operating need. It remains blocked by non-operating status, approved expansion, and a treasury rescue in the previous 14 days. Because it reduces company protection to one day, it can contribute to later distress or insolvency.
 
-Otherwise, the living owner's personal runway determines the share of ordinary surplus selected: 55% below five days, 35% from five to below 15 days, and the owner's stable 15–31% preference when more secure. Every dividend or emergency distribution is recorded on both firm and owner ledgers. The firm pipeline card shows the latest price, wage, capital, continuation/insolvency, and distribution choices with their days, amounts, and reasons. These thresholds are behavioral hypotheses designed to produce distinct retention, investment, failure, and extraction choices, not claims about observed owner behavior.
+Otherwise, personal runway determines the available ordinary-distribution amount: 55% of surplus below five days, 35% from five to below 15 days, and the owner's stable 15–31% preference when more secure. Motivation scoring can still prefer retention. Every paid distribution is recorded on both ledgers. The citizen motivation panel and selected-firm owner-decision stream show legal alternatives, scores, reasons, and evidence; the firm card summarizes the latest choices. These thresholds and scores are behavioral hypotheses, not claims about observed owner behavior.
 
 #### Health and stress
 

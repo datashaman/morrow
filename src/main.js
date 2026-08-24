@@ -77,6 +77,10 @@ app.innerHTML = `
       </div>
       <div class="firm-grid" id="firm-grid"></div>
       <div class="activity-heading">
+        <h2 id="firm-decision-title">Owner decisions</h2>
+      </div>
+      <ol class="decision-stream" id="firm-decision-stream" tabindex="0" aria-label="Selected firm's owner decisions, newest first"></ol>
+      <div class="activity-heading">
         <h2 id="firm-activity-title">Firm activity</h2>
         <label>Show
           <select id="firm-activity-filter">
@@ -119,7 +123,7 @@ const commonPark = { x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 };
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail",
-  "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid",
+  "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -181,6 +185,7 @@ const staticActionNames = {
 function actionName(decision, action) {
   if (staticActionNames[action]) return staticActionNames[action];
   const option = decision.observation.options?.find((candidate) => candidate.action === action);
+  if (option?.label) return option.label;
   const capacity = option?.capacityAvailable ? "capacity available" : "seller full";
   if (action.startsWith("eat-stored-food:")) return `Chose stored food from ${option?.sellerName ?? "a previous seller"} (${percent(option?.effectiveQuality ?? 0)} quality, ${option?.age ?? 0}d old)`;
   if (action.startsWith("buy-food:")) return `Tried ${option?.units ?? ""} food portion${option?.units === 1 ? "" : "s"} from ${option?.sellerName ?? "a seller"} (${money(option?.totalPrice ?? 0)}, ${percent(option?.effectiveQuality ?? 0)} quality, ${capacity})`;
@@ -212,17 +217,11 @@ function renderActivity(entity, filter, stream) {
   if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
 }
 
-function renderMotivations(person) {
-  elements["motivation-profile"].replaceChildren(...Object.entries(person.motivationProfile).map(([name, value]) => {
-    const item = document.createElement("span");
-    item.innerHTML = `${motivationNames[name]} <b>${value.toFixed(2)}</b>`;
-    return item;
-  }));
-  const stream = elements["decision-stream"];
+function renderDecisions(entity, stream) {
   const previousScrollHeight = stream.scrollHeight;
   const previousScrollTop = stream.scrollTop;
   const followingNewest = previousScrollTop < 2;
-  stream.replaceChildren(...person.decisions.map((decision) => {
+  stream.replaceChildren(...entity.decisions.map((decision) => {
     const item = document.createElement("li");
     const alternatives = decision.legalActions
       .map((action) => `${actionName(decision, action)}${decision.scores[action] === undefined ? "" : ` ${decision.scores[action].toFixed(2)}`}`)
@@ -234,13 +233,22 @@ function renderMotivations(person) {
     item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""} · ${decision.policy}</small>`;
     return item;
   }));
-  if (!person.decisions.length) {
+  if (!entity.decisions.length) {
     const item = document.createElement("li");
     item.className = "decision-empty";
     item.textContent = "No policy decision has been recorded yet.";
     stream.append(item);
   }
   if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
+}
+
+function renderMotivations(person) {
+  elements["motivation-profile"].replaceChildren(...Object.entries(person.motivationProfile).map(([name, value]) => {
+    const item = document.createElement("span");
+    item.innerHTML = `${motivationNames[name]} <b>${value.toFixed(2)}</b>`;
+    return item;
+  }));
+  renderDecisions(person, elements["decision-stream"]);
 }
 
 function updateInterface() {
@@ -315,6 +323,8 @@ function updateInterface() {
     return card;
   }));
   const firm = simulation.firms[selectedFirm];
+  elements["firm-decision-title"].textContent = `${firm.name} owner decisions`;
+  renderDecisions(firm, elements["firm-decision-stream"]);
   elements["firm-activity-title"].textContent = `${firm.name} activity`;
   renderActivity(firm, elements["firm-activity-filter"].value, elements["firm-activity-stream"]);
 }

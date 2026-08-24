@@ -294,6 +294,11 @@ test("an owner chooses a dividend only from retained operating surplus", () => {
   assert.match(firm.ownerDecision.dividendReason, /thin owner runway/);
   assert.match(firm.ledger[0].text, /owner dividend to Amina/);
   assert.match(owner.ledger[0].text, /owner dividend from Harvest Foods/);
+  assert.equal(owner.decisions[0].observation.domain, "distribution");
+  assert.equal(owner.decisions[0].chosenAction, "take-owner-distribution");
+  assert.deepEqual(owner.decisions[0].legalActions, ["retain-owner-cash", "take-owner-distribution"]);
+  assert.equal(owner.decisions[0].observation.options[1].amount, 49.5);
+  assert.equal(firm.decisions[0].chosenAction, "take-owner-distribution");
 });
 
 test("an owner contributes equity when recovery can be funded above a personal reserve", () => {
@@ -416,6 +421,7 @@ test("expansion and a recent rescue block owner dividends", () => {
 
   assert.equal(town.payOwnerDividend(firm), 0);
   assert.match(firm.ownerDecision.dividendReason, /approved expansion/);
+  assert.deepEqual(town.people[firm.owner].decisions[0].legalActions, ["retain-owner-cash"]);
 
   firm.targetStaff = firm.employees.length;
   firm.lastRescueDay = town.day;
@@ -956,6 +962,11 @@ test("an owner lowers price after repeated affordability failures", () => {
   assert.equal(harvest.ownerDecision.priceDecision, "lowered");
   assert.match(harvest.ownerDecision.priceReason, /4 affordability failures/);
   assert.match(harvest.events[0].text, /lowered the price from 1.80 to 1.71/);
+  const owner = town.people[harvest.owner];
+  assert.equal(owner.decisions[0].observation.domain, "pricing");
+  assert.equal(owner.decisions[0].chosenAction, "lower-owner-price");
+  assert.deepEqual(owner.decisions[0].legalActions, ["hold-owner-price", "lower-owner-price", "raise-owner-price"]);
+  assert.equal(harvest.decisions[0].chosenAction, "lower-owner-price");
 });
 
 test("an owner raises price when demand exceeds transaction capacity", () => {
@@ -1317,11 +1328,13 @@ test("an injected citizen policy can decline a job offer and records its decisio
     id: "test-always-decline",
     decide: ({ observation, legalActions }) => observation.kind === "job-search"
       ? { action: legalActions[1], reasons: ["test policy applied"], scores: { [legalActions[1]]: 1 } }
-      : {
+      : observation.kind === "owner"
+        ? { action: legalActions[0], reasons: ["test retained firm state"], scores: { [legalActions[0]]: 1 } }
+        : {
         action: "decline-job-offer",
         reasons: ["test policy preferred remaining unemployed"],
         scores: { decline: 1, accept: 0 },
-      },
+        },
   };
   const town = new TownSimulation({ seed: 42, citizenPolicy });
   town.setPolicy("shockRisk", 0);
@@ -1382,6 +1395,40 @@ test("citizen motivation profiles are stable for a seed and differ across seeds"
   assert.deepEqual(first.people.map((person) => person.motivationProfile), replay.people.map((person) => person.motivationProfile));
   assert.notDeepEqual(first.people.map((person) => person.motivationProfile), alternate.people.map((person) => person.motivationProfile));
   assert.deepEqual(first.people[7].motivationProfile, createMotivationProfile(42, 7));
+});
+
+test("owner motivations can prefer continuity or personal extraction from the same legal options", () => {
+  const policy = new MotivationCitizenPolicy();
+  const profile = { comfort: 0.7, connection: 1.3, mastery: 1.3, security: 0.7, foodQuality: 1, planning: 1.3, avoidance: 1 };
+  const observation = {
+    kind: "owner",
+    domain: "distribution",
+    citizenId: 0,
+    citizenName: "Owner",
+    firmId: 0,
+    firmName: "Firm",
+    ownerRunwayDays: 0,
+    firmRunwayDays: 5,
+    firmTrouble: 0,
+    employeeCount: 4,
+    extractionPreference: 0.3,
+    profile,
+    options: [
+      { action: "retain-owner-cash", label: "Retain", personalSafety: 0.2, firmContinuity: 1, workerProtection: 1, growth: 0.5, extraction: 0, exitRelief: 0 },
+      { action: "take-owner-distribution", label: "Take", personalSafety: 1, firmContinuity: 0, workerProtection: 0, growth: 0, extraction: 1, exitRelief: 0 },
+    ],
+  };
+  const legalActions = observation.options.map((option) => option.action);
+
+  const continuityChoice = policy.decide({ observation, legalActions, random: () => 0 });
+  const extractionChoice = policy.decide({
+    observation: { ...observation, profile: { ...profile, comfort: 1.3, connection: 0.7, mastery: 0.7, security: 1.3, planning: 0.7 } },
+    legalActions,
+    random: () => 0,
+  });
+
+  assert.equal(continuityChoice.action, "retain-owner-cash");
+  assert.equal(extractionChoice.action, "take-owner-distribution");
 });
 
 test("different motivation profiles rank the same legal personal-time actions differently", () => {
