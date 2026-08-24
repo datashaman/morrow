@@ -56,6 +56,10 @@ Defines versioned observation/action schemas, shared-weight loading, local MLP i
 
 The runtime module loads the bundled Python-trained artifact, binds it to the checked activation certificate, and constructs the default switchable policy. The evaluator runs motivation and personal-time neural candidates across fresh held-out towns twice, requiring zero failures, illegal applied actions, or cash differences; identical replay; personal-time-only control; and explicit bounded aggregate deltas. `scripts/evaluate-neural-activation.ts` is the reproducible command-line adapter.
 
+### `src/personalization-research.ts` and `src/personalization-evaluation.ts`
+
+Define headless-only profile, four-value learned-embedding, and four-value bounded-adaptation variants plus diversity, replay, sample-cost, state, and interpretability comparisons. The adaptation prototype supports versioned serialization, reset, and per-update audit without bypassing legal actions. These modules support ADR 0002 and are not imported by the browser runtime. `scripts/evaluate-personalization.ts` reproduces the report.
+
 ### `src/policy-evaluation.ts`
 
 Runs fresh headless towns across configurable seeds, days, and policy factories. It collects outcomes, active, controlled, and shadow action distributions, controller and weight metadata, neural divergence, invalid pre-mask preferences, directional shadow projections, checks invariants and finite state, aggregates results, and computes candidate deltas from a named deterministic baseline. `scripts/evaluate-policies.ts` is the human/JSON command-line adapter.

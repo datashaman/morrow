@@ -22,6 +22,7 @@ npm run typecheck # check TypeScript policy modules
 npm run build     # typecheck and create the production bundle
 npm run evaluate  # compare rule and motivation policies across fixed seeds
 npm run evaluate:activation # rerun the held-out personal-time neural gate
+npm run evaluate:personalization -- --output personalization-report.json # compare research-only personalization variants
 npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.json
 npm run preview   # serve the production bundle locally
 ```
@@ -35,7 +36,7 @@ npm test
 npm run build
 ```
 
-The current baseline is 114 passing tests and a successful typed Vite build.
+The current baseline is 118 passing tests and a successful typed Vite build.
 
 For a custom headless comparison:
 
@@ -71,6 +72,7 @@ Current coverage protects:
 - deterministic multi-seed policy comparison, machine-readable reports, and hard failure detection
 - shared neural inference reproducibility, schema width, legal masking, illegal pre-mask diagnosis, and non-controlling shadow traces
 - personal-time-only neural activation, checked gate refusal, live fallback without reset, controller metadata, and held-out replay/bounds
+- research-only embedding/adaptation legal containment, deterministic learning, state serialization/reset/audit, diversity metrics, and sample-cost comparison
 - deterministic synthetic trajectory export, strict weight-artifact validation, and Python/TypeScript golden inference compatibility
 
 For a random or emergent bug, preserve the seed and reduce the reproduction to the smallest phase or helper possible. Prefer assertions on causal state and ledger entries over screenshots.

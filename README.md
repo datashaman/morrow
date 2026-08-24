@@ -22,6 +22,7 @@ npm test
 npm run build
 npm run evaluate
 npm run evaluate:activation
+npm run evaluate:personalization -- --output personalization-report.json
 npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.json
 ```
 
@@ -33,6 +34,7 @@ npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.jso
 - `src/policy-evaluation.ts` compares policy implementations across reproducible headless runs.
 - `src/neural-policy.ts` runs one shared local neural network in shadow mode and behind a personal-time-only activation gate.
 - `src/neural-activation-evaluation.ts` verifies replay, invariants, domain containment, and bounded outcomes before activation.
+- `src/personalization-evaluation.ts` compares profile-only, learned-embedding, and bounded-adaptation research variants without exposing them in the runtime.
 - `src/trajectory-export.ts` exports versioned synthetic datasets for optional offline training.
 - `src/main.js` connects the simulation to the interactive interface.
 - `src/styles.css` contains the responsive presentation.

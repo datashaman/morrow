@@ -12,7 +12,7 @@ from pathlib import Path
 
 ARTIFACT_FORMAT = "morrow-shared-policy-weights"
 ARTIFACT_FORMAT_VERSION = 1
-SUPPORTED_TRAJECTORY_SCHEMA = 1
+SUPPORTED_TRAJECTORY_SCHEMAS = {1, 2}
 SUPPORTED_NEURAL_SCHEMA = 1
 OBJECTIVE = "reward-weighted-active-policy-imitation-v1"
 
@@ -31,7 +31,7 @@ def parse_args():
 
 def validate_dataset(dataset):
     metadata = dataset.get("metadata", {})
-    if metadata.get("format") != "morrow-policy-trajectories" or metadata.get("schemaVersion") != SUPPORTED_TRAJECTORY_SCHEMA:
+    if metadata.get("format") != "morrow-policy-trajectories" or metadata.get("schemaVersion") not in SUPPORTED_TRAJECTORY_SCHEMAS:
         raise ValueError("unsupported trajectory schema")
     if metadata.get("neuralSchemaVersion") != SUPPORTED_NEURAL_SCHEMA:
         raise ValueError("neural schema mismatch")

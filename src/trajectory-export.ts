@@ -11,7 +11,7 @@ import {
 } from "./neural-policy.ts";
 import { TownSimulation } from "./simulation.js";
 
-export const TRAJECTORY_SCHEMA_VERSION = 1;
+export const TRAJECTORY_SCHEMA_VERSION = 2;
 export const REWARD_HYPOTHESIS_VERSION = "narrative-proxy-v1";
 
 const round = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
@@ -70,6 +70,7 @@ export function exportTrajectoryDataset(config: TrajectoryExportConfig) {
       const legalKinds = new Set(legalActions.map((candidate: any) => candidate.kind));
       samples.push({
         seed,
+        agentSlot: person.id,
         day: decision.day,
         phase: decision.phase,
         decisionSequence: decision.sequence,

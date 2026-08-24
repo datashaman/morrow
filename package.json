@@ -8,6 +8,7 @@
     "build": "npm run typecheck && vite build",
     "evaluate": "tsx scripts/evaluate-policies.ts",
     "evaluate:activation": "tsx scripts/evaluate-neural-activation.ts",
+    "evaluate:personalization": "tsx scripts/evaluate-personalization.ts",
     "export:trajectories": "tsx scripts/export-trajectories.ts",
     "preview": "vite preview",
     "test": "tsx --test",

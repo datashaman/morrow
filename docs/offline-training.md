@@ -25,13 +25,13 @@ python3 scripts/train_shared_policy.py \
 
 Neither generated file is required to run Morrow. Keep experimental large datasets and weights outside Git unless they are an intentional small fixture.
 
-## Trajectory schema v1
+## Trajectory schema v2
 
 `morrow-policy-trajectories` contains only synthetic simulation state. Names, ledgers, events, relationships, browser state, and external or personal data are excluded. Metadata records simulation/schema versions, seeds, days, active policy IDs, exact feature names and widths, action kinds, and the reward-hypothesis version.
 
 Each sample contains:
 
-- seed, simulated day, phase, and per-agent decision sequence;
+- seed, synthetic numeric agent slot, simulated day, phase, and per-agent decision sequence;
 - encoded observation and decision kind;
 - every concrete legal action with kind and encoded action vector;
 - the complete action-kind legal mask;
@@ -39,6 +39,8 @@ Each sample contains:
 - a versioned hypothetical reward total and named components.
 
 The dataset does not export illegal concrete actions. The trainer verifies that the target action occurs in the exported legal set and cannot add, unlock, or relabel an action.
+
+Schema v2 adds only the synthetic agent slot needed for research-only personalization comparisons. The standard-library trainer accepts both v1 and v2; names and other personal or external data remain excluded.
 
 ## Reward hypothesis v1
 

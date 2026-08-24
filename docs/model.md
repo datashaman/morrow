@@ -181,6 +181,8 @@ Every default decision also passes through one shared, deterministic, schema-ver
 
 The browser starts with neural control disabled. A visible switch can enable it without resetting the town only because the matching artifact passed the versioned personal-time activation gate. When enabled, the neural choice controls personal time only. `motivation-v3` still controls attendance, job search and offers, food, housing, and all owner decisions. `TownSimulation` continues to generate and validate legal actions and apply consequences. Disabling the switch returns the very next decision to `motivation-v3` without changing town state. See [neural activation](./neural-activation.md) for the gate evidence and its limits.
 
+The runtime does not add learned citizen embeddings or mutable online adaptation. Headless research found no held-out behavioral or outcome difference from the existing profile features, so [ADR 0002](./decisions/0002-retain-profile-only-personalization.md) retains profile-only personalization.
+
 - A highly stressed person experiencing a scarcity error may buy short-term comfort at the café. This immediately reduces stress by 0.035 but also lowers cash reserves. Employment and housing status do not block an affordable purchase: an unemployed or unhoused citizen with cash retains the same bounded agency, and the resulting life event names those circumstances.
 - A person focused on belonging may buy a social visit if they retain more than seven cash after its price.
 - A person focused on esteem or growth may buy learning tools if they retain more than ten cash after the price. This increases skill by 0.02 and growth by 0.04.

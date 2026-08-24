@@ -1,9 +1,9 @@
-import { MotivationCitizenPolicy, RuleCitizenPolicy, type CitizenPolicy } from "./citizen-policy.ts";
+import { MotivationCitizenPolicy, PERSONAL_TIME_ACTIONS, RuleCitizenPolicy, type CitizenPolicy } from "./citizen-policy.ts";
 import { PHASES } from "./config.js";
 import { ShadowCitizenPolicy } from "./neural-policy.ts";
 import { TownSimulation } from "./simulation.js";
 
-export const EVALUATION_SCHEMA_VERSION = 1;
+export const EVALUATION_SCHEMA_VERSION = 2;
 
 export type PolicyFactory = () => CitizenPolicy;
 export type EvaluationConfig = Readonly<{
@@ -32,6 +32,25 @@ function assertFiniteState(town: TownSimulation) {
     });
   };
   visit({ people: town.people, firms: town.firms, government: town.government, contracts: town.contracts }, "town");
+}
+
+function personalTimeDiversity(town: TownSimulation) {
+  const distributions = (town as any).people.map((person: any) => {
+    const counts = Object.fromEntries(PERSONAL_TIME_ACTIONS.map((action) => [action, 0])) as Record<string, number>;
+    person.decisions.filter((decision: any) => decision.kind === "personal-time").forEach((decision: any) => { counts[decision.chosenAction] += 1; });
+    const total = Object.values(counts).reduce((sum, count) => sum + count, 0);
+    const shares = PERSONAL_TIME_ACTIONS.map((action) => total ? counts[action] / total : 0);
+    const entropy = total ? -shares.filter(Boolean).reduce((sum, share) => sum + share * Math.log(share), 0) / Math.log(PERSONAL_TIME_ACTIONS.length) : 0;
+    return { total, shares, entropy };
+  }).filter((distribution: any) => distribution.total > 0);
+  const meanEntropy = distributions.length ? distributions.reduce((sum: number, item: any) => sum + item.entropy, 0) / distributions.length : 0;
+  const betweenCitizenVariance = PERSONAL_TIME_ACTIONS.reduce((total, _, actionIndex) => {
+    if (!distributions.length) return total;
+    const meanShare = distributions.reduce((sum: number, item: any) => sum + item.shares[actionIndex], 0) / distributions.length;
+    return total + distributions.reduce((sum: number, item: any) => sum + (item.shares[actionIndex] - meanShare) ** 2, 0) / distributions.length;
+  }, 0) / PERSONAL_TIME_ACTIONS.length;
+  const distinctProfiles = new Set(distributions.map((item: any) => item.shares.map((share: number) => share.toFixed(2)).join(","))).size;
+  return { citizensObserved: distributions.length, meanEntropy, betweenCitizenVariance, distinctProfiles };
 }
 
 export function evaluatePolicyRun({ seed, days, policyFactory }: { seed: number; days: number; policyFactory: PolicyFactory }) {
@@ -113,6 +132,7 @@ export function evaluatePolicyRun({ seed, days, policyFactory }: { seed: number;
       conserved: Math.abs(town.totalMoney() - town.initialMoney) <= 0.1,
     },
     actionCounts,
+    behavior: personalTimeDiversity(town),
     control,
     shadow: {
       ...shadow,
@@ -145,6 +165,9 @@ function aggregatePolicy(name: string, runs: ReturnType<typeof evaluatePolicyRun
       rejectedOffers: mean(runs.map((run) => run.rejectedOffers)),
       invalidActions: mean(runs.map((run) => run.invalidActions)),
       cashDifference: mean(runs.map((run) => run.cash.difference)),
+      personalTimeEntropy: mean(runs.map((run) => run.behavior.meanEntropy)),
+      betweenCitizenActionVariance: mean(runs.map((run) => run.behavior.betweenCitizenVariance)),
+      distinctPersonalTimeProfiles: mean(runs.map((run) => run.behavior.distinctProfiles)),
       neuralControlledDecisions: mean(runs.map((run) => run.control.neuralDecisions)),
       neuralControlDivergences: mean(runs.map((run) => run.control.divergencesFromFallback)),
       shadowDivergenceRate: mean(runs.map((run) => run.shadow.divergenceRate)),

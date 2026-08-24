@@ -16,7 +16,7 @@ Library callers can pass additional `policyFactories` to `evaluatePolicies()`. A
 
 ## Report
 
-The versioned report records the simulation version, schema version, baseline, policy names and implementation IDs, seeds, days, and phases per day. Each run includes:
+The version 2 report records the simulation version, schema version, baseline, policy names and implementation IDs, seeds, days, and phases per day. Each run includes:
 
 - final living, dead, hungry, unhoused, and employed citizens;
 - final inactive/insolvent firms;
@@ -25,6 +25,7 @@ The versioned report records the simulation version, schema version, baseline, p
 - initial/final cash, difference, and conservation status;
 - a complete chosen-action frequency distribution;
 - active controller, controlled domain, schema, gate, and weights metadata plus neural-control decision and fallback-divergence counts;
+- personal-time diversity metrics: mean per-citizen action entropy, between-citizen action-share variance, and distinct rounded action profiles;
 - neural-shadow decision counts, divergence and invalid pre-mask preference rates, and shadow action distributions;
 - directional missed-shift, essential-skip, and accepted-offer projections where direct action comparison is meaningful;
 - pass/fail status and any failure message.

@@ -9,6 +9,7 @@ import {
 
 const loadedArtifact = loadSharedNeuralWeightArtifact(artifact);
 
+export const BUNDLED_NEURAL_ARTIFACT = loadedArtifact.artifact;
 export const BUNDLED_NEURAL_WEIGHTS = loadedArtifact.weights;
 
 export const BUNDLED_NEURAL_ACTIVATION_GATE: NeuralActivationGate = Object.freeze({
