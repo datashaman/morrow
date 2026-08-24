@@ -14,7 +14,7 @@ Stress falls through financial runway, stable employment, food, housing, friends
 
 ### No saved or shareable run
 
-The seed is fixed in code, not visible or editable in the interface. Policy changes and runs cannot be exported, imported, bookmarked, or compared side by side.
+The seed is fixed in the browser and interactive runs still cannot be exported, imported, or bookmarked. Policies can now be compared reproducibly across configurable seeds through the headless evaluator, but there is no interactive side-by-side run viewer or saved report store.
 
 ## Economic simplifications
 

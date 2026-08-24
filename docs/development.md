@@ -20,6 +20,7 @@ Open the local HTTP address printed by Vite. Do not open `index.html` directly w
 npm test          # deterministic domain tests
 npm run typecheck # check TypeScript policy modules
 npm run build     # typecheck and create the production bundle
+npm run evaluate  # compare rule and motivation policies across fixed seeds
 npm run preview   # serve the production bundle locally
 ```
 
@@ -32,7 +33,16 @@ npm test
 npm run build
 ```
 
-The current baseline is eighty-eight passing tests and a successful typed Vite build.
+The current baseline is 101 passing tests and a successful typed Vite build.
+
+For a custom headless comparison:
+
+```sh
+npm run evaluate -- --seeds 11,22,33 --days 120
+npm run --silent evaluate -- --seeds 11,22,33 --days 120 --json
+```
+
+See [policy evaluation](./policy-evaluation.md) for metrics, policy registration, and interpretation limits.
 
 ## Testing strategy
 
@@ -54,6 +64,7 @@ Current coverage protects:
 - runway-based owner wage waivers and retained-surplus dividend decisions
 - owner equity contributions, voluntary insolvency, and constrained emergency distributions
 - deterministic reproduction from a seed
+- deterministic multi-seed policy comparison, machine-readable reports, and hard failure detection
 
 For a random or emergent bug, preserve the seed and reduce the reproduction to the smallest phase or helper possible. Prefer assertions on causal state and ledger entries over screenshots.
 

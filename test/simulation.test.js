@@ -1081,6 +1081,7 @@ test("the rule citizen policy preserves reservation-wage and reliability accepta
     skill: 0.7,
     reliability: 0.8,
     acceptanceProbability: 0.78,
+    acceptanceDraw: 0,
   };
   const legalActions = ["accept-job-offer", "decline-job-offer"];
 
@@ -1090,12 +1091,12 @@ test("the rule citizen policy preserves reservation-wage and reliability accepta
     random: () => { randomCalls += 1; return 0; },
   });
   const accepted = citizenPolicy.decide({
-    observation: { ...observation, offeredWage: 6.5 },
+    observation: { ...observation, offeredWage: 6.5, acceptanceDraw: 0.77 },
     legalActions,
     random: () => 0.77,
   });
   const declined = citizenPolicy.decide({
-    observation: { ...observation, offeredWage: 6.5 },
+    observation: { ...observation, offeredWage: 6.5, acceptanceDraw: 0.78 },
     legalActions,
     random: () => 0.78,
   });

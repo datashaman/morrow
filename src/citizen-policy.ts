@@ -209,10 +209,10 @@ export function createMotivationProfile(seed: number, citizenId: number): Motiva
 }
 
 export class RuleCitizenPolicy implements CitizenPolicy {
-  readonly id = "rule-v1";
+  readonly id = "rule-v2";
 
-  decide({ observation, random }: CitizenPolicyInput): CitizenPolicyDecision {
-    if (observation.kind !== "job-offer") throw new Error(`${this.id} cannot decide ${observation.kind}`);
+  decide({ observation, legalActions }: CitizenPolicyInput): CitizenPolicyDecision {
+    if (observation.kind !== "job-offer") return this.decideDeterministicRule(observation, legalActions);
     if (observation.offeredWage < observation.reservationWage) {
       return {
         action: "decline-job-offer",
@@ -225,7 +225,7 @@ export class RuleCitizenPolicy implements CitizenPolicy {
       };
     }
 
-    const draw = random();
+    const draw = observation.acceptanceDraw;
     const accepted = draw < observation.acceptanceProbability;
     return {
       action: accepted ? "accept-job-offer" : "decline-job-offer",
@@ -238,6 +238,42 @@ export class RuleCitizenPolicy implements CitizenPolicy {
         acceptanceProbability: observation.acceptanceProbability,
         randomDraw: draw,
       },
+    };
+  }
+
+  decideDeterministicRule(observation: Exclude<CitizenObservation, JobOfferObservation>, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    let action: CitizenAction = legalActions[0];
+    if (observation.kind === "attendance") {
+      action = observation.attendanceDraw >= observation.baselineMissChance ? "attend-shift" : "miss-shift";
+    } else if (observation.kind === "job-search") {
+      action = observation.options[0]?.action ?? SKIP_JOB_SEARCH;
+    } else if (observation.kind === "food") {
+      const stored = observation.options.filter((option) => option.source === "stored").sort((a, b) => b.age - a.age)[0];
+      const purchase = observation.options.filter((option) => option.source === "seller").sort((a, b) => a.totalPrice - b.totalPrice || b.units - a.units)[0];
+      action = stored?.action ?? purchase?.action ?? "skip-food";
+    } else if (observation.kind === "housing") {
+      action = observation.options[0]?.action ?? (observation.housed ? "defer-housing" : "remain-unhoused");
+    } else if (observation.kind === "personal-time") {
+      action = legalActions.includes("do-nothing") ? "do-nothing" : legalActions[0];
+    } else if (observation.kind === "owner") {
+      if (observation.domain === "wage") {
+        const waive = observation.options.find((option) => option.action === "waive-owner-wage");
+        const draw = observation.options.find((option) => option.action === "draw-owner-wage");
+        action = waive && draw && waive.firmContinuity > draw.firmContinuity ? waive.action : draw?.action ?? legalActions[0];
+      } else if (observation.domain === "financing") {
+        action = observation.options.find((option) => option.action === "contribute-owner-capital")?.action
+          ?? observation.options.find((option) => option.action === "choose-voluntary-insolvency")?.action
+          ?? legalActions[0];
+      } else if (observation.domain === "pricing") {
+        action = observation.options.reduce((best, option) => option.firmContinuity > best.firmContinuity ? option : best).action;
+      } else {
+        action = observation.options.find((option) => option.action === "take-owner-distribution")?.action ?? legalActions[0];
+      }
+    }
+    return {
+      action,
+      reasons: [`The deterministic ${this.id} baseline selected its fixed legal ${observation.kind} rule.`],
+      scores: Object.fromEntries(legalActions.map((candidate) => [candidate, candidate === action ? 1 : 0])),
     };
   }
 }
