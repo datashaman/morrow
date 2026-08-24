@@ -67,8 +67,8 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Scarcity errors are generic and probabilistic; they should not be interpreted as a clinical claim about people in poverty.
 - Short-term comfort spending can occur during unemployment or homelessness, but this is a gameplay hypothesis rather than a calibrated claim about how people experiencing hardship behave.
 - The Maslow-inspired hierarchy uses hard thresholds and weighted sums. It is a gameplay heuristic, not validated psychology.
-- Current focus selects one need category but does not plan across days or learn from outcomes.
-- There is no learned policy yet. The current policy seam is a behavior-preserving architecture boundary, not evidence that citizen motivations have become psychologically realistic.
+- Current focus selects one need category. Stable seed-derived motivation weights now vary personal-time scoring, but citizens still do not plan across days or learn from outcomes. The weights and scoring equations are gameplay hypotheses, not a validated personality model.
+- There is no learned policy yet. Job offers retain the original rule and personal time uses a deterministic scorer; neither is evidence that citizen motivations have become psychologically realistic.
 
 ## Simulation and interface limitations
 

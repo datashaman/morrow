@@ -25,6 +25,7 @@ There are 40 named people. Each person carries:
 - Economic state: cash, employer, seller references, food reserve, housing status, rent arrears, and transaction ledger
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
+- Motivation: four stable, seed-derived personal-time weights for comfort, connection, mastery, and security plus a complete in-memory policy-decision history
 - Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
 - Personal differences: randomized starting values, a persistent esteem baseline, a stable 15–31% comfortable-owner dividend preference, and a stable 0.60–0.84 minimum recovery ratio for personal firm funding
 - Narrative state: recent life events
@@ -162,7 +163,18 @@ When HomeWorks becomes insolvent, ordinary rent and rehousing transactions stop 
 
 ### 6. Personal time
 
-The current focus is reassessed before choosing an activity. The discretionary-demand policy is the probability that an otherwise eligible optional purchase proceeds: 0% suppresses café and goods purchases, while 100% permits every eligible purchase. It does not affect food or housing.
+The current focus is reassessed before choosing an activity. The discretionary-demand policy determines whether optional purchases enter the legal-action set: 0% leaves only doing nothing, while 100% allows every otherwise eligible café or goods action to be considered. It does not affect food or housing.
+
+Each citizen has stable comfort, connection, mastery, and security weights between 0.70 and 1.30. They are generated from an isolated combination of the town seed and citizen ID, so they do not consume or disturb the main simulation random sequence. The values are hypotheses for producing heterogeneous stories, not measured personality traits.
+
+The simulation constructs the currently legal personal-time actions from living status, focus, affordability, inventory, seller transaction capacity, and the discretionary-demand result. Doing nothing is always legal. `motivation-v1` scores only that set:
+
+- Doing nothing rises with the security weight and a runway shortfall below twelve days.
+- Short-term comfort rises with the comfort weight and stress.
+- A social visit rises with the connection weight and unmet belonging.
+- Learning tools rise with the mastery weight and unmet esteem and growth.
+
+The highest-scoring legal action is selected deterministically. `TownSimulation` validates it, performs any exact purchase, and applies consequences. The citizen retains the observation, legal alternatives, scores, chosen action, reasons, and policy version as a decision trace. The selected-citizen panel shows the stable weights and the complete newest-first decision history.
 
 - A highly stressed person experiencing a scarcity error may buy short-term comfort at the café. This immediately reduces stress by 0.035 but also lowers cash reserves. Employment and housing status do not block an affordable purchase: an unemployed or unhoused citizen with cash retains the same bounded agency, and the resulting life event names those circumstances.
 - A person focused on belonging may buy a social visit if they retain more than seven cash after its price.

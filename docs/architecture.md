@@ -46,7 +46,7 @@ The class currently combines initialization, accounting, decision rules, phase o
 
 ### `src/citizen-policy.ts`
 
-Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among the legal actions and explains that choice. The first tracer bullet covers job-offer acceptance. `RuleCitizenPolicy` preserves the existing seeded heuristic, while tests inject a second policy to protect substitutability. Later motivation or neural policies should extend this boundary one decision domain at a time rather than bypassing `TownSimulation`.
+Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among the legal actions and explains that choice. `RuleCitizenPolicy` preserves the seeded job-offer heuristic. `MotivationCitizenPolicy` delegates job offers to that rule and scores personal-time actions from stable seed-derived citizen weights plus current needs, stress, and runway. Tests inject alternative policies to protect substitutability. Later motivation or neural policies should extend this boundary one decision domain at a time rather than bypassing `TownSimulation`.
 
 ### `src/firm-presentation.js`
 

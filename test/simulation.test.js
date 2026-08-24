@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { RuleCitizenPolicy } from "../src/citizen-policy.ts";
+import {
+  createMotivationProfile,
+  MotivationCitizenPolicy,
+  RuleCitizenPolicy,
+} from "../src/citizen-policy.ts";
 import { PHASES, PRODUCTS } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
@@ -1112,6 +1116,84 @@ test("the simulation rejects an illegal citizen-policy action", () => {
   );
   assert.equal(candidate.employer, -1);
   assert.equal(candidate.decisions.length, 0);
+});
+
+test("citizen motivation profiles are stable for a seed and differ across seeds", () => {
+  const first = new TownSimulation({ seed: 42 });
+  const replay = new TownSimulation({ seed: 42 });
+  const alternate = new TownSimulation({ seed: 43 });
+
+  assert.deepEqual(first.people.map((person) => person.motivationProfile), replay.people.map((person) => person.motivationProfile));
+  assert.notDeepEqual(first.people.map((person) => person.motivationProfile), alternate.people.map((person) => person.motivationProfile));
+  assert.deepEqual(first.people[7].motivationProfile, createMotivationProfile(42, 7));
+});
+
+test("different motivation profiles rank the same legal personal-time actions differently", () => {
+  const policy = new MotivationCitizenPolicy();
+  const observation = {
+    kind: "personal-time",
+    citizenId: 9,
+    citizenName: "Candidate",
+    stress: 0.8,
+    runwayDays: 12,
+    focus: "belonging",
+    needs: { physiological: 1, safety: 1, belonging: 0.2, esteem: 0.2, growth: 0.2 },
+    relationshipCount: 0,
+    strongestRelationship: 0,
+    profile: { comfort: 1, connection: 1.3, mastery: 0.7, security: 1 },
+  };
+  const legalActions = ["do-nothing", "social-visit", "buy-learning-tools"];
+
+  const connectionChoice = policy.decide({ observation, legalActions, random: () => 0 });
+  const masteryChoice = policy.decide({
+    observation: { ...observation, profile: { ...observation.profile, connection: 0.7, mastery: 1.3 } },
+    legalActions,
+    random: () => 0,
+  });
+
+  assert.equal(connectionChoice.action, "social-visit");
+  assert.equal(masteryChoice.action, "buy-learning-tools");
+  assert.ok(connectionChoice.scores["social-visit"] > connectionChoice.scores["buy-learning-tools"]);
+});
+
+test("personal-time motivations choose only available affordable actions and retain a trace", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.setPolicy("discretionaryDemand", 100);
+  const person = town.people[0];
+  const café = town.firms.find((firm) => firm.sector === "service");
+  const makers = town.firms.find((firm) => firm.sector === "goods");
+  person.health = 1;
+  person.hungryDays = 0;
+  person.housed = true;
+  person.cash = 100;
+  person.stress = 0.2;
+  person.relationships = {};
+  person.lastSocialDay = -20;
+  person.motivationProfile = { comfort: 0.7, connection: 1.3, mastery: 0.7, security: 0.7 };
+  café.inventory = 10;
+  café.employees.forEach((id) => { town.people[id].attended = true; });
+  town.random = () => 0;
+
+  const acted = town.considerPersonalTime(person, café, makers);
+
+  assert.equal(acted, true);
+  assert.equal(person.socialToday, true);
+  assert.match(person.ledger[0].text, /social visit to Common Café/);
+  assert.equal(person.decisions[0].kind, "personal-time");
+  assert.equal(person.decisions[0].policy, "motivation-v1");
+  assert.equal(person.decisions[0].chosenAction, "social-visit");
+  assert.deepEqual(person.decisions[0].legalActions, ["do-nothing", "social-visit"]);
+
+  const cashPoorPerson = town.people.at(-1);
+  cashPoorPerson.cash = 0;
+  cashPoorPerson.stress = 0.9;
+  cashPoorPerson.scarcityError = true;
+  cashPoorPerson.motivationProfile = { comfort: 1.3, connection: 0.7, mastery: 0.7, security: 0.7 };
+  town.considerPersonalTime(cashPoorPerson, café, makers);
+
+  assert.equal(cashPoorPerson.decisions[0].chosenAction, "do-nothing");
+  assert.deepEqual(cashPoorPerson.decisions[0].legalActions, ["do-nothing"]);
+  assert.equal(cashPoorPerson.ledger.length, 0);
 });
 
 test("sustained income eventually expands staffing", () => {

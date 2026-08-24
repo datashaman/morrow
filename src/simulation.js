@@ -30,14 +30,18 @@ import {
   VITAL_RESCUE_CAP,
   VITAL_RESCUE_RUNWAY_DAYS,
 } from "./config.js";
-import { JOB_OFFER_ACTIONS, RuleCitizenPolicy } from "./citizen-policy.ts";
+import {
+  createMotivationProfile,
+  JOB_OFFER_ACTIONS,
+  MotivationCitizenPolicy,
+} from "./citizen-policy.ts";
 import { createRandom } from "./random.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = new RuleCitizenPolicy() } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = new MotivationCitizenPolicy() } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -149,6 +153,7 @@ export class TownSimulation {
         health: 0.58 + this.random() * 0.36,
         stress: 0.12 + this.random() * 0.25,
         esteemBaseline: 0.05 + this.random() * 0.12,
+        motivationProfile: createMotivationProfile(this.seed, id),
         dividendPreference: 0.15 + (id % 5) * 0.04,
         ownerRecoveryThreshold: 0.6 + (id % 4) * 0.08,
         growth: 0.04 + this.random() * 0.15,
@@ -400,11 +405,17 @@ export class TownSimulation {
     if (!decision || !legalActions.includes(decision.action)) {
       throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal job-offer action`);
     }
-    candidate.decisionSequence += 1;
-    candidate.decisions.unshift({
+    this.recordDecision(candidate, observation, legalActions, decision, "Settlement");
+    if (decision.action !== "accept-job-offer") return false;
+    return this.hire(firm, candidate);
+  }
+
+  recordDecision(person, observation, legalActions, decision, phase) {
+    person.decisionSequence += 1;
+    person.decisions.unshift({
       day: this.day,
-      phase: "Settlement",
-      sequence: candidate.decisionSequence,
+      phase,
+      sequence: person.decisionSequence,
       policy: this.citizenPolicy.id ?? "unknown",
       kind: observation.kind,
       observation: { ...observation },
@@ -413,8 +424,6 @@ export class TownSimulation {
       reasons: Array.isArray(decision.reasons) ? [...decision.reasons] : [],
       scores: decision.scores ? { ...decision.scores } : {},
     });
-    if (decision.action !== "accept-job-offer") return false;
-    return this.hire(firm, candidate);
   }
 
   die(person, reason = "died after health reached a critical level") {
@@ -709,20 +718,7 @@ export class TownSimulation {
     const makers = this.firms.find((firm) => firm.active && firm.sector === "goods" && firm.inventory >= 1);
     this.people.forEach((person) => {
       if (!person.alive) return;
-      this.assessNeeds(person);
-      const pursuesDiscretionaryPurchase = this.random() < this.policy.discretionaryDemand / 100;
-      if (pursuesDiscretionaryPurchase && person.scarcityError && person.stress > 0.65 && café && this.buy(person, café, 1, "short-term comfort")) {
-        person.stress = clamp(person.stress - 0.035);
-        const insecureCircumstances = [person.employer < 0 ? "unemployed" : "", !person.housed ? "unhoused" : ""].filter(Boolean).join(" and ");
-        this.note(person, insecureCircumstances
-          ? `short-term comfort spending while ${insecureCircumstances} reduced thin reserves`
-          : "stress relief spending reduced thin reserves", "bad");
-      } else if (pursuesDiscretionaryPurchase && person.focus === "belonging" && café && person.cash > café.price + 7 && this.buy(person, café, 1, "social visit")) {
-        person.socialToday = true;
-      } else if (pursuesDiscretionaryPurchase && ["esteem", "growth"].includes(person.focus) && makers && person.cash > makers.price + 10 && this.buy(person, makers, 1, "learning tools")) {
-        person.skill = clamp(person.skill + 0.02);
-        person.growth = clamp(person.growth + 0.04);
-      }
+      this.considerPersonalTime(person, café, makers);
     });
     const social = this.people.filter((person) => person.alive && person.socialToday).sort(() => this.random() - 0.5);
     for (let index = 0; index + 1 < social.length; index += 2) {
@@ -734,6 +730,61 @@ export class TownSimulation {
         this.note(b, `a café encounter became friendship with ${a.name}`, "good");
       }
     }
+  }
+
+  considerPersonalTime(person, café, makers) {
+    if (!person.alive) return false;
+    this.assessNeeds(person);
+    const pursuesDiscretionaryPurchase = this.random() < this.policy.discretionaryDemand / 100;
+    const canBuy = (firm, reserve = 0) => firm
+      && firm.active
+      && firm.inventory >= 1
+      && person.cash > firm.price + reserve
+      && firm.transactionsToday < this.transactionCapacity(firm);
+    const legalActions = ["do-nothing"];
+    if (pursuesDiscretionaryPurchase) {
+      if (person.scarcityError && person.stress > 0.65 && canBuy(café, -1e-9)) legalActions.push("buy-comfort");
+      if (person.focus === "belonging" && canBuy(café, 7)) legalActions.push("social-visit");
+      if (["esteem", "growth"].includes(person.focus) && canBuy(makers, 10)) legalActions.push("buy-learning-tools");
+    }
+    const relationships = this.relationshipStats(person);
+    const observation = Object.freeze({
+      kind: "personal-time",
+      citizenId: person.id,
+      citizenName: person.name,
+      stress: person.stress,
+      runwayDays: this.runwayDays(person),
+      focus: person.focus,
+      needs: { ...person.needs },
+      relationshipCount: relationships.count,
+      strongestRelationship: relationships.strongest,
+      profile: { ...person.motivationProfile },
+    });
+    const frozenLegalActions = Object.freeze([...legalActions]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions: frozenLegalActions, random: this.random });
+    if (!decision || !frozenLegalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal personal-time action`);
+    }
+    this.recordDecision(person, observation, frozenLegalActions, decision, "Personal time");
+
+    if (decision.action === "buy-comfort" && this.buy(person, café, 1, "short-term comfort")) {
+      person.stress = clamp(person.stress - 0.035);
+      const insecureCircumstances = [person.employer < 0 ? "unemployed" : "", !person.housed ? "unhoused" : ""].filter(Boolean).join(" and ");
+      this.note(person, insecureCircumstances
+        ? `short-term comfort spending while ${insecureCircumstances} reduced thin reserves`
+        : "stress relief spending reduced thin reserves", "bad");
+      return true;
+    }
+    if (decision.action === "social-visit" && this.buy(person, café, 1, "social visit")) {
+      person.socialToday = true;
+      return true;
+    }
+    if (decision.action === "buy-learning-tools" && this.buy(person, makers, 1, "learning tools")) {
+      person.skill = clamp(person.skill + 0.02);
+      person.growth = clamp(person.growth + 0.04);
+      return true;
+    }
+    return false;
   }
 
   settlementPhase() {

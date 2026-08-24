@@ -32,7 +32,7 @@ npm test
 npm run build
 ```
 
-The current baseline is eighty-one passing tests and a successful typed Vite build.
+The current baseline is eighty-four passing tests and a successful typed Vite build.
 
 ## Testing strategy
 

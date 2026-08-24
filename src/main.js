@@ -47,6 +47,13 @@ app.innerHTML = `
       </div>
       <p class="person-summary" id="person-summary"></p>
       <div class="needs" id="needs"></div>
+      <section class="motivation-panel" aria-labelledby="motivation-title">
+        <div class="motivation-heading">
+          <h2 id="motivation-title">Motivation</h2>
+          <div class="motivation-profile" id="motivation-profile"></div>
+        </div>
+        <ol class="decision-stream" id="decision-stream" tabindex="0" aria-label="Citizen decisions, newest first"></ol>
+      </section>
       <div class="activity-heading">
         <h2>Activity</h2>
         <label>Show
@@ -112,7 +119,7 @@ const commonPark = { x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 };
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail",
-  "person-select", "focus", "person-summary", "needs", "activity-filter", "activity-stream", "firm-grid", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid",
+  "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -155,6 +162,15 @@ const money = (value) => value.toFixed(1);
 const price = (value) => value.toFixed(2);
 const percent = (value) => `${Math.round(value * 100)}%`;
 const needNames = { physiological: "Physiological", safety: "Safety", belonging: "Belonging", esteem: "Esteem", growth: "Self-actualization" };
+const motivationNames = { comfort: "Comfort", connection: "Connection", mastery: "Mastery", security: "Security" };
+const actionNames = {
+  "accept-job-offer": "Accepted job offer",
+  "decline-job-offer": "Declined job offer",
+  "do-nothing": "Did nothing",
+  "buy-comfort": "Bought short-term comfort",
+  "social-visit": "Made a social visit",
+  "buy-learning-tools": "Bought learning tools",
+};
 
 function renderActivity(entity, filter, stream) {
   const previousScrollHeight = stream.scrollHeight;
@@ -173,6 +189,37 @@ function renderActivity(entity, filter, stream) {
     const item = document.createElement("li");
     item.className = "activity-empty";
     item.textContent = filter === "transactions" ? "No transactions yet" : filter === "events" ? "No life events yet" : "No activity yet";
+    stream.append(item);
+  }
+  if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
+}
+
+function renderMotivations(person) {
+  elements["motivation-profile"].replaceChildren(...Object.entries(person.motivationProfile).map(([name, value]) => {
+    const item = document.createElement("span");
+    item.innerHTML = `${motivationNames[name]} <b>${value.toFixed(2)}</b>`;
+    return item;
+  }));
+  const stream = elements["decision-stream"];
+  const previousScrollHeight = stream.scrollHeight;
+  const previousScrollTop = stream.scrollTop;
+  const followingNewest = previousScrollTop < 2;
+  stream.replaceChildren(...person.decisions.map((decision) => {
+    const item = document.createElement("li");
+    const alternatives = decision.legalActions
+      .map((action) => `${actionNames[action] ?? action}${decision.scores[action] === undefined ? "" : ` ${decision.scores[action].toFixed(2)}`}`)
+      .join(" · ");
+    const evidence = Object.entries(decision.scores)
+      .filter(([name]) => !decision.legalActions.includes(name))
+      .map(([name, value]) => `${name} ${value.toFixed(2)}`)
+      .join(" · ");
+    item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionNames[decision.chosenAction] ?? decision.chosenAction}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""} · ${decision.policy}</small>`;
+    return item;
+  }));
+  if (!person.decisions.length) {
+    const item = document.createElement("li");
+    item.className = "decision-empty";
+    item.textContent = "No policy decision has been recorded yet.";
     stream.append(item);
   }
   if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
@@ -228,6 +275,7 @@ function updateInterface() {
     return item;
   }));
 
+  renderMotivations(person);
   renderActivity(person, elements["activity-filter"].value, elements["activity-stream"]);
 
   elements["firm-grid"].replaceChildren(...simulation.firms.map((firm) => {
