@@ -43,11 +43,12 @@ test("unemployed citizens apply only to active firms with approved vacancies", (
     { id: 3, active: true, targetStaff: 4, employees: [4, 5] },
   ];
 
-  assert.equal(applicantFirmId(0, firms), 0);
-  assert.equal(applicantFirmId(1, firms), 3);
-  assert.equal(applicantFirmId(2, firms), 3);
-  assert.equal(applicantFirmId(3, firms), 0);
-  assert.equal(applicantFirmId(0, firms.map((firm) => ({ ...firm, targetStaff: firm.employees.length }))), null);
+  assert.equal(applicantFirmId({ jobApplicationFirm: 0 }, firms), 0);
+  assert.equal(applicantFirmId({ jobApplicationFirm: 3 }, firms), 3);
+  assert.equal(applicantFirmId({ jobApplicationFirm: 1 }, firms), null);
+  assert.equal(applicantFirmId({ jobApplicationFirm: 2 }, firms), null);
+  assert.equal(applicantFirmId({ jobApplicationFirm: -1 }, firms), null);
+  assert.equal(applicantFirmId({ jobApplicationFirm: 0 }, firms.map((firm) => ({ ...firm, targetStaff: firm.employees.length }))), null);
 });
 
 test("applicants wait outside the firm plaque", () => {

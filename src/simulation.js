@@ -35,6 +35,7 @@ import {
   createMotivationProfile,
   JOB_OFFER_ACTIONS,
   MotivationCitizenPolicy,
+  SKIP_JOB_SEARCH,
 } from "./citizen-policy.ts";
 import { createRandom } from "./random.js";
 
@@ -145,6 +146,7 @@ export class TownSimulation {
         skill: 0.25 + this.random() * 0.65,
         reliability: 0.55 + this.random() * 0.43,
         employer: -1,
+        jobApplicationFirm: -1,
         relationships: {},
         socialCapacity: 3 + Math.floor(this.random() * 4),
         lastSocialDay: 0,
@@ -376,6 +378,7 @@ export class TownSimulation {
   hire(firm, person, silent = false) {
     if (!firm.active || !person.alive || person.employer >= 0) return false;
     person.employer = firm.id;
+    person.jobApplicationFirm = -1;
     firm.employees.push(person.id);
     if (!silent) this.note(person, `hired by ${firm.name}`, "good");
     return true;
@@ -389,6 +392,7 @@ export class TownSimulation {
 
   considerJobOffer(firm, candidate, offeredWage) {
     if (!firm.active || !candidate.alive || candidate.employer >= 0) return false;
+    const needs = this.assessNeeds(candidate);
     const observation = Object.freeze({
       kind: "job-offer",
       citizenId: candidate.id,
@@ -400,6 +404,11 @@ export class TownSimulation {
       skill: candidate.skill,
       reliability: candidate.reliability,
       acceptanceProbability: 0.5 + candidate.reliability * 0.35,
+      acceptanceDraw: this.random(),
+      stress: candidate.stress,
+      runwayDays: this.runwayDays(candidate),
+      safetyNeed: needs.safety,
+      profile: candidate.motivationProfile,
     });
     const legalActions = Object.freeze([...JOB_OFFER_ACTIONS]);
     const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
@@ -409,6 +418,72 @@ export class TownSimulation {
     this.recordDecision(candidate, observation, legalActions, decision, "Settlement");
     if (decision.action !== "accept-job-offer") return false;
     return this.hire(firm, candidate);
+  }
+
+  eligibleJobFirms(firms = this.firms) {
+    return firms.filter((firm) => firm.active
+      && firm.vacancyAge >= 2
+      && firm.targetStaff > firm.employees.length);
+  }
+
+  considerJobSearch(person, firms = this.firms) {
+    if (!person.alive || person.employer >= 0) return null;
+    person.jobApplicationFirm = -1;
+    const eligibleFirms = this.eligibleJobFirms(firms);
+    if (!eligibleFirms.length) return null;
+    const needs = this.assessNeeds(person);
+    const reservationWage = 3.2 + person.skill * 4.5;
+    const options = eligibleFirms.map((firm) => Object.freeze({
+      action: `apply-job:${firm.id}`,
+      firmId: firm.id,
+      firmName: firm.name,
+      offeredWage: Math.max(this.policy.minimumWage, firm.wage),
+      reservationWage,
+      firmTrouble: firm.trouble,
+      vacancyAge: firm.vacancyAge,
+    }));
+    const observation = Object.freeze({
+      kind: "job-search",
+      citizenId: person.id,
+      citizenName: person.name,
+      skill: person.skill,
+      reliability: person.reliability,
+      stress: person.stress,
+      runwayDays: this.runwayDays(person),
+      safetyNeed: needs.safety,
+      profile: person.motivationProfile,
+      options: Object.freeze(options),
+    });
+    const legalActions = Object.freeze([SKIP_JOB_SEARCH, ...options.map((option) => option.action)]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal job-search action`);
+    }
+    this.recordDecision(person, observation, legalActions, decision, "Settlement");
+    const application = options.find((option) => option.action === decision.action);
+    person.jobApplicationFirm = application?.firmId ?? -1;
+    return application?.firmId ?? null;
+  }
+
+  runJobMarket(firms = this.firms) {
+    this.people.forEach((person) => { person.jobApplicationFirm = -1; });
+    const eligibleFirms = this.eligibleJobFirms(firms);
+    if (!eligibleFirms.length) return 0;
+    this.people
+      .filter((person) => person.alive && person.employer < 0)
+      .forEach((person) => this.considerJobSearch(person, eligibleFirms));
+    let hires = 0;
+    eligibleFirms.forEach((firm) => {
+      const candidate = this.people
+        .filter((person) => person.alive && person.employer < 0 && person.jobApplicationFirm === firm.id)
+        .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
+      const wage = Math.max(this.policy.minimumWage, firm.wage);
+      if (candidate && this.considerJobOffer(firm, candidate, wage)) {
+        firm.vacancyAge = 0;
+        hires += 1;
+      }
+    });
+    return hires;
   }
 
   considerAttendance(person, firm) {
@@ -473,6 +548,7 @@ export class TownSimulation {
       delete friend.relationships[person.id];
     });
     person.relationships = {};
+    person.jobApplicationFirm = -1;
     person.alive = false;
     person.deathDay = this.day;
     person.attended = false;
@@ -928,7 +1004,9 @@ export class TownSimulation {
       if (paid) this.ledger(person, { direction: "in", amount: paid, text: "support from treasury", before });
     });
 
-    this.firms.forEach((firm) => this.settleFirm(firm));
+    this.firms.forEach((firm) => this.prepareFirmSettlement(firm));
+    this.runJobMarket();
+    this.firms.forEach((firm) => this.finishFirmSettlement(firm));
     this.decayRelationships();
     this.people.forEach((person) => {
       if (!person.alive) return;
@@ -1211,7 +1289,7 @@ export class TownSimulation {
     return paid;
   }
 
-  settleFirm(firm) {
+  prepareFirmSettlement(firm) {
     if (!firm.active) return;
     firm.pricingWindow.unitsSold += firm.unitsSold;
     firm.pricingWindow.revenue += firm.sales;
@@ -1236,12 +1314,10 @@ export class TownSimulation {
     }
     const vacancies = Math.max(0, firm.targetStaff - firm.employees.length);
     firm.vacancyAge = vacancies ? firm.vacancyAge + 1 : 0;
-    if (vacancies && firm.vacancyAge >= 2) {
-      const candidate = this.people.filter((person) => person.alive && person.employer < 0).sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
-      if (candidate && this.considerJobOffer(firm, candidate, wage)) {
-        firm.vacancyAge = 0;
-      }
-    }
+  }
+
+  finishFirmSettlement(firm) {
+    if (!firm.active) return;
     if (this.random() < (this.policy.shockRisk / 100) * 0.025) {
       this.transfer(firm, this.government, Math.min(firm.cash, 12 + this.random() * 22));
       firm.trouble += 1;
@@ -1258,6 +1334,12 @@ export class TownSimulation {
     firm.attemptedTransactions = 0;
     firm.turnedAwayTransactions = 0;
     firm.priceRejectionsToday = 0;
+  }
+
+  settleFirm(firm) {
+    this.prepareFirmSettlement(firm);
+    this.runJobMarket([firm]);
+    this.finishFirmSettlement(firm);
   }
 
   isExtinct() {
@@ -1285,6 +1367,7 @@ export class TownSimulation {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
+    if (this.people.some((person) => person.employer >= 0 && person.jobApplicationFirm >= 0)) throw new Error("An employed person cannot remain a job applicant");
     if (this.firms.some((firm) => !firm.active && !["insolvent", "receivership"].includes(firm.status))) throw new Error("An inactive firm must be insolvent or in receivership");
     this.people.forEach((person) => {
       this.friendIds(person).forEach((friendId) => {

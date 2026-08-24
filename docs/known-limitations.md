@@ -44,7 +44,8 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Each attending worker contributes a fixed sector-specific number of transactions regardless of skill, health, transaction complexity, or coworker coordination.
 - There are no occupations, schedules, hours, contracts, tenure, credentials, discrimination, commuting cost, care work, informal work, or self-employment.
 - Candidate ranking uses skill and reliability. The richer social referral effect from an earlier version is not present.
-- Attendance is routed through the motivation policy using health, hunger, stress, runway, reliability, a baseline absence chance, and a seeded daily draw. It remains an all-or-nothing daily shift with no schedules, partial capacity, paid leave, illness categories, transport, care obligations, or employer attendance policy. Job-offer acceptance still retains a skill-only reservation wage and reliability-only probability; richer job seeking and acceptance are the next policy boundary.
+- Attendance is routed through the motivation policy using health, hunger, stress, runway, reliability, a baseline absence chance, and a seeded daily draw. It remains an all-or-nothing daily shift with no schedules, partial capacity, paid leave, illness categories, transport, care obligations, or employer attendance policy.
+- Job seeking is a once-per-settlement choice among mature approved vacancies, and each firm makes at most one offer to its highest-ranked applicant. Offered wage, reservation wage, reliability, safety, runway, stress, firm trouble, seeded acceptance evidence, and stable motivation weights affect the two decisions, but there are no applications in progress, interviews, credentials, occupations, schedules, benefits, commuting costs, discrimination, negotiation, competing offers, referrals, search costs, employer preferences beyond skill and reliability, or memory of earlier rejection.
 - Production by housing employees is not used to constrain housing supply.
 - Missed shifts create events but no distinct wage-ledger entry because no money moves.
 
@@ -68,11 +69,11 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Short-term comfort spending can occur during unemployment or homelessness, but this is a gameplay hypothesis rather than a calibrated claim about how people experiencing hardship behave.
 - The Maslow-inspired hierarchy uses hard thresholds and weighted sums. It is a gameplay heuristic, not validated psychology.
 - Current focus selects one need category. Stable seed-derived motivation weights now vary attendance, food, housing, and personal-time scoring, but citizens still do not plan across days or learn from outcomes. The weights and scoring equations are gameplay hypotheses, not a validated personality model.
-- There is no learned policy yet. Job offers retain the original rule and the other routed domains use a deterministic scorer; neither is evidence that citizen motivations have become psychologically realistic.
+- There is no learned policy yet. The routed domains use deterministic scoring over legal actions and seeded observations; this is an inspectable bridge toward a learned policy, not evidence that citizen motivations have become psychologically realistic.
 
 ## Simulation and interface limitations
 
-- The canvas moves employees toward employers, unemployed people toward firms with approved vacancies or the Common Park, and deceased people toward the cemetery continuously, not according to the seven economic phases. Applications, park movement, and the cemetery are illustrative rather than causal; the park provides no shelter, food, services, or social effects.
+- The canvas moves employees toward employers, current applicants toward the firm named by their domain application, other unemployed people toward the Common Park, and deceased people toward the cemetery continuously, not according to the seven economic phases. The map does not create applications or employment; park movement and the cemetery remain illustrative, and the park provides no shelter, food, services, or social effects.
 - Person positions are mutated by rendering and live on domain entities, weakening separation between simulation and view state.
 - The UI shows complete citizen and firm histories plus current firm pipelines, but no town-wide distributions, inequality measures, network graph, cross-entity trace query, or aggregate supply-chain history.
 - Policy changes apply mid-run without being recorded in the event history.

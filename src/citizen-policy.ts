@@ -2,14 +2,16 @@ import { createRandom } from "./random.js";
 
 export const JOB_OFFER_ACTIONS = ["accept-job-offer", "decline-job-offer"] as const;
 export const ATTENDANCE_ACTIONS = ["attend-shift", "miss-shift"] as const;
+export const SKIP_JOB_SEARCH = "skip-job-search" as const;
 export const PERSONAL_TIME_ACTIONS = ["do-nothing", "buy-comfort", "social-visit", "buy-learning-tools"] as const;
 
 export type JobOfferAction = (typeof JOB_OFFER_ACTIONS)[number];
 export type AttendanceAction = (typeof ATTENDANCE_ACTIONS)[number];
+export type JobSearchAction = typeof SKIP_JOB_SEARCH | `apply-job:${number}`;
 export type PersonalTimeAction = (typeof PERSONAL_TIME_ACTIONS)[number];
 export type FoodAction = "skip-food" | `eat-stored-food:${number}` | `buy-food:${number}:${number}`;
 export type HousingAction = "defer-housing" | "remain-unhoused" | `pay-housing:${number}` | `secure-housing:${number}`;
-export type CitizenAction = JobOfferAction | AttendanceAction | PersonalTimeAction | FoodAction | HousingAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | FoodAction | HousingAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -32,6 +34,34 @@ export type JobOfferObservation = Readonly<{
   skill: number;
   reliability: number;
   acceptanceProbability: number;
+  acceptanceDraw: number;
+  stress: number;
+  runwayDays: number;
+  safetyNeed: number;
+  profile: MotivationProfile;
+}>;
+
+export type JobSearchOption = Readonly<{
+  action: `apply-job:${number}`;
+  firmId: number;
+  firmName: string;
+  offeredWage: number;
+  reservationWage: number;
+  firmTrouble: number;
+  vacancyAge: number;
+}>;
+
+export type JobSearchObservation = Readonly<{
+  kind: "job-search";
+  citizenId: number;
+  citizenName: string;
+  skill: number;
+  reliability: number;
+  stress: number;
+  runwayDays: number;
+  safetyNeed: number;
+  profile: MotivationProfile;
+  options: readonly JobSearchOption[];
 }>;
 
 export type AttendanceObservation = Readonly<{
@@ -112,7 +142,7 @@ export type HousingObservation = Readonly<{
   options: readonly HousingOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | AttendanceObservation | PersonalTimeObservation | FoodObservation | HousingObservation;
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | FoodObservation | HousingObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -184,10 +214,10 @@ export class RuleCitizenPolicy implements CitizenPolicy {
 
 export class MotivationCitizenPolicy implements CitizenPolicy {
   readonly id = "motivation-v3";
-  readonly jobOfferPolicy = new RuleCitizenPolicy();
 
   decide(input: CitizenPolicyInput): CitizenPolicyDecision {
-    if (input.observation.kind === "job-offer") return this.jobOfferPolicy.decide(input);
+    if (input.observation.kind === "job-offer") return this.decideJobOffer(input.observation, input.legalActions);
+    if (input.observation.kind === "job-search") return this.decideJobSearch(input.observation, input.legalActions);
     if (input.observation.kind === "attendance") return this.decideAttendance(input.observation, input.legalActions);
     if (input.observation.kind === "food") return this.decideFood(input.observation, input.legalActions);
     if (input.observation.kind === "housing") return this.decideHousing(input.observation, input.legalActions);
@@ -220,6 +250,63 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     };
   }
 
+  decideJobSearch(observation: JobSearchObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const scarcity = clamp(1 - observation.runwayDays / 12);
+    const safetyGap = 1 - observation.safetyNeed;
+    const scores: Record<string, number> = {
+      [SKIP_JOB_SEARCH]: 0.12 + observation.profile.avoidance * observation.stress * 0.45,
+    };
+    observation.options.forEach((option) => {
+      const wageFit = (option.offeredWage - option.reservationWage) / Math.max(1, option.reservationWage);
+      const firmStability = 1 - clamp(option.firmTrouble / 4);
+      scores[option.action] = observation.profile.security * (0.5 + safetyGap * 0.7 + scarcity * 0.45)
+        + observation.profile.mastery * (0.15 + wageFit * 0.35)
+        + observation.reliability * 0.15
+        + firmStability * 0.15
+        - observation.profile.avoidance * observation.stress * 0.08;
+    });
+    const decision = this.highestScoringDecision(legalActions, scores, "job-search");
+    return {
+      ...decision,
+      scores: {
+        ...decision.scores,
+        safetyNeed: roundedWeight(observation.safetyNeed),
+        runwayDays: roundedWeight(observation.runwayDays),
+        reliability: roundedWeight(observation.reliability),
+      },
+    };
+  }
+
+  decideJobOffer(observation: JobOfferObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const scarcity = clamp(1 - observation.runwayDays / 12);
+    const safetyGap = 1 - observation.safetyNeed;
+    const wageFit = (observation.offeredWage - observation.reservationWage) / Math.max(1, observation.reservationWage);
+    const favorableDraw = observation.acceptanceDraw < observation.acceptanceProbability;
+    const scores: Record<string, number> = {
+      "accept-job-offer": observation.profile.security * (0.55 + safetyGap * 0.65 + scarcity * 0.4)
+        + observation.reliability * 0.3
+        + wageFit * 0.7
+        + (favorableDraw ? 0.25 : 0),
+      "decline-job-offer": observation.profile.avoidance * (0.25 + observation.stress * 0.35)
+        + Math.max(0, -wageFit) * 0.9
+        + (favorableDraw ? 0 : 0.35),
+    };
+    const decision = this.highestScoringDecision(legalActions, scores, "job-offer");
+    return {
+      ...decision,
+      scores: {
+        ...decision.scores,
+        offeredWage: roundedWeight(observation.offeredWage),
+        reservationWage: roundedWeight(observation.reservationWage),
+        reliability: roundedWeight(observation.reliability),
+        safetyNeed: roundedWeight(observation.safetyNeed),
+        runwayDays: roundedWeight(observation.runwayDays),
+        acceptanceProbability: roundedWeight(observation.acceptanceProbability),
+        acceptanceDraw: roundedWeight(observation.acceptanceDraw),
+      },
+    };
+  }
+
   decideAttendance(observation: AttendanceObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
     const scarcity = clamp(1 - observation.runwayDays / 12);
     const healthGap = 1 - observation.health;
@@ -238,7 +325,19 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
         + hungerPressure * 0.38
       ),
     };
-    return this.highestScoringDecision(legalActions, scores, "attendance");
+    const decision = this.highestScoringDecision(legalActions, scores, "attendance");
+    return {
+      ...decision,
+      scores: {
+        ...decision.scores,
+        health: roundedWeight(observation.health),
+        stress: roundedWeight(observation.stress),
+        runwayDays: roundedWeight(observation.runwayDays),
+        reliability: roundedWeight(observation.reliability),
+        baselineMissChance: roundedWeight(observation.baselineMissChance),
+        attendanceDraw: roundedWeight(observation.attendanceDraw),
+      },
+    };
   }
 
   decideFood(observation: FoodObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {

@@ -22,7 +22,7 @@ The day counter increments during settlement. A full day therefore requires seve
 
 There are 40 named people. Each person carries:
 
-- Economic state: cash, employer, seller references, food reserve, housing status, rent arrears, and transaction ledger
+- Economic state: cash, employer, current job application, seller references, food reserve, housing status, rent arrears, and transaction ledger
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Motivation: seven stable, seed-derived weights for comfort, connection, mastery, security, food quality, planning, and avoidance plus a complete in-memory policy-decision history
@@ -217,11 +217,15 @@ Prices remain between 70% and 140% of their configured starting value. When Morr
 
 Income-supported staff is the bounded floor of smoothed income divided by 108% of the configured wage. Active firms retain a minimum of one worker, or two for housing. A firm approves at most one additional position per settlement when income supports it, the firm holds at least six wages in cash, and it remains below maximum staff.
 
-Vacancies must persist for two settlement phases before recruitment. Candidates are ranked by skill and reliability. The simulation then generates an offer observation and the two legal actions, accept or decline, for an injectable citizen policy. The default `rule-v1` policy preserves the original rule: an offer below `3.2 + skill × 4.5` is declined without a random draw; an adequate offer is accepted when a seeded draw is below `0.5 + reliability × 0.35`. The simulation validates the chosen action and performs any hiring itself. Each considered offer is retained as a decision trace with the observation, legal alternatives, chosen action, policy identifier, scores, and reasons. Transaction capacity still limits how many customers attending staff can serve, but transaction count does not determine whether a firm is financially successful.
+Vacancies must persist for two settlement phases before recruitment. Once every active firm has approved its staffing target, each living unemployed citizen sees one legal application action per mature approved vacancy plus the option not to apply. `motivation-v3` scores only that common legal set. Low safety, short cash runway, the security weight, offered wage relative to the citizen's skill-based reservation wage, reliability, mastery, stress, avoidance, and firm trouble can change whether and where the citizen applies. The selected application is stored on the citizen and retained as a complete decision trace.
+
+Each employer ranks only the people who actually applied to it, using the existing skill-plus-reliability ordering, and offers its vacancy to the highest-ranked applicant. The offer creates two legal actions, accept or decline. Acceptance scoring includes offered wage relative to `3.2 + skill × 4.5`, reliability, safety need, runway, stress, security and avoidance weights, plus the existing seeded acceptance evidence `0.5 + reliability × 0.35`. The simulation validates every chosen action and alone performs hiring. Declined offers remain visible in the decision history, while later settlement phases provide new application and recovery opportunities. `rule-v1` remains available as a small legacy job-offer policy for direct comparison, but it is no longer the default.
+
+Every job-search and offer decision retains its observation, legal alternatives, chosen action, policy identifier, scores, and reasons. Transaction capacity still limits how many customers attending staff can serve, but transaction count does not determine whether a firm is financially successful.
 
 The Employment card reports positions available as approved vacancies across active firms: the sum of `targetStaff − current employees`, bounded at zero for each firm. Because `targetStaff` reflects smoothed income, payroll coverage, cash reserves, and current staffing, a layoff or closure does not automatically create an available position. Vacancies must still persist for two settlement phases before recruitment, and a candidate may decline or fail to accept the offered wage.
 
-The map visualizes this employment state without changing it. Living employees gather around their employer. Unemployed citizens are distributed deterministically among firms with approved vacancies to depict job applications; when there are no approved vacancies, they mill slowly inside the central Common Park. The display does not affect candidate ranking, vacancy age, acceptance, hiring, housing, or any need.
+The map visualizes this employment state without changing it. Living employees gather around their employer. An unemployed citizen with a current domain application waits outside that employer; unemployed citizens who did not apply mill slowly inside the central Common Park. The renderer reads `jobApplicationFirm` but never creates an application or affects candidate ranking, vacancy age, acceptance, hiring, housing, or any need.
 
 Overstaffing or sustained cash trouble can produce layoffs after three settlement phases. This staffing response is separate from the solvency test.
 

@@ -31,14 +31,9 @@ function firmOrbitTarget(index, count, landmark, viewport, clearance) {
   };
 }
 
-export function applicantFirmId(personId, firms) {
-  const vacancySlots = firms
-    .filter((firm) => firm.active)
-    .flatMap((firm) => Array.from(
-      { length: Math.max(0, firm.targetStaff - firm.employees.length) },
-      () => firm.id,
-    ));
-  return vacancySlots.length ? vacancySlots[personId % vacancySlots.length] : null;
+export function applicantFirmId(person, firms) {
+  const firm = firms.find((candidate) => candidate.id === person.jobApplicationFirm);
+  return firm?.active && firm.targetStaff > firm.employees.length ? firm.id : null;
 }
 
 export function parkVisitorTarget(personId, park, elapsedMs = 0) {

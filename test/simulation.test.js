@@ -1143,14 +1143,148 @@ test("the simulation rejects an illegal attendance action", () => {
   assert.equal(person.decisions.length, 0);
 });
 
+test("job seekers can apply only to currently approved vacancies", () => {
+  const citizenPolicy = {
+    id: "test-job-search",
+    decide: ({ observation, legalActions }) => {
+      assert.equal(observation.kind, "job-search");
+      return { action: legalActions.at(-1), reasons: ["test selected the available vacancy"], scores: {} };
+    },
+  };
+  const town = new TownSimulation({ seed: 42, citizenPolicy });
+  const person = town.people.find((candidate) => candidate.employer < 0);
+  const approved = town.firms[0];
+  const tooNew = town.firms[1];
+  const inactive = town.firms[2];
+  approved.targetStaff = approved.employees.length + 1;
+  approved.vacancyAge = 2;
+  tooNew.targetStaff = tooNew.employees.length + 1;
+  tooNew.vacancyAge = 1;
+  inactive.targetStaff = inactive.employees.length + 1;
+  inactive.vacancyAge = 3;
+  inactive.active = false;
+
+  const application = town.considerJobSearch(person);
+
+  assert.equal(application, approved.id);
+  assert.equal(person.jobApplicationFirm, approved.id);
+  assert.deepEqual(person.decisions[0].legalActions, ["skip-job-search", `apply-job:${approved.id}`]);
+  assert.deepEqual(person.decisions[0].observation.options.map((option) => option.firmId), [approved.id]);
+});
+
+test("employers rank actual applicants rather than every unemployed citizen", () => {
+  let selectedApplicantId;
+  const citizenPolicy = {
+    id: "test-applicant-pool",
+    decide: ({ observation, legalActions }) => {
+      if (observation.kind === "job-search") {
+        const apply = legalActions.find((action) => action.startsWith("apply-job:"));
+        return {
+          action: observation.citizenId === selectedApplicantId ? apply : "skip-job-search",
+          reasons: ["test controlled the applicant pool"],
+          scores: {},
+        };
+      }
+      assert.equal(observation.kind, "job-offer");
+      return { action: "accept-job-offer", reasons: ["test accepted the offer"], scores: {} };
+    },
+  };
+  const town = new TownSimulation({ seed: 42, citizenPolicy });
+  const unemployed = town.people.filter((person) => person.employer < 0).sort((a, b) => a.skill - b.skill);
+  const lowerSkillApplicant = unemployed[0];
+  const higherSkillNonApplicant = unemployed.at(-1);
+  selectedApplicantId = lowerSkillApplicant.id;
+  const firm = town.firms[0];
+  firm.targetStaff = firm.employees.length + 1;
+  firm.vacancyAge = 2;
+
+  const hires = town.runJobMarket([firm]);
+
+  assert.equal(hires, 1);
+  assert.equal(lowerSkillApplicant.employer, firm.id);
+  assert.equal(higherSkillNonApplicant.employer, -1);
+  assert.equal(higherSkillNonApplicant.decisions[0].chosenAction, "skip-job-search");
+  assert.equal(lowerSkillApplicant.decisions[0].kind, "job-offer");
+});
+
+test("job-offer motivations weigh need, reservation wage, reliability, and seeded acceptance evidence", () => {
+  const citizenPolicy = new MotivationCitizenPolicy();
+  const profile = {
+    comfort: 1,
+    connection: 1,
+    mastery: 1,
+    security: 1.3,
+    foodQuality: 1,
+    planning: 1,
+    avoidance: 0.7,
+  };
+  const observation = {
+    kind: "job-offer",
+    citizenId: 9,
+    citizenName: "Candidate",
+    firmId: 0,
+    firmName: "Harvest Foods",
+    offeredWage: 6.5,
+    reservationWage: 6.5,
+    skill: 0.7,
+    reliability: 0.9,
+    acceptanceProbability: 0.815,
+    acceptanceDraw: 0.2,
+    stress: 0.7,
+    runwayDays: 1,
+    safetyNeed: 0.2,
+    profile,
+  };
+  const legalActions = ["accept-job-offer", "decline-job-offer"];
+
+  const neededWork = citizenPolicy.decide({ observation, legalActions, random: () => 0 });
+  const unattractiveOffer = citizenPolicy.decide({
+    observation: {
+      ...observation,
+      offeredWage: 4,
+      reliability: 0.55,
+      acceptanceDraw: 0.95,
+      stress: 0.2,
+      runwayDays: 20,
+      safetyNeed: 1,
+      profile: { ...profile, security: 0.7, avoidance: 1.3 },
+    },
+    legalActions,
+    random: () => 0,
+  });
+
+  assert.equal(neededWork.action, "accept-job-offer");
+  assert.equal(unattractiveOffer.action, "decline-job-offer");
+});
+
+test("the simulation rejects an illegal job-search action", () => {
+  const town = new TownSimulation({
+    seed: 42,
+    citizenPolicy: { id: "invalid-job-search", decide: () => ({ action: "apply-job:999", reasons: [] }) },
+  });
+  const firm = town.firms[0];
+  firm.targetStaff = firm.employees.length + 1;
+  firm.vacancyAge = 2;
+  const person = town.people.find((candidate) => candidate.employer < 0);
+
+  assert.throws(
+    () => town.considerJobSearch(person, [firm]),
+    /chose an illegal job-search action/,
+  );
+  assert.equal(person.jobApplicationFirm, -1);
+  assert.equal(person.decisions.length, 0);
+});
+
 test("an injected citizen policy can decline a job offer and records its decision trace", () => {
   const citizenPolicy = {
     id: "test-always-decline",
-    decide: () => ({
-      action: "decline-job-offer",
-      reasons: ["test policy preferred remaining unemployed"],
-      scores: { decline: 1, accept: 0 },
-    }),
+    decide: ({ observation, legalActions }) => observation.kind === "job-search"
+      ? { action: legalActions[1], reasons: ["test policy applied"], scores: { [legalActions[1]]: 1 } }
+      : {
+        action: "decline-job-offer",
+        reasons: ["test policy preferred remaining unemployed"],
+        scores: { decline: 1, accept: 0 },
+      },
   };
   const town = new TownSimulation({ seed: 42, citizenPolicy });
   town.setPolicy("shockRisk", 0);

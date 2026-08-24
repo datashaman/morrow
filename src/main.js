@@ -168,6 +168,7 @@ const staticActionNames = {
   "decline-job-offer": "Declined job offer",
   "attend-shift": "Attended shift",
   "miss-shift": "Missed shift",
+  "skip-job-search": "Did not apply for work",
   "do-nothing": "Did nothing",
   "buy-comfort": "Bought short-term comfort",
   "social-visit": "Made a social visit",
@@ -185,6 +186,7 @@ function actionName(decision, action) {
   if (action.startsWith("buy-food:")) return `Tried ${option?.units ?? ""} food portion${option?.units === 1 ? "" : "s"} from ${option?.sellerName ?? "a seller"} (${money(option?.totalPrice ?? 0)}, ${percent(option?.effectiveQuality ?? 0)} quality, ${capacity})`;
   if (action.startsWith("pay-housing:")) return `Tried housing payment to ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
   if (action.startsWith("secure-housing:")) return `Tried to secure housing through ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
+  if (action.startsWith("apply-job:")) return `Applied to ${option?.firmName ?? "an employer"} (${money(option?.offeredWage ?? 0)} wage)`;
   return action;
 }
 
@@ -395,7 +397,7 @@ function drawTown() {
 
   const applicationFirmIds = new Map(simulation.people
     .filter((person) => person.alive && person.employer < 0)
-    .map((person) => [person.id, applicantFirmId(person.id, simulation.firms)]));
+    .map((person) => [person.id, applicantFirmId(person, simulation.firms)]));
   const applicantsByFirm = new Map(simulation.firms.map((firm) => [
     firm.id,
     [...applicationFirmIds].filter(([, firmId]) => firmId === firm.id).map(([personId]) => personId),

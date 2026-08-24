@@ -39,7 +39,7 @@ The visualization became large enough that it was migrated into this repository.
 
 - A Vite-based browser app runs the simulation.
 - The simulation core is independent of the DOM and can be exercised from tests.
-- Eighty-eight deterministic regression tests pass.
+- Ninety-five deterministic regression tests pass.
 - The production build passes.
 - Simulation changes are tracked as tested vertical-slice commits and GitHub Issues.
 - Historical single-file previews remain in `work/` and are ignored by Git.
