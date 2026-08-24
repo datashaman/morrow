@@ -34,17 +34,16 @@ import {
   ATTENDANCE_ACTIONS,
   createMotivationProfile,
   JOB_OFFER_ACTIONS,
-  MotivationCitizenPolicy,
   SKIP_JOB_SEARCH,
 } from "./citizen-policy.ts";
-import { ShadowCitizenPolicy } from "./neural-policy.ts";
+import { createDefaultCitizenPolicy } from "./neural-runtime.ts";
 import { createRandom } from "./random.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = new ShadowCitizenPolicy(new MotivationCitizenPolicy()) } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy() } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -211,6 +210,18 @@ export class TownSimulation {
   setPolicy(name, value) {
     if (!(name in this.policy)) throw new Error(`Unknown policy: ${name}`);
     this.policy[name] = Number(value);
+  }
+
+  setNeuralControl(enabled) {
+    if (typeof this.citizenPolicy.setEnabled !== "function") throw new Error("The active citizen policy does not support neural control switching");
+    this.citizenPolicy.setEnabled(Boolean(enabled));
+    return this.policyMetadata();
+  }
+
+  policyMetadata() {
+    return typeof this.citizenPolicy.metadata === "function"
+      ? this.citizenPolicy.metadata()
+      : { id: this.citizenPolicy.id ?? "unknown", mode: "deterministic", controlledDomain: null, weightsVersion: null };
   }
 
   totalMoney() {
@@ -536,6 +547,7 @@ export class TownSimulation {
       chosenAction: decision.action,
       reasons: Array.isArray(decision.reasons) ? [...decision.reasons] : [],
       scores: decision.scores ? { ...decision.scores } : {},
+      control: decision.control ? structuredClone(decision.control) : null,
       shadow: decision.shadow ? structuredClone(decision.shadow) : null,
     });
   }
@@ -1563,6 +1575,7 @@ export class TownSimulation {
         .reduce((total, firm) => total + Math.max(0, firm.targetStaff - firm.employees.length), 0),
       hungry: this.people.filter((person) => person.alive && person.hungryDays > 0).length,
       unhoused: this.people.filter((person) => person.alive && !person.housed).length,
+      citizenPolicy: this.policyMetadata(),
     };
   }
 }

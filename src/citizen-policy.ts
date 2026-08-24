@@ -178,6 +178,16 @@ export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
   reasons: readonly string[];
   scores?: Readonly<Record<string, number>>;
+  control?: Readonly<{
+    mode: "deterministic" | "neural";
+    domain: "personal-time";
+    policy: string;
+    fallbackPolicy: string;
+    weightsVersion: string;
+    schemaVersion: number;
+    gateVersion: number;
+    probabilities: Readonly<Record<string, number>>;
+  }>;
   shadow?: Readonly<{
     policy: string;
     weightsVersion: string;

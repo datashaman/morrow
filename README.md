@@ -21,6 +21,7 @@ The app uses browser modules and should be served through Vite; opening `index.h
 npm test
 npm run build
 npm run evaluate
+npm run evaluate:activation
 npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.json
 ```
 
@@ -30,7 +31,8 @@ npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.jso
 - `src/config.js` contains people, firms, phases, and policy defaults.
 - `src/random.js` provides seeded randomness for reproducible runs.
 - `src/policy-evaluation.ts` compares policy implementations across reproducible headless runs.
-- `src/neural-policy.ts` runs one shared local neural network in non-controlling shadow mode.
+- `src/neural-policy.ts` runs one shared local neural network in shadow mode and behind a personal-time-only activation gate.
+- `src/neural-activation-evaluation.ts` verifies replay, invariants, domain containment, and bounded outcomes before activation.
 - `src/trajectory-export.ts` exports versioned synthetic datasets for optional offline training.
 - `src/main.js` connects the simulation to the interactive interface.
 - `src/styles.css` contains the responsive presentation.

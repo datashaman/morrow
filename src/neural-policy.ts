@@ -280,3 +280,112 @@ export class ShadowCitizenPolicy implements CitizenPolicy {
     return { ...active, shadow } as CitizenPolicyDecision;
   }
 }
+
+export type NeuralActivationGate = Readonly<{
+  format: "morrow-neural-activation-gate";
+  version: 1;
+  passed: boolean;
+  domain: "personal-time";
+  neuralSchemaVersion: number;
+  weightsVersion: string;
+  baselinePolicy: string;
+  candidatePolicy: string;
+  evidence: Readonly<Record<string, unknown>>;
+}>;
+
+function probabilities(scores: Readonly<Record<string, number>>) {
+  const entries = Object.entries(scores);
+  const maximum = Math.max(...entries.map(([, score]) => score));
+  const exponentials = entries.map(([action, score]) => [action, Math.exp(score - maximum)] as const);
+  const total = exponentials.reduce((sum, [, value]) => sum + value, 0);
+  return Object.freeze(Object.fromEntries(exponentials.map(([action, value]) => [action, value / total])));
+}
+
+export function validateNeuralActivationGate(gate: NeuralActivationGate, neuralPolicy: SharedNeuralPolicy, fallbackPolicy: CitizenPolicy) {
+  if (!gate || gate.format !== "morrow-neural-activation-gate" || gate.version !== 1 || !gate.passed) throw new Error("Neural activation requires a passed versioned gate");
+  if (gate.domain !== "personal-time") throw new Error("Neural activation is limited to personal-time decisions");
+  if (gate.neuralSchemaVersion !== NEURAL_SCHEMA_VERSION) throw new Error("Neural activation gate schema mismatch");
+  if (gate.weightsVersion !== neuralPolicy.weights.version) throw new Error("Neural activation gate weights mismatch");
+  if (gate.baselinePolicy !== fallbackPolicy.id) throw new Error("Neural activation gate fallback-policy mismatch");
+  const expectedCandidatePolicy = `${fallbackPolicy.id}+gated-neural-personal-time-schema-${NEURAL_SCHEMA_VERSION}`;
+  if (gate.candidatePolicy !== expectedCandidatePolicy) throw new Error("Neural activation gate candidate-policy mismatch");
+  const checks = (gate.evidence as any)?.checks;
+  const requiredChecks = ["zeroFailures", "zeroIllegalAppliedActions", "cashConserved", "stableReplay", "controlledPersonalTimeOnly", "boundedOutcomes"];
+  if (!checks || requiredChecks.some((name) => checks[name] !== true)) throw new Error("Neural activation gate evidence is incomplete or failed");
+  const outcomeBounds = (gate.evidence as any)?.outcomeBounds;
+  if (!outcomeBounds || !Object.values(outcomeBounds).length || Object.values(outcomeBounds).some((result: any) => result?.passed !== true)) {
+    throw new Error("Neural activation outcome bounds did not pass");
+  }
+  return gate;
+}
+
+export class GatedNeuralCitizenPolicy implements CitizenPolicy {
+  readonly id: string;
+  private enabled: boolean;
+
+  constructor(
+    readonly fallbackPolicy: CitizenPolicy,
+    readonly neuralPolicy: SharedNeuralPolicy,
+    readonly gate: NeuralActivationGate,
+    enabled = false,
+  ) {
+    validateNeuralActivationGate(gate, neuralPolicy, fallbackPolicy);
+    this.enabled = enabled;
+    this.id = `${fallbackPolicy.id}+gated-neural-personal-time-schema-${NEURAL_SCHEMA_VERSION}`;
+  }
+
+  setEnabled(enabled: boolean) {
+    if (enabled) validateNeuralActivationGate(this.gate, this.neuralPolicy, this.fallbackPolicy);
+    this.enabled = Boolean(enabled);
+  }
+
+  metadata() {
+    return Object.freeze({
+      id: this.id,
+      mode: this.enabled ? "neural" : "deterministic",
+      controlledDomain: this.enabled ? "personal-time" : null,
+      fallbackPolicy: this.fallbackPolicy.id,
+      neuralPolicy: this.neuralPolicy.id,
+      weightsVersion: this.neuralPolicy.weights.version,
+      schemaVersion: NEURAL_SCHEMA_VERSION,
+      gateVersion: this.gate.version,
+      gatePassed: this.gate.passed,
+    });
+  }
+
+  decide(input: CitizenPolicyInput): CitizenPolicyDecision {
+    const fallback = this.fallbackPolicy.decide(input);
+    const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
+    const neuralControls = this.enabled && input.observation.kind === "personal-time";
+    const shadow: ShadowDecision = Object.freeze({
+      policy: this.neuralPolicy.id,
+      weightsVersion: this.neuralPolicy.weights.version,
+      schemaVersion: NEURAL_SCHEMA_VERSION,
+      action: inference.action,
+      diverged: inference.action !== fallback.action,
+      unmaskedPreference: inference.unmaskedPreference,
+      unmaskedActionKind: inference.unmaskedActionKind,
+      invalidPreferenceBeforeMask: inference.invalidPreferenceBeforeMask,
+      legalMask: inference.legalMask,
+      scores: inference.legalScores,
+    });
+    return {
+      ...(neuralControls ? {
+        action: inference.action,
+        reasons: ["The gated shared neural policy selected the highest-scoring masked personal-time action."],
+        scores: inference.legalScores,
+      } : fallback),
+      control: Object.freeze({
+        mode: neuralControls ? "neural" : "deterministic",
+        domain: "personal-time",
+        policy: neuralControls ? this.neuralPolicy.id : this.fallbackPolicy.id,
+        fallbackPolicy: this.fallbackPolicy.id,
+        weightsVersion: this.neuralPolicy.weights.version,
+        schemaVersion: NEURAL_SCHEMA_VERSION,
+        gateVersion: this.gate.version,
+        probabilities: probabilities(inference.legalScores),
+      }),
+      shadow,
+    } as CitizenPolicyDecision;
+  }
+}

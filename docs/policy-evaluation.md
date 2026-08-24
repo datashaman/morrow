@@ -24,6 +24,7 @@ The versioned report records the simulation version, schema version, baseline, p
 - rejected job offers and invalid actions;
 - initial/final cash, difference, and conservation status;
 - a complete chosen-action frequency distribution;
+- active controller, controlled domain, schema, gate, and weights metadata plus neural-control decision and fallback-divergence counts;
 - neural-shadow decision counts, divergence and invalid pre-mask preference rates, and shadow action distributions;
 - directional missed-shift, essential-skip, and accepted-offer projections where direct action comparison is meaningful;
 - pass/fail status and any failure message.
@@ -34,4 +35,4 @@ Aggregates report mean survival, hunger, homelessness, employment, insolvency, r
 
 Every phase still runs the simulation's normal invariants. The evaluator additionally scans domain state for non-finite numbers. An invariant exception, illegal policy action, or non-finite value marks that seed run and the whole report failed. The CLI exits non-zero when any run fails.
 
-Passing means only that the configured runs were reproducible and remained within current technical invariants. It does not mean a policy is safe, realistic, fair, or calibrated. Explicit activation gates for a learned policy belong to a later roadmap slice.
+Passing means only that the configured runs were reproducible and remained within current technical invariants. It does not mean a policy is safe, realistic, fair, or calibrated. The stricter `npm run evaluate:activation` command additionally enforces the documented personal-time domain and outcome bounds described in [neural activation](./neural-activation.md).

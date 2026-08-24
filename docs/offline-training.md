@@ -62,4 +62,4 @@ These values are explicit gameplay hypotheses. They are not welfare, utility, he
 
 [`test/fixtures/python-exported-weights.json`](../test/fixtures/python-exported-weights.json) is a deliberately tiny artifact produced by the Python script. Node tests load it through the TypeScript validator and reproduce Python's expected score to within `1e-12`. This protects feature order, shape, activation, bias, and matrix-orientation compatibility.
 
-Loading compatible weights still does not authorize neural control. Imported weights remain usable only by the shadow policy until the separate activation-gate roadmap slice is satisfied.
+Loading compatible weights alone does not authorize neural control. The bundled artifact is separately bound to a matching, passed personal-time activation certificate; arbitrary imported weights remain shadow-only until they independently pass that gate. See [neural activation](./neural-activation.md).

@@ -50,6 +50,7 @@ export function exportTrajectoryDataset(config: TrajectoryExportConfig) {
   if (!Number.isInteger(config.days) || config.days < 1) throw new Error("Trajectory days must be a positive integer");
   const samples: any[] = [];
   const policyIds = new Set<string>();
+  const weightsVersions = new Set<string>();
   config.seeds.forEach((seed) => {
     const options = config.policyFactory ? { seed, citizenPolicy: config.policyFactory() } : { seed };
     const town: any = new TownSimulation(options as any);
@@ -57,6 +58,8 @@ export function exportTrajectoryDataset(config: TrajectoryExportConfig) {
       for (let phase = 0; phase < PHASES.length; phase += 1) town.step();
     }
     policyIds.add(town.citizenPolicy.id);
+    const weightsVersion = town.policyMetadata().weightsVersion;
+    if (weightsVersion) weightsVersions.add(weightsVersion);
     town.people.forEach((person: any) => person.decisions.forEach((decision: any) => {
       const observationVector = encodeNeuralObservation(decision.observation);
       const legalActions = decision.legalActions.map((action: string) => ({
@@ -91,6 +94,7 @@ export function exportTrajectoryDataset(config: TrajectoryExportConfig) {
       seeds: [...config.seeds],
       days: config.days,
       policyIds: [...policyIds].sort(),
+      weightsVersions: [...weightsVersions].sort(),
       observationFeatures: [...NEURAL_OBSERVATION_SCHEMA.features],
       actionKinds: [...ACTION_KINDS],
       actionNumericFeatures: [...NEURAL_ACTION_SCHEMA.numericFeatures],

@@ -102,6 +102,10 @@ app.innerHTML = `
           <select id="speed"><option value="1800">Slow</option><option value="850" selected>Normal</option><option value="300">Fast</option></select>
         </label>
       </div>
+      <div class="neural-control">
+        <label><input id="neural-control" type="checkbox"> Neural control for personal time</label>
+        <small id="policy-status"></small>
+      </div>
       <details>
         <summary>Town policy</summary>
         <div class="policy-grid" id="policy-grid"></div>
@@ -122,7 +126,7 @@ const commonPark = { x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 };
 
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
-  "population", "population-detail",
+  "population", "population-detail", "neural-control", "policy-status",
   "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
@@ -224,14 +228,15 @@ function renderDecisions(entity, stream) {
   stream.replaceChildren(...entity.decisions.map((decision) => {
     const item = document.createElement("li");
     const alternatives = decision.legalActions
-      .map((action) => `${actionName(decision, action)}${decision.scores[action] === undefined ? "" : ` ${decision.scores[action].toFixed(2)}`}`)
+      .map((action) => `${actionName(decision, action)}${decision.scores[action] === undefined ? "" : ` score ${decision.scores[action].toFixed(2)}`}${decision.control?.probabilities?.[action] === undefined ? "" : ` · ${(decision.control.probabilities[action] * 100).toFixed(1)}%`}`)
       .join(" · ");
     const evidence = Object.entries(decision.scores)
       .filter(([name]) => !decision.legalActions.includes(name))
       .map(([name, value]) => `${name} ${value.toFixed(2)}`)
       .join(" · ");
+    const neuralLabel = decision.control?.mode === "neural" ? "Neural control" : "Neural shadow";
     const shadow = decision.shadow
-      ? ` · Neural shadow: ${actionName(decision, decision.shadow.action)}${decision.shadow.diverged ? " (diverged)" : " (agreed)"} · unmasked ${decision.shadow.unmaskedPreference}${decision.shadow.invalidPreferenceBeforeMask ? " (illegal before masking)" : ""}`
+      ? ` · ${neuralLabel}: ${actionName(decision, decision.shadow.action)}${decision.shadow.diverged ? " (diverged from motivation fallback)" : " (agreed with motivation fallback)"} · unmasked ${decision.shadow.unmaskedPreference}${decision.shadow.invalidPreferenceBeforeMask ? " (illegal before masking)" : ""}`
       : "";
     item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""}${shadow} · ${decision.policy}</small>`;
     return item;
@@ -284,6 +289,8 @@ function updateInterface() {
     : (person.rentSeller >= 0 ? `last housing: unhoused; previous provider ${simulation.firms[person.rentSeller].name}` : "last housing: unhoused");
 
   elements.clock.textContent = `Day ${state.day} · ${state.phaseName}${playback.clockSuffix}`;
+  elements["neural-control"].checked = state.citizenPolicy.mode === "neural";
+  elements["policy-status"].textContent = `${state.citizenPolicy.mode === "neural" ? "Neural controls personal time" : "Motivation policy controls all choices"} · ${state.citizenPolicy.weightsVersion} · gate v${state.citizenPolicy.gateVersion} passed`;
   elements.money.textContent = `${(state.totalMoney / state.initialMoney * 100).toFixed(2)}%`;
   elements["money-detail"].textContent = `${money(state.totalMoney)} of ${money(state.initialMoney)} remains on ledgers`;
   elements.employment.textContent = `${state.alive ? Math.round(state.employed / state.alive * 100) : 0}%`;
@@ -511,6 +518,7 @@ function step() {
 }
 
 elements["person-select"].addEventListener("change", (event) => { selected = Number(event.target.value); updateInterface(); elements["activity-stream"].scrollTop = 0; drawTown(); });
+elements["neural-control"].addEventListener("change", (event) => { simulation.setNeuralControl(event.target.checked); updateInterface(); });
 elements["activity-filter"].addEventListener("change", () => { updateInterface(); elements["activity-stream"].scrollTop = 0; });
 elements["firm-activity-filter"].addEventListener("change", () => { updateInterface(); elements["firm-activity-stream"].scrollTop = 0; });
 elements["firm-grid"].addEventListener("click", (event) => {

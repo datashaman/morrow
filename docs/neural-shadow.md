@@ -1,6 +1,6 @@
 # Shared neural shadow policy
 
-Morrow includes one small shared multilayer perceptron as an architectural tracer bullet. It runs locally in TypeScript and observes every policy decision, but it does not control the simulation.
+Morrow includes one small shared multilayer perceptron as an architectural tracer bullet. It runs locally in TypeScript and observes every policy decision. A separately gated switch can now let it control personal-time choices only; this page describes the shadow behavior that remains active for all domains.
 
 ## Boundary
 
@@ -35,4 +35,4 @@ The interface shows this comparison in citizen and selected-firm decision stream
 
 The headless evaluator reports shadow divergence, illegal pre-mask preference rates, shadow action distributions, and three directional—not causal—projections: changes in missed shifts, essential skips, and accepted job offers if shadow choices had replaced active choices. Outcomes are not projected by mutating the same run because that would change future state and randomness. A later activation-gate slice will run bounded controlled-policy comparisons.
 
-The default network is not trained and its weights have no behavioral meaning. Compatible offline-trained artifacts can be validated and loaded into a shadow network, but this does not authorize control. Shadow agreement is not a quality target by itself, and technical reproducibility is not evidence of realism, safety, fairness, or calibration. See [offline training](./offline-training.md).
+The bundled network is trained by an explicit but uncalibrated imitation objective. Compatible offline-trained artifacts can be validated and loaded into a shadow network, but loading alone does not authorize control. Shadow agreement is not a quality target by itself, and technical reproducibility is not evidence of realism, safety, fairness, or calibration. See [offline training](./offline-training.md) and [neural activation](./neural-activation.md).

@@ -63,10 +63,16 @@ export function evaluatePolicyRun({ seed, days, policyFactory }: { seed: number;
   const actionCounts: Record<string, number> = {};
   const shadowActionCounts: Record<string, number> = {};
   const shadow = { decisions: 0, divergences: 0, invalidPreferencesBeforeMask: 0 };
+  const control = { neuralDecisions: 0, neuralOutsidePersonalTime: 0, divergencesFromFallback: 0 };
   const outcomeProjections = { missedShiftDelta: 0, essentialSkipDelta: 0, acceptedOfferDelta: 0 };
   const isEssentialSkip = (action: string) => ["skip-food", "defer-housing", "remain-unhoused"].includes(action);
   town.people.forEach((person: any) => person.decisions.forEach((decision: any) => {
     actionCounts[decision.chosenAction] = (actionCounts[decision.chosenAction] ?? 0) + 1;
+    if (decision.control?.mode === "neural") {
+      control.neuralDecisions += 1;
+      control.neuralOutsidePersonalTime += Number(decision.kind !== "personal-time");
+      control.divergencesFromFallback += Number(decision.shadow?.diverged);
+    }
     if (decision.shadow) {
       shadow.decisions += 1;
       shadow.divergences += Number(decision.shadow.diverged);
@@ -82,6 +88,7 @@ export function evaluatePolicyRun({ seed, days, policyFactory }: { seed: number;
   return {
     seed,
     policyId: policy.id,
+    policyMetadata: town.policyMetadata(),
     requestedDays: days,
     completedDays,
     status: failure ? "failed" : "passed",
@@ -106,6 +113,7 @@ export function evaluatePolicyRun({ seed, days, policyFactory }: { seed: number;
       conserved: Math.abs(town.totalMoney() - town.initialMoney) <= 0.1,
     },
     actionCounts,
+    control,
     shadow: {
       ...shadow,
       divergenceRate: shadow.decisions ? shadow.divergences / shadow.decisions : 0,
@@ -137,6 +145,8 @@ function aggregatePolicy(name: string, runs: ReturnType<typeof evaluatePolicyRun
       rejectedOffers: mean(runs.map((run) => run.rejectedOffers)),
       invalidActions: mean(runs.map((run) => run.invalidActions)),
       cashDifference: mean(runs.map((run) => run.cash.difference)),
+      neuralControlledDecisions: mean(runs.map((run) => run.control.neuralDecisions)),
+      neuralControlDivergences: mean(runs.map((run) => run.control.divergencesFromFallback)),
       shadowDivergenceRate: mean(runs.map((run) => run.shadow.divergenceRate)),
       shadowInvalidPreferenceRate: mean(runs.map((run) => run.shadow.invalidPreferenceRate)),
       projectedMissedShiftDelta: mean(runs.map((run) => run.shadow.outcomeProjections.missedShiftDelta)),
@@ -181,6 +191,10 @@ export function evaluatePolicies(config: EvaluationConfig) {
       baseline,
       policies: policyNames,
       policyVersions: Object.fromEntries(policyNames.map((name) => [name, aggregates[name].policyId])),
+      weightVersions: Object.fromEntries(policyNames.map((name) => [
+        name,
+        [...new Set(runs.filter((run) => run.name === name).map((run) => run.result.policyMetadata.weightsVersion).filter(Boolean))],
+      ])),
       seeds: [...config.seeds],
       days: config.days,
       phasesPerDay: PHASES.length,

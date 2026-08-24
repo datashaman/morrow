@@ -50,11 +50,15 @@ Defines the typed, injectable citizen-policy boundary. The simulation owns obser
 
 ### `src/neural-policy.ts`
 
-Defines versioned observation/action schemas, deterministic fixed shared weights, local MLP inference, legal-action masking, and `ShadowCitizenPolicy`. The default town wraps `motivation-v3`: motivation remains authoritative while one shared network records its masked choice, unmasked preference, divergence, and invalid pre-mask preference. No network action is applied. There is no per-citizen network, runtime Python, or raw citizen-ID input.
+Defines versioned observation/action schemas, shared-weight loading, local MLP inference, legal-action masking, `ShadowCitizenPolicy`, and the passed-gate wrapper that can control personal time only. The simulation still owns legal-action generation, validation, and consequences. There is no per-citizen network, runtime Python, or raw citizen-ID input.
+
+### `src/neural-runtime.ts` and `src/neural-activation-evaluation.ts`
+
+The runtime module loads the bundled Python-trained artifact, binds it to the checked activation certificate, and constructs the default switchable policy. The evaluator runs motivation and personal-time neural candidates across fresh held-out towns twice, requiring zero failures, illegal applied actions, or cash differences; identical replay; personal-time-only control; and explicit bounded aggregate deltas. `scripts/evaluate-neural-activation.ts` is the reproducible command-line adapter.
 
 ### `src/policy-evaluation.ts`
 
-Runs fresh headless towns across configurable seeds, days, and policy factories. It collects outcomes, active and shadow action distributions, neural divergence, invalid pre-mask preferences, directional shadow projections, checks invariants and finite state, aggregates results, and computes candidate deltas from a named deterministic baseline. `scripts/evaluate-policies.ts` is the human/JSON command-line adapter.
+Runs fresh headless towns across configurable seeds, days, and policy factories. It collects outcomes, active, controlled, and shadow action distributions, controller and weight metadata, neural divergence, invalid pre-mask preferences, directional shadow projections, checks invariants and finite state, aggregates results, and computes candidate deltas from a named deterministic baseline. `scripts/evaluate-policies.ts` is the human/JSON command-line adapter.
 
 ### `src/trajectory-export.ts`
 

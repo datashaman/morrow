@@ -84,14 +84,15 @@ test("shadow policy preserves the active choice and records the neural compariso
   assert.equal(decision.shadow.schemaVersion, 1);
 });
 
-test("the default town records neural shadow traces while motivations control consequences", () => {
+test("the default town records neural shadow traces while its passed gate remains disabled", () => {
   const town = new TownSimulation({ seed: 42 });
   const firm = town.firms[0];
   const person = town.people[firm.employees[0]];
 
   town.considerAttendance(person, firm);
 
-  assert.equal(town.citizenPolicy.activePolicy instanceof MotivationCitizenPolicy, true);
+  assert.equal(town.citizenPolicy.fallbackPolicy instanceof MotivationCitizenPolicy, true);
+  assert.equal(town.snapshot().citizenPolicy.mode, "deterministic");
   assert.equal(person.decisions[0].shadow.policy, "neural-shadow-schema-1");
   assert.ok(person.decisions[0].legalActions.includes(person.decisions[0].shadow.action));
 });
@@ -105,7 +106,11 @@ test("shadow inference does not alter active-policy state or consume simulation 
     activeOnlyTown.step();
   }
 
-  assert.deepEqual(shadowTown.snapshot(), activeOnlyTown.snapshot());
+  const { citizenPolicy: shadowMetadata, ...shadowSnapshot } = shadowTown.snapshot();
+  const { citizenPolicy: activeMetadata, ...activeSnapshot } = activeOnlyTown.snapshot();
+  assert.equal(shadowMetadata.mode, "deterministic");
+  assert.equal(activeMetadata.mode, "deterministic");
+  assert.deepEqual(shadowSnapshot, activeSnapshot);
   assert.deepEqual(
     shadowTown.people.map(({ cash, health, stress, employer, housed, hungryDays }) => ({ cash, health, stress, employer, housed, hungryDays })),
     activeOnlyTown.people.map(({ cash, health, stress, employer, housed, hungryDays }) => ({ cash, health, stress, employer, housed, hungryDays })),
