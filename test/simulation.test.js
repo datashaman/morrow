@@ -252,6 +252,11 @@ test("a secure working owner can waive wages to preserve a cash-poor firm", () =
   assert.match(firm.ownerDecision.wageReason, /preserve operating cash/);
   assert.match(owner.events[0].text, /waived owner wage/);
   assert.match(coworker.ledger[0].text, /wage from Harvest Foods/);
+  assert.equal(owner.decisions[0].kind, "owner");
+  assert.equal(owner.decisions[0].observation.domain, "wage");
+  assert.equal(owner.decisions[0].chosenAction, "waive-owner-wage");
+  assert.deepEqual(owner.decisions[0].legalActions, ["draw-owner-wage", "waive-owner-wage"]);
+  assert.equal(firm.decisions[0].chosenAction, "waive-owner-wage");
 });
 
 test("a cash-poor owner can still draw wages for attended work", () => {
@@ -313,6 +318,11 @@ test("an owner contributes equity when recovery can be funded above a personal r
   assert.match(firm.ledger[0].text, /equity contribution from Amina/);
   assert.match(owner.ledger[0].text, /equity contribution to Harvest Foods/);
   assert.equal(town.totalMoney(), moneyBefore);
+  assert.equal(owner.decisions[0].observation.domain, "financing");
+  assert.equal(owner.decisions[0].chosenAction, "contribute-owner-capital");
+  assert.deepEqual(owner.decisions[0].legalActions, ["contribute-owner-capital", "wait-on-owner-financing"]);
+  assert.equal(owner.decisions[0].observation.options[0].amount, need * 2);
+  assert.equal(firm.decisions[0].chosenAction, "contribute-owner-capital");
 });
 
 test("an owner can choose voluntary insolvency instead of exhausting personal reserves", () => {
@@ -333,6 +343,33 @@ test("an owner can choose voluntary insolvency instead of exhausting personal re
   assert.equal(firm.ownerDecision.continuation, "voluntary insolvency");
   assert.match(firm.ownerDecision.continuationReason, /protect personal reserves/);
   assert.match(firm.events[0].text, /chose voluntary insolvency/);
+  assert.deepEqual(owner.decisions[0].legalActions, ["wait-on-owner-financing", "choose-voluntary-insolvency"]);
+  assert.equal(owner.decisions[0].chosenAction, "choose-voluntary-insolvency");
+});
+
+test("the simulation rejects an illegal owner action before applying consequences", () => {
+  const town = new TownSimulation({
+    seed: 42,
+    citizenPolicy: { id: "invalid-owner", decide: () => ({ action: "empty-company-account", reasons: [] }) },
+  });
+  const firm = town.firms[0];
+  const owner = town.people[firm.owner];
+
+  assert.throws(
+    () => town.considerOwnerAction(owner, firm, "wage", [{
+      action: "draw-owner-wage",
+      label: "Draw wage",
+      personalSafety: 1,
+      firmContinuity: 0,
+      workerProtection: 0,
+      growth: 0,
+      extraction: 1,
+      exitRelief: 0,
+    }], "Payroll"),
+    /chose an illegal owner-wage action/,
+  );
+  assert.equal(owner.decisions.length, 0);
+  assert.equal(firm.decisions.length, 0);
 });
 
 test("an owner can prefer insolvency to funding a firm with poor recovery prospects", () => {

@@ -113,6 +113,8 @@ export class TownSimulation {
         priceReason: "the first pricing window is still open",
       },
       activitySequence: 0,
+      decisionSequence: 0,
+      decisions: [],
       ledger: [],
       events: [],
     }));
@@ -536,6 +538,34 @@ export class TownSimulation {
     });
   }
 
+  considerOwnerAction(owner, firm, domain, options, phase) {
+    if (!owner.alive || !firm.active || !options.length) return null;
+    const frozenOptions = Object.freeze(options.map((option) => Object.freeze({ ...option })));
+    const observation = Object.freeze({
+      kind: "owner",
+      domain,
+      citizenId: owner.id,
+      citizenName: owner.name,
+      firmId: firm.id,
+      firmName: firm.name,
+      ownerRunwayDays: this.runwayDays(owner),
+      firmRunwayDays: firm.cash / Math.max(1, this.nextOperatingNeed(firm)),
+      firmTrouble: firm.trouble,
+      employeeCount: firm.employees.length,
+      extractionPreference: owner.dividendPreference,
+      profile: owner.motivationProfile,
+      options: frozenOptions,
+    });
+    const legalActions = Object.freeze(frozenOptions.map((option) => option.action));
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal owner-${domain} action`);
+    }
+    this.recordDecision(owner, observation, legalActions, decision, phase);
+    this.recordDecision(firm, observation, legalActions, decision, phase);
+    return { option: frozenOptions.find((option) => option.action === decision.action), decision };
+  }
+
   die(person, reason = "died after health reached a critical level") {
     if (!person.alive) return false;
     if (person.employer >= 0) {
@@ -749,9 +779,32 @@ export class TownSimulation {
   ownerWageDecision(firm, owner) {
     const firmNeedsCash = firm.cash + 1e-9 < this.nextOperatingNeed(firm);
     const ownerIsSecure = this.runwayDays(owner) >= 10;
-    if (firmNeedsCash && ownerIsSecure) return { draw: false, reason: "secure owner chose to preserve operating cash" };
-    if (firmNeedsCash) return { draw: true, reason: "owner runway is thin despite firm cash pressure" };
-    return { draw: true, reason: "firm can cover its next operating need" };
+    const choice = this.considerOwnerAction(owner, firm, "wage", [
+      {
+        action: "draw-owner-wage",
+        label: "Draw the attended owner wage",
+        personalSafety: ownerIsSecure ? 0.2 : 1,
+        firmContinuity: firmNeedsCash ? 0 : 0.75,
+        workerProtection: firmNeedsCash ? 0 : 0.5,
+        growth: 0.1,
+        extraction: 0.65,
+        exitRelief: 0,
+      },
+      {
+        action: "waive-owner-wage",
+        label: "Waive the owner wage for this shift",
+        personalSafety: ownerIsSecure ? 0.75 : 0,
+        firmContinuity: firmNeedsCash ? 1 : 0.5,
+        workerProtection: firmNeedsCash ? 1 : 0.35,
+        growth: 0.25,
+        extraction: 0,
+        exitRelief: 0.1,
+      },
+    ], "Payroll");
+    const draw = choice.option.action === "draw-owner-wage";
+    if (!draw) return { draw, reason: firmNeedsCash ? "secure owner chose to preserve operating cash" : "owner chose to retain the attended wage in the firm" };
+    if (firmNeedsCash) return { draw, reason: "owner runway is thin despite firm cash pressure" };
+    return { draw, reason: "firm can cover its next operating need" };
   }
 
   foodPhase() {
@@ -1170,12 +1223,48 @@ export class TownSimulation {
     const recoveryRatio = need ? firm.revenueEMA / need : 0;
     const recoveryThreshold = Math.max(0.35, owner.ownerRecoveryThreshold - (firm.vital ? 0.15 : 0));
     const recoveryIsCredible = recoveryRatio >= recoveryThreshold;
-    if (availablePersonalCash + 1e-9 >= immediateGap && recoveryIsCredible) {
-      const target = roundMoney(need * 2);
-      const requested = Math.min(availablePersonalCash, roundMoney(target - firm.cash));
+    const target = roundMoney(need * 2);
+    const requested = Math.min(availablePersonalCash, roundMoney(target - firm.cash));
+    const canContribute = availablePersonalCash + 1e-9 >= immediateGap && recoveryIsCredible && requested > 0;
+    const options = [];
+    if (canContribute) options.push({
+      action: "contribute-owner-capital",
+      label: `Contribute ${requested.toFixed(2)} owner cash`,
+      amount: requested,
+      personalSafety: 0.65,
+      firmContinuity: 1,
+      workerProtection: 1,
+      growth: clamp(recoveryRatio),
+      extraction: 0,
+      exitRelief: 0,
+    });
+    options.push({
+      action: "wait-on-owner-financing",
+      label: "Wait without contributing personal cash",
+      amount: 0,
+      personalSafety: 1,
+      firmContinuity: 0.15,
+      workerProtection: 0.1,
+      growth: 0,
+      extraction: 0,
+      exitRelief: 0.2,
+    });
+    if (firm.distressDays >= 2) options.push({
+      action: "choose-voluntary-insolvency",
+      label: "Choose voluntary insolvency",
+      amount: 0,
+      personalSafety: 1,
+      firmContinuity: 0,
+      workerProtection: 0,
+      growth: 0,
+      extraction: 0,
+      exitRelief: 1,
+    });
+    const choice = this.considerOwnerAction(owner, firm, "financing", options, "Settlement");
+    if (choice.option.action === "contribute-owner-capital") {
       const ownerBefore = owner.cash;
       const firmBefore = firm.cash;
-      const paid = this.transfer(owner, firm, requested, { exact: true });
+      const paid = this.transfer(owner, firm, choice.option.amount, { exact: true });
       if (paid > 0) {
         firm.ownerDecision.capitalContribution = paid;
         firm.ownerDecision.capitalReason = `owner funded credible recovery while retaining ${protectedPersonalCash.toFixed(1)} personal cash`;
@@ -1191,7 +1280,7 @@ export class TownSimulation {
     firm.ownerDecision.capitalReason = recoveryIsCredible
       ? `owner protected a ${protectedPersonalCash.toFixed(1)} personal reserve`
       : `recovery ratio ${recoveryRatio.toFixed(2)} was below the owner's ${recoveryThreshold.toFixed(2)} threshold`;
-    if (firm.distressDays >= 2) {
+    if (choice.option.action === "choose-voluntary-insolvency") {
       firm.ownerDecision.continuation = "voluntary insolvency";
       firm.ownerDecision.continuationReason = recoveryIsCredible
         ? "owner chose to protect personal reserves"

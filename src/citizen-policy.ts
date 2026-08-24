@@ -11,7 +11,8 @@ export type JobSearchAction = typeof SKIP_JOB_SEARCH | `apply-job:${number}`;
 export type PersonalTimeAction = (typeof PERSONAL_TIME_ACTIONS)[number];
 export type FoodAction = "skip-food" | `eat-stored-food:${number}` | `buy-food:${number}:${number}`;
 export type HousingAction = "defer-housing" | "remain-unhoused" | `pay-housing:${number}` | `secure-housing:${number}`;
-export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | FoodAction | HousingAction;
+export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | FoodAction | HousingAction | OwnerAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -142,7 +143,36 @@ export type HousingObservation = Readonly<{
   options: readonly HousingOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | FoodObservation | HousingObservation;
+export type OwnerOption = Readonly<{
+  action: OwnerAction;
+  label: string;
+  amount?: number;
+  resultingPrice?: number;
+  personalSafety: number;
+  firmContinuity: number;
+  workerProtection: number;
+  growth: number;
+  extraction: number;
+  exitRelief: number;
+}>;
+
+export type OwnerObservation = Readonly<{
+  kind: "owner";
+  domain: "wage" | "financing" | "pricing" | "distribution";
+  citizenId: number;
+  citizenName: string;
+  firmId: number;
+  firmName: string;
+  ownerRunwayDays: number;
+  firmRunwayDays: number;
+  firmTrouble: number;
+  employeeCount: number;
+  extractionPreference: number;
+  profile: MotivationProfile;
+  options: readonly OwnerOption[];
+}>;
+
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | FoodObservation | HousingObservation | OwnerObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -221,6 +251,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     if (input.observation.kind === "attendance") return this.decideAttendance(input.observation, input.legalActions);
     if (input.observation.kind === "food") return this.decideFood(input.observation, input.legalActions);
     if (input.observation.kind === "housing") return this.decideHousing(input.observation, input.legalActions);
+    if (input.observation.kind === "owner") return this.decideOwner(input.observation, input.legalActions);
 
     const { observation, legalActions } = input;
     const belongingGap = 1 - (observation.needs.belonging ?? 0);
@@ -247,6 +278,31 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
       action,
       reasons: [`${actionReasons[action as PersonalTimeAction]} had the highest score among the currently legal personal-time actions.`],
       scores: roundedScores,
+    };
+  }
+
+  decideOwner(observation: OwnerObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const personalScarcity = clamp(1 - observation.ownerRunwayDays / 12);
+    const scores: Record<string, number> = {};
+    observation.options.forEach((option) => {
+      scores[option.action] = observation.profile.security * option.personalSafety * (0.75 + personalScarcity * 0.75)
+        + observation.profile.planning * option.firmContinuity * 0.65
+        + observation.profile.connection * option.workerProtection * 0.4
+        + observation.profile.mastery * option.growth * 0.3
+        + observation.profile.comfort * option.extraction * (0.25 + observation.extractionPreference)
+        + observation.profile.avoidance * option.exitRelief * 0.4;
+    });
+    const decision = this.highestScoringDecision(legalActions, scores, `owner-${observation.domain}`);
+    return {
+      ...decision,
+      scores: {
+        ...decision.scores,
+        ownerRunwayDays: roundedWeight(observation.ownerRunwayDays),
+        firmRunwayDays: roundedWeight(observation.firmRunwayDays),
+        firmTrouble: roundedWeight(observation.firmTrouble),
+        employeeCount: observation.employeeCount,
+        extractionPreference: roundedWeight(observation.extractionPreference),
+      },
     };
   }
 
