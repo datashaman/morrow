@@ -418,7 +418,7 @@ export class TownSimulation {
       sequence: person.decisionSequence,
       policy: this.citizenPolicy.id ?? "unknown",
       kind: observation.kind,
-      observation: { ...observation },
+      observation: structuredClone(observation),
       legalActions: [...legalActions],
       chosenAction: decision.action,
       reasons: Array.isArray(decision.reasons) ? [...decision.reasons] : [],
@@ -520,13 +520,18 @@ export class TownSimulation {
 
   consumeFood(person, food) {
     const age = Math.max(0, this.day - food.purchasedDay);
-    const quality = clamp(food.quality - age * FOOD_QUALITY_DECAY_PER_DAY, MIN_FOOD_QUALITY, 1);
+    const quality = this.effectiveFoodQuality(food);
     person.lastFoodQuality = quality;
     person.lastFoodAge = age;
     person.foodSeller = food.seller;
     person.hungryDays = Math.max(0, person.hungryDays - 1);
     person.health = clamp(person.health + quality * FOOD_HEALTH_RECOVERY);
     return quality;
+  }
+
+  effectiveFoodQuality(food) {
+    const age = Math.max(0, this.day - food.purchasedDay);
+    return clamp(food.quality - age * FOOD_QUALITY_DECAY_PER_DAY, MIN_FOOD_QUALITY, 1);
   }
 
   productionPhase() {
@@ -649,29 +654,89 @@ export class TownSimulation {
     this.people.forEach((person) => {
       if (!person.alive) return;
       person.socialToday = false;
-      let meal = person.foodStock.shift();
+      this.considerFood(person, foodFirms);
+    });
+  }
+
+  considerFood(person, foodFirms) {
+    if (!person.alive) return false;
+    const options = person.foodStock.length
+      ? person.foodStock.map((food, index) => ({
+        action: `eat-stored-food:${index}`,
+        source: "stored",
+        sellerId: food.seller,
+        sellerName: this.firms[food.seller]?.name ?? "unknown seller",
+        units: 1,
+        unitPrice: 0,
+        totalPrice: 0,
+        effectiveQuality: this.effectiveFoodQuality(food),
+        age: Math.max(0, this.day - food.purchasedDay),
+        capacityAvailable: true,
+      }))
+      : foodFirms.flatMap((firm) => {
+        const maxUnits = Math.min(person.foodReserveTarget, Math.floor(firm.inventory), Math.floor((person.cash + 1e-9) / firm.price));
+        return Array.from({ length: maxUnits }, (_, index) => {
+          const units = index + 1;
+          return {
+            action: `buy-food:${firm.id}:${units}`,
+            source: "seller",
+            sellerId: firm.id,
+            sellerName: firm.name,
+            units,
+            unitPrice: firm.price,
+            totalPrice: roundMoney(firm.price * units),
+            effectiveQuality: firm.quality,
+            age: 0,
+            capacityAvailable: firm.transactionsToday < this.transactionCapacity(firm),
+          };
+        });
+      });
+    if (!person.foodStock.length && !options.length && foodFirms.length) foodFirms[0].priceRejectionsToday += 1;
+    const legalActions = Object.freeze(["skip-food", ...options.map((option) => option.action)]);
+    const observation = Object.freeze({
+      kind: "food",
+      citizenId: person.id,
+      citizenName: person.name,
+      stress: person.stress,
+      health: person.health,
+      hungryDays: person.hungryDays,
+      runwayDays: this.runwayDays(person),
+      reserveTarget: person.foodReserveTarget,
+      scarcityError: person.scarcityError,
+      profile: { ...person.motivationProfile },
+      options: options.map((option) => ({ ...option })),
+    });
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal food action`);
+    }
+    this.recordDecision(person, observation, legalActions, decision, "Food shopping");
+
+    let ate = false;
+    if (decision.action.startsWith("eat-stored-food:")) {
+      const index = Number(decision.action.split(":")[1]);
+      const [meal] = person.foodStock.splice(index, 1);
       if (meal) {
         this.consumeFood(person, meal);
-        return;
+        ate = true;
       }
-      const affordable = foodFirms.filter((firm) => person.cash >= firm.price && firm.inventory >= 1);
-      if (!affordable.length && foodFirms.length) foodFirms[0].priceRejectionsToday += 1;
-      const delayed = person.scarcityError && person.stress > 0.62 && this.runwayDays(person) < 5 && this.random() < 0.32;
-      const sellers = person.scarcityError && affordable.length > 1 ? [...affordable].reverse() : affordable;
-      const paid = delayed ? 0 : sellers.reduce((result, firm) => {
-        const units = Math.min(person.foodReserveTarget, Math.floor(firm.inventory), Math.floor(person.cash / firm.price));
-        return result || this.buy(person, firm, units, "food");
-      }, 0);
-      if (paid) {
-        meal = person.foodStock.shift();
-        this.consumeFood(person, meal);
-      } else {
-        person.hungryDays += 1;
-        person.health = clamp(person.health - 0.045);
-        if (delayed) this.note(person, "scarcity stress disrupted an essential purchase", "bad");
-        else if (person.hungryDays === 2) this.note(person, "missed food for two days", "bad");
+    } else if (decision.action.startsWith("buy-food:")) {
+      const option = options.find((candidate) => candidate.action === decision.action);
+      if (option && this.buy(person, this.firms[option.sellerId], option.units, "food")) {
+        const meal = person.foodStock.shift();
+        if (meal) {
+          this.consumeFood(person, meal);
+          ate = true;
+        }
       }
-    });
+    }
+    if (ate) return true;
+
+    person.hungryDays += 1;
+    person.health = clamp(person.health - 0.045);
+    if (decision.action === "skip-food" && options.length) this.note(person, "motivation-driven avoidance deferred available food", "bad");
+    else if (person.hungryDays === 2) this.note(person, "missed food for two days", "bad");
+    return false;
   }
 
   housingPhase() {
@@ -681,36 +746,70 @@ export class TownSimulation {
       if (!person.alive) return;
       if (!person.housed) person.rentArrears = 0;
       if (person.housed && !this.rentDueToday()) return;
-      const due = roundMoney(person.housed ? housing.price : housing.price * 3);
-      const avoidance = person.housed && person.scarcityError && person.stress > 0.6 && this.runwayDays(person) < 5 && this.random() < 0.38;
-      if (avoidance) {
-        person.rentArrears += 1;
-        this.note(person, `stress-driven avoidance deferred rent to ${housing.name}`, "bad");
-      } else {
-        const before = person.cash;
-        const canPay = person.cash + 1e-9 >= due;
-        if (!canPay) housing.priceRejectionsToday += 1;
-        const paid = canPay && this.requestTransaction(housing, person, "housing payment")
-          ? this.transfer(person, housing, due, { exact: true })
-          : 0;
-        if (paid === due) {
-          housing.sales += paid;
-          housing.unitsSold += 1;
-          person.rentSeller = housing.id;
-          person.rentArrears = 0;
-          person.housed = true;
-          this.ledger(person, { direction: "out", amount: paid, text: `${due > housing.price ? "deposit and rent" : "rent"} to ${housing.name}`, before });
-          if (due > housing.price) this.note(person, "secured housing again", "good");
-          return;
-        }
-        if (person.housed) person.rentArrears += 1;
+      this.considerHousing(person, housing);
+    });
+  }
+
+  considerHousing(person, housing) {
+    if (!person.alive || !housing?.active) return false;
+    const wasHoused = person.housed;
+    const due = roundMoney(wasHoused ? housing.price : housing.price * 3);
+    const canPay = person.cash + 1e-9 >= due;
+    if (!canPay) housing.priceRejectionsToday += 1;
+    const option = canPay ? {
+      action: `${wasHoused ? "pay-housing" : "secure-housing"}:${housing.id}`,
+      firmId: housing.id,
+      firmName: housing.name,
+      totalPrice: due,
+      capacityAvailable: housing.transactionsToday < this.transactionCapacity(housing),
+    } : null;
+    const inactiveAction = wasHoused ? "defer-housing" : "remain-unhoused";
+    const legalActions = Object.freeze([inactiveAction, ...(option ? [option.action] : [])]);
+    const observation = Object.freeze({
+      kind: "housing",
+      citizenId: person.id,
+      citizenName: person.name,
+      housed: wasHoused,
+      rentArrears: person.rentArrears,
+      stress: person.stress,
+      runwayDays: this.runwayDays(person),
+      scarcityError: person.scarcityError,
+      profile: { ...person.motivationProfile },
+      options: option ? [{ ...option }] : [],
+    });
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal housing action`);
+    }
+    this.recordDecision(person, observation, legalActions, decision, "Housing and bills");
+
+    if (option && decision.action === option.action) {
+      const before = person.cash;
+      const paid = this.requestTransaction(housing, person, "housing payment")
+        ? this.transfer(person, housing, due, { exact: true })
+        : 0;
+      if (paid === due) {
+        housing.sales += paid;
+        housing.unitsSold += 1;
+        person.rentSeller = housing.id;
+        person.rentArrears = 0;
+        person.housed = true;
+        this.ledger(person, { direction: "out", amount: paid, text: `${due > housing.price ? "deposit and rent" : "rent"} to ${housing.name}`, before });
+        if (due > housing.price) this.note(person, "secured housing again", "good");
+        return true;
       }
-      if (person.housed && person.rentArrears >= 3) {
+    }
+
+    if (wasHoused) {
+      person.rentArrears += 1;
+      if (decision.action === "defer-housing" && option) this.note(person, `motivation-driven avoidance deferred rent to ${housing.name}`, "bad");
+      if (person.rentArrears >= 3) {
         person.housed = false;
         person.rentArrears = 0;
         this.note(person, "three missed rents caused eviction", "bad");
       }
-    });
+    }
+    return false;
   }
 
   personalPhase() {

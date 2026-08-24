@@ -25,7 +25,7 @@ There are 40 named people. Each person carries:
 - Economic state: cash, employer, seller references, food reserve, housing status, rent arrears, and transaction ledger
 - Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
-- Motivation: four stable, seed-derived personal-time weights for comfort, connection, mastery, and security plus a complete in-memory policy-decision history
+- Motivation: seven stable, seed-derived weights for comfort, connection, mastery, security, food quality, planning, and avoidance plus a complete in-memory policy-decision history
 - Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
 - Personal differences: randomized starting values, a persistent esteem baseline, a stable 15–31% comfortable-owner dividend preference, and a stable 0.60–0.84 minimum recovery ratio for personal firm funding
 - Narrative state: recent life events
@@ -131,18 +131,15 @@ Workers who missed production receive no wage in that payroll phase.
 
 ### 4. Food shopping
 
-Food firms with inventory are sorted by price. A person normally buys one unit from the cheapest affordable seller.
+A citizen has a deterministic reserve target of one, two, or three meals. When their reserve is empty, the simulation creates exact purchase options for every affordable quantity from one portion through that target, bounded by each active food firm's inventory. Each option records seller, portions, unit and total price, fresh quality, and whether attending workers currently have transaction capacity. Skipping food is always legal. When food is already stored, each stored meal instead becomes a legal consumption option with its seller, age, and current effective quality.
 
-A citizen has a deterministic reserve target of one, two, or three meals. When their reserve is empty, they attempt to buy enough portions to reach that target in one transaction, limited by cash and seller inventory. They eat one portion immediately and store the remainder. On later days they consume the oldest stored portion without visiting a seller, which reduces synchronized daily shopping demand.
+`motivation-v2` scores only those legal actions. Buying or eating becomes more attractive with hunger and declining health. Food-quality preference rewards effective quality, planning rewards reaching the reserve target and consuming aging stock, security and low runway penalize cost, unavailable transaction capacity carries a large penalty, and avoidance under a scarcity error can make skipping an available meal win. Different profiles can therefore prefer cheaper food, higher-quality food, different quantities, old or fresh stored meals, or occasionally no meal. These weights are narrative hypotheses, not calibrated consumer behavior.
+
+The simulation validates the choice, then performs the purchase through the existing exact `buy` path. A seller attempt remains legal when its current capacity is exhausted because being turned away is a possible outcome; the policy sees that status and penalizes it but may still choose the attempt. The transaction then fails normally and creates a turned-away event. A successful purchase is one transaction regardless of portions. The citizen eats one portion immediately and stores the remainder, reducing synchronized daily shopping demand.
 
 Stored food loses 0.12 quality per day between purchase and consumption, to a minimum quality of 0.20. Health recovery is based on effective quality at consumption, not quality at purchase. The citizen profile reports the most recent meal's effective quality and age plus the number of stored meals.
 
-A scarcity error can cause either:
-
-- choosing the more expensive affordable food seller, or
-- delaying food despite available cash when stress exceeds 0.62 and runway is below five days; this additional delay has a 0.32 probability.
-
-A shopper tries another affordable food firm when the preferred seller lacks transaction capacity. Consuming a meal reduces `hungryDays` by one and restores health by its effective quality multiplied by 0.006. Harvest Foods is cheaper and has fresh quality 0.55; Green Basket is dearer and has fresh quality 0.85. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy or consume food adds one hungry day and reduces health by 0.045.
+Consuming a meal reduces `hungryDays` by one and restores health by its effective quality multiplied by 0.006. Harvest Foods is cheaper and has fresh quality 0.55; Green Basket is dearer and has fresh quality 0.85. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy or consume food adds one hungry day and reduces health by 0.045. Every food choice retains its observation, legal options, scores, reason, and selected action in the citizen decision history.
 
 ### 5. Housing and bills
 
@@ -150,12 +147,12 @@ HomeWorks is the only current housing provider.
 
 - A housed person owes one rent of 6.0 every seven days, beginning on day 1 and recurring on days 8, 15, and so on.
 - An unhoused person may attempt rehousing on any day and needs three rents, 18.0, to secure housing again. This represents a deposit plus rent.
-- Both are exact payments; insufficient cash causes no transfer.
+- Both are exact payments. A payment option exists only when the citizen can cover the whole amount; insufficient cash leaves only deferral or remaining unhoused and causes no transfer.
 - A payable housing transaction can still fail when HomeWorks has exhausted its attending workers’ transaction capacity.
 - A housed person who misses three rents is evicted once; eviction clears the missed-rent counter because post-eviction debt is not modeled.
 - A successful rent resets arrears to zero.
 
-A housed person under scarcity pressure may defer rent despite being able to pay. This requires stress above 0.60, runway below five days, and a 0.38 random result after the scarcity-error flag has been set.
+For rent day or a rehousing opportunity, the simulation creates deferral or remaining-unhoused plus any exactly affordable HomeWorks option, including its amount and current transaction-capacity status. `motivation-v2` weighs payment or rehousing through the security preference, existing arrears, stress, and housing state. Avoidance, stress, low runway, and a scarcity error can make deferral win even when payment is possible. The simulation validates the choice and alone performs the exact transfer, arrears update, eviction, or rehousing consequence. Every considered housing choice is retained in the citizen decision history.
 
 An unhoused person owes no recurring rent and does not accumulate arrears. Rehousing still requires the separate deposit-and-rent payment described above. The citizen summary shows whether rent is due today or how many days remain until the next billing day.
 
@@ -165,9 +162,9 @@ When HomeWorks becomes insolvent, ordinary rent and rehousing transactions stop 
 
 The current focus is reassessed before choosing an activity. The discretionary-demand policy determines whether optional purchases enter the legal-action set: 0% leaves only doing nothing, while 100% allows every otherwise eligible café or goods action to be considered. It does not affect food or housing.
 
-Each citizen has stable comfort, connection, mastery, and security weights between 0.70 and 1.30. They are generated from an isolated combination of the town seed and citizen ID, so they do not consume or disturb the main simulation random sequence. The values are hypotheses for producing heterogeneous stories, not measured personality traits.
+Each citizen has stable comfort, connection, mastery, security, food-quality, planning, and avoidance weights between 0.70 and 1.30. They are generated from an isolated combination of the town seed and citizen ID, so they do not consume or disturb the main simulation random sequence. The values are hypotheses for producing heterogeneous stories, not measured personality traits.
 
-The simulation constructs the currently legal personal-time actions from living status, focus, affordability, inventory, seller transaction capacity, and the discretionary-demand result. Doing nothing is always legal. `motivation-v1` scores only that set:
+The simulation constructs the currently legal personal-time actions from living status, focus, affordability, inventory, seller transaction capacity, and the discretionary-demand result. Doing nothing is always legal. `motivation-v2` scores only that set:
 
 - Doing nothing rises with the security weight and a runway shortfall below twelve days.
 - Short-term comfort rises with the comfort weight and stress.

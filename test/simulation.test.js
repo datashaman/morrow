@@ -1180,7 +1180,7 @@ test("personal-time motivations choose only available affordable actions and ret
   assert.equal(person.socialToday, true);
   assert.match(person.ledger[0].text, /social visit to Common Café/);
   assert.equal(person.decisions[0].kind, "personal-time");
-  assert.equal(person.decisions[0].policy, "motivation-v1");
+  assert.equal(person.decisions[0].policy, "motivation-v2");
   assert.equal(person.decisions[0].chosenAction, "social-visit");
   assert.deepEqual(person.decisions[0].legalActions, ["do-nothing", "social-visit"]);
 
@@ -1194,6 +1194,124 @@ test("personal-time motivations choose only available affordable actions and ret
   assert.equal(cashPoorPerson.decisions[0].chosenAction, "do-nothing");
   assert.deepEqual(cashPoorPerson.decisions[0].legalActions, ["do-nothing"]);
   assert.equal(cashPoorPerson.ledger.length, 0);
+});
+
+test("food quality and security motivations can prefer different legal sellers", () => {
+  const policy = new MotivationCitizenPolicy();
+  const cheapAction = "buy-food:0:3";
+  const premiumAction = "buy-food:1:3";
+  const observation = {
+    kind: "food",
+    citizenId: 9,
+    citizenName: "Candidate",
+    stress: 0.4,
+    health: 0.8,
+    hungryDays: 0,
+    runwayDays: 1,
+    reserveTarget: 3,
+    scarcityError: false,
+    profile: { comfort: 1, connection: 1, mastery: 1, security: 0.7, foodQuality: 1.3, planning: 1, avoidance: 1 },
+    options: [
+      { action: cheapAction, source: "seller", sellerId: 0, sellerName: "Value Foods", units: 3, unitPrice: 1, totalPrice: 3, effectiveQuality: 0.55, age: 0, capacityAvailable: true },
+      { action: premiumAction, source: "seller", sellerId: 1, sellerName: "Premium Foods", units: 3, unitPrice: 10, totalPrice: 30, effectiveQuality: 0.85, age: 0, capacityAvailable: true },
+    ],
+  };
+  const legalActions = ["skip-food", cheapAction, premiumAction];
+
+  const qualityChoice = policy.decide({ observation, legalActions, random: () => 0 });
+  const securityChoice = policy.decide({
+    observation: { ...observation, profile: { ...observation.profile, security: 1.3, foodQuality: 0.7 } },
+    legalActions,
+    random: () => 0,
+  });
+
+  assert.equal(qualityChoice.action, premiumAction);
+  assert.equal(securityChoice.action, cheapAction);
+});
+
+test("food policy options cannot overdraw cash or invent an unaffordable purchase", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  person.cash = harvest.price;
+  person.foodStock = [];
+  person.foodReserveTarget = 3;
+  person.ledger = [];
+  const before = person.cash;
+
+  town.considerFood(person, [harvest]);
+
+  assert.equal(person.cash, 0);
+  assert.equal(person.ledger[0].amount, before);
+  assert.deepEqual(person.decisions[0].legalActions, ["skip-food", `buy-food:${harvest.id}:1`]);
+  assert.equal(person.decisions[0].observation.options[0].totalPrice, before);
+
+  const invalidTown = new TownSimulation({
+    seed: 42,
+    citizenPolicy: { id: "illegal-food-test", decide: () => ({ action: `buy-food:${harvest.id}:3`, reasons: [] }) },
+  });
+  const invalidPerson = invalidTown.people[0];
+  invalidPerson.cash = harvest.price;
+  invalidPerson.foodStock = [];
+  assert.throws(() => invalidTown.considerFood(invalidPerson, [invalidTown.firms[harvest.id]]), /chose an illegal food action/);
+  assert.equal(invalidPerson.cash, harvest.price);
+  assert.equal(invalidPerson.ledger.length, 0);
+});
+
+test("food observations expose seller capacity and the policy can choose an available alternative", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const basket = town.firms.find((firm) => firm.name === "Green Basket");
+  person.cash = 20;
+  person.foodStock = [];
+  person.foodReserveTarget = 1;
+  harvest.inventory = 5;
+  basket.inventory = 5;
+  harvest.employees.forEach((id) => { town.people[id].attended = true; });
+  basket.employees.forEach((id) => { town.people[id].attended = true; });
+  harvest.transactionsToday = town.transactionCapacity(harvest);
+
+  town.considerFood(person, [harvest, basket]);
+
+  const trace = person.decisions[0];
+  assert.equal(trace.observation.options.find((option) => option.sellerId === harvest.id).capacityAvailable, false);
+  assert.equal(trace.observation.options.find((option) => option.sellerId === basket.id).capacityAvailable, true);
+  assert.equal(trace.chosenAction, `buy-food:${basket.id}:1`);
+  assert.equal(person.foodSeller, basket.id);
+  assert.equal(harvest.transactionsToday, town.transactionCapacity(harvest));
+});
+
+test("housing security and avoidance motivations can produce payment or deferral", () => {
+  const runChoice = ({ security, avoidance }) => {
+    const town = new TownSimulation({ seed: 42 });
+    const person = town.people[0];
+    const housing = town.firms.find((firm) => firm.sector === "housing");
+    person.cash = housing.price + 0.1;
+    person.stress = 0.9;
+    person.scarcityError = true;
+    person.rentArrears = 0;
+    person.ledger = [];
+    person.events = [];
+    person.motivationProfile = { ...person.motivationProfile, security, avoidance };
+    const personBefore = person.cash;
+    const housingBefore = housing.cash;
+    const totalBefore = town.totalMoney();
+    town.considerHousing(person, housing);
+    return { town, person, housing, personBefore, housingBefore, totalBefore };
+  };
+
+  const secure = runChoice({ security: 1.3, avoidance: 0.7 });
+  const avoidant = runChoice({ security: 0.7, avoidance: 1.3 });
+
+  assert.match(secure.person.decisions[0].chosenAction, /^pay-housing:/);
+  assert.equal(secure.person.cash, 0.1);
+  assert.equal(secure.housing.cash, secure.housingBefore + secure.housing.price);
+  assert.equal(secure.town.totalMoney(), secure.totalBefore);
+  assert.equal(avoidant.person.decisions[0].chosenAction, "defer-housing");
+  assert.equal(avoidant.person.cash, avoidant.personBefore);
+  assert.equal(avoidant.person.rentArrears, 1);
+  assert.match(avoidant.person.events[0].text, /motivation-driven avoidance deferred rent/);
 });
 
 test("sustained income eventually expands staffing", () => {

@@ -29,7 +29,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Housing has transaction-processing capacity but no dwelling stock, vacancy, construction, maintenance, quality, or location. HomeWorks can house everyone indefinitely while operating. Its receivership preserves all tenancies for seven days, then uses a fixed restart threshold or deterministic displacement rate rather than modeling property ownership, administrators, courts, lenders, tenant protections, or alternate landlords.
 - Initially housed people receive housing without an initial payment or provider record.
 - Every person consumes at most one food unit per day regardless of body, work, or household.
-- Citizens use fixed one-to-three-meal reserve targets. They do not forecast rent, prices, attendance, congestion, spoilage, or future income when deciding how much food to store; there are no refrigeration or storage costs.
+- Citizens use fixed one-to-three-meal reserve targets. Motivation scoring sees current prices, quality, age, and transaction capacity but does not forecast future rent, attendance, congestion, spoilage, or income; there are no refrigeration or storage costs.
 - Treasury support uses current vulnerability and a daily budget but has no eligibility history, application process, delay, fraud, stigma, or administrative cost.
 - Vital-business classification is fixed in configuration. A vital firm can receive one cash rescue based only on next-day operating need; HomeWorks can additionally receive one fixed-cost receivership restart. There is no public-interest assessment, conditionality, political process, repayment, equity stake, creditor review, or performance monitoring.
 - Owners are the first six people and can also be employees. Working owners make simple runway-based wage-waiver, equity-contribution, voluntary-insolvency, ordinary-dividend, and emergency-distribution decisions. They cannot set arbitrary salary, vary working hours, replace management, lend to the firm, recover contributed equity, sell or transfer ownership, share ownership, or create formal distribution policies. Ownership is not inherited; a firm with a dead owner retains surplus.
@@ -44,7 +44,7 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Each attending worker contributes a fixed sector-specific number of transactions regardless of skill, health, transaction complexity, or coworker coordination.
 - There are no occupations, schedules, hours, contracts, tenure, credentials, discrimination, commuting cost, care work, informal work, or self-employment.
 - Candidate ranking uses skill and reliability. The richer social referral effect from an earlier version is not present.
-- Job-offer acceptance is the only decision currently routed through the typed citizen-policy boundary. Its default reservation wage is based only on skill, and acceptance probability only on reliability; it does not reflect housing, dependants, transport, benefits, risk, alternatives, or a richer motivation profile. Food, housing, attendance, personal-time, and ownership choices still use their direct simulation heuristics.
+- Job-offer acceptance retains a skill-only reservation wage and reliability-only probability inside the typed policy boundary; it does not yet use housing, dependants, transport, benefits, risk, alternatives, or the motivation profile. Attendance and ownership choices still use direct simulation heuristics, while food, housing, and personal time use deterministic motivation scoring.
 - Production by housing employees is not used to constrain housing supply.
 - Missed shifts create events but no distinct wage-ledger entry because no money moves.
 
@@ -67,8 +67,8 @@ The seed is fixed in code, not visible or editable in the interface. Policy chan
 - Scarcity errors are generic and probabilistic; they should not be interpreted as a clinical claim about people in poverty.
 - Short-term comfort spending can occur during unemployment or homelessness, but this is a gameplay hypothesis rather than a calibrated claim about how people experiencing hardship behave.
 - The Maslow-inspired hierarchy uses hard thresholds and weighted sums. It is a gameplay heuristic, not validated psychology.
-- Current focus selects one need category. Stable seed-derived motivation weights now vary personal-time scoring, but citizens still do not plan across days or learn from outcomes. The weights and scoring equations are gameplay hypotheses, not a validated personality model.
-- There is no learned policy yet. Job offers retain the original rule and personal time uses a deterministic scorer; neither is evidence that citizen motivations have become psychologically realistic.
+- Current focus selects one need category. Stable seed-derived motivation weights now vary food, housing, and personal-time scoring, but citizens still do not plan across days or learn from outcomes. The weights and scoring equations are gameplay hypotheses, not a validated personality model.
+- There is no learned policy yet. Job offers retain the original rule and the other routed domains use a deterministic scorer; neither is evidence that citizen motivations have become psychologically realistic.
 
 ## Simulation and interface limitations
 

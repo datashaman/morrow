@@ -162,15 +162,29 @@ const money = (value) => value.toFixed(1);
 const price = (value) => value.toFixed(2);
 const percent = (value) => `${Math.round(value * 100)}%`;
 const needNames = { physiological: "Physiological", safety: "Safety", belonging: "Belonging", esteem: "Esteem", growth: "Self-actualization" };
-const motivationNames = { comfort: "Comfort", connection: "Connection", mastery: "Mastery", security: "Security" };
-const actionNames = {
+const motivationNames = { comfort: "Comfort", connection: "Connection", mastery: "Mastery", security: "Security", foodQuality: "Food quality", planning: "Planning", avoidance: "Avoidance" };
+const staticActionNames = {
   "accept-job-offer": "Accepted job offer",
   "decline-job-offer": "Declined job offer",
   "do-nothing": "Did nothing",
   "buy-comfort": "Bought short-term comfort",
   "social-visit": "Made a social visit",
   "buy-learning-tools": "Bought learning tools",
+  "skip-food": "Skipped food",
+  "defer-housing": "Deferred housing payment",
+  "remain-unhoused": "Remained unhoused",
 };
+
+function actionName(decision, action) {
+  if (staticActionNames[action]) return staticActionNames[action];
+  const option = decision.observation.options?.find((candidate) => candidate.action === action);
+  const capacity = option?.capacityAvailable ? "capacity available" : "seller full";
+  if (action.startsWith("eat-stored-food:")) return `Chose stored food from ${option?.sellerName ?? "a previous seller"} (${percent(option?.effectiveQuality ?? 0)} quality, ${option?.age ?? 0}d old)`;
+  if (action.startsWith("buy-food:")) return `Tried ${option?.units ?? ""} food portion${option?.units === 1 ? "" : "s"} from ${option?.sellerName ?? "a seller"} (${money(option?.totalPrice ?? 0)}, ${percent(option?.effectiveQuality ?? 0)} quality, ${capacity})`;
+  if (action.startsWith("pay-housing:")) return `Tried housing payment to ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
+  if (action.startsWith("secure-housing:")) return `Tried to secure housing through ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
+  return action;
+}
 
 function renderActivity(entity, filter, stream) {
   const previousScrollHeight = stream.scrollHeight;
@@ -207,13 +221,13 @@ function renderMotivations(person) {
   stream.replaceChildren(...person.decisions.map((decision) => {
     const item = document.createElement("li");
     const alternatives = decision.legalActions
-      .map((action) => `${actionNames[action] ?? action}${decision.scores[action] === undefined ? "" : ` ${decision.scores[action].toFixed(2)}`}`)
+      .map((action) => `${actionName(decision, action)}${decision.scores[action] === undefined ? "" : ` ${decision.scores[action].toFixed(2)}`}`)
       .join(" · ");
     const evidence = Object.entries(decision.scores)
       .filter(([name]) => !decision.legalActions.includes(name))
       .map(([name, value]) => `${name} ${value.toFixed(2)}`)
       .join(" · ");
-    item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionNames[decision.chosenAction] ?? decision.chosenAction}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""} · ${decision.policy}</small>`;
+    item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""} · ${decision.policy}</small>`;
     return item;
   }));
   if (!person.decisions.length) {
