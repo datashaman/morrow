@@ -74,7 +74,7 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 
 ## Simulation and interface limitations
 
-- The canvas moves employees toward employers, current applicants toward the firm named by their domain application, other unemployed people toward the Common Park, and deceased people toward the cemetery continuously, not according to the seven economic phases. The map does not create applications or employment; park movement and the cemetery remain illustrative, and the park provides no shelter, food, services, or social effects.
+- The canvas moves employees toward employers, current applicants toward the firm named by their domain application, other unemployed people toward the Common Park, and deceased people toward the cemetery continuously, not according to the seven economic phases. The map does not create applications or employment; the cemetery remains illustrative. Park social effects come from explicit personal-time decisions rather than map position, and the park provides no shelter, food, or services.
 - Person positions are mutated by rendering and live on domain entities, weakening separation between simulation and view state.
 - The UI shows complete citizen and firm histories, owner-decision traces, and current firm pipelines, but no town-wide distributions, inequality measures, network graph, cross-entity trace query, or aggregate supply-chain history.
 - Economic slider changes and neural-control toggles have a town-level before/after run history, and individual decision traces identify the controller, fallback, schema, gate, and weights used at decision time. Runs still cannot be exported or compared interactively.

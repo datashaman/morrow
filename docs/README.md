@@ -5,6 +5,7 @@
 - [Architecture](./architecture.md): module boundaries, runtime flow, and extension points.
 - [Development](./development.md): setup, testing, debugging, and change workflow.
 - [Policy evaluation](./policy-evaluation.md): headless multi-seed policy comparisons, metrics, report schema, and hard failures.
+- [Firm viability evaluation](./firm-viability.md): deterministic optional-sector demand, cost, constraint, and closure diagnostics.
 - [Neural shadow](./neural-shadow.md): shared local network, versioned schemas, legal masks, traces, and interpretation limits.
 - [Neural activation](./neural-activation.md): personal-time control boundary, held-out gate evidence, live fallback, and interpretation limits.
 - [Offline training](./offline-training.md): synthetic trajectories, optional Python training, weight artifacts, rewards, and golden compatibility tests.
