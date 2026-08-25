@@ -54,11 +54,19 @@ The confirmed product name is “Morrow.” The repository lives at `/Users/marl
 A real vacancy backed by an explicit paying counterparty and available through the town's job market. It provides a credible path to earned income without guaranteeing that a particular citizen applies, receives an offer, accepts, or remains employed.
 _Avoid_: Employment target, guaranteed job
 
+**Trade knowledge domain**:
+A transferable area of vocational capability that can be learned at more than one relevant workplace and may contribute to a bounded operational effect. It is not a credential, occupation, employer affiliation, or firm-specific badge.
+_Avoid_: Firm skill, job title, profession
+
 ### Example dialogue
 
 > **Developer:** Should the early economy hold employment above a fixed percentage?
 >
 > **Domain expert:** No. It should provide funded employment opportunities; hiring outcomes may still vary and unemployment must remain possible.
+>
+> **Developer:** Does knowledge learned at one grocer belong only to that firm?
+>
+> **Domain expert:** No. Retail operations is a trade knowledge domain and may transfer to another relevant workplace.
 
 ## Where to continue
 
