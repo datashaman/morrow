@@ -6,6 +6,7 @@
 - [Development](./development.md): setup, testing, debugging, and change workflow.
 - [Policy evaluation](./policy-evaluation.md): headless multi-seed policy comparisons, metrics, report schema, and hard failures.
 - [Firm viability evaluation](./firm-viability.md): deterministic optional-sector demand, cost, constraint, and closure diagnostics.
+- [Development sensitivity](./development-sensitivity.md): fixed-seed formation, replacement, stage, hardship, failure, extinction, and conservation comparisons.
 - [Neural shadow](./neural-shadow.md): shared local network, versioned schemas, legal masks, traces, and interpretation limits.
 - [Neural activation](./neural-activation.md): personal-time control boundary, held-out gate evidence, live fallback, and interpretation limits.
 - [Offline training](./offline-training.md): synthetic trajectories, optional Python training, weight artifacts, rewards, and golden compatibility tests.

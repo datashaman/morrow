@@ -87,7 +87,7 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 
 ## Calibration and validation
 
-No parameter has been calibrated against real data. There are no sensitivity analyses, ensemble runs, uncertainty intervals, or empirical validation suites. Before drawing substantive conclusions:
+No parameter has been calibrated against real data. A deterministic multi-seed development sensitivity harness now compares selected gameplay policy ranges, but there are no uncertainty intervals, external datasets, independently calibrated formation constants, or empirical validation suites. Before drawing substantive conclusions:
 
 1. Define the claim being investigated.
 2. Identify which parameters materially affect it.

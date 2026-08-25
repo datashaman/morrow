@@ -64,6 +64,10 @@ Define headless-only profile, four-value learned-embedding, and four-value bound
 
 Runs fresh headless towns across configurable seeds, days, and policy factories. It collects outcomes, active, controlled, and shadow action distributions, controller and weight metadata, neural divergence, invalid pre-mask preferences, directional shadow projections, checks invariants and finite state, aggregates results, and computes candidate deltas from a named deterministic baseline. `scripts/evaluate-policies.ts` is the human/JSON command-line adapter.
 
+### `src/development-sensitivity.ts`
+
+Runs the minimal foundation across fixed seeds and named policy scenarios without mutating domain rules. It records formation, founders, replacements, stage transitions, outcomes, failures, cash conservation, and degenerate-run flags. `scripts/evaluate-development.ts` provides text and JSON output.
+
 ### `src/trajectory-export.ts`
 
 Converts complete synthetic decision traces into a deterministic, versioned observation/action/reward dataset without names, histories, external data, or new legal actions. `scripts/export-trajectories.ts` is the JSON command-line adapter. The optional standard-library `scripts/train_shared_policy.py` validates this dataset, trains the same pair-MLP shape, and exports a versioned artifact. TypeScript validates artifact schemas, action order, shapes, finite values, and golden vectors before weights can be constructed.
