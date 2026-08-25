@@ -2,6 +2,7 @@ import "./styles.css";
 import { PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
 import { describeContract, describePipeline } from "./firm-presentation.js";
+import { describeFirmOpportunity } from "./firm-opportunity-presentation.js";
 import {
   applicantFirmId,
   applicantOrbitTarget,
@@ -343,7 +344,7 @@ function updateInterface() {
   renderMotivations(person);
   renderActivity(person, elements["activity-filter"].value, elements["activity-stream"]);
 
-  elements["firm-grid"].replaceChildren(...simulation.firms.map((firm) => {
+  const firmCards = simulation.firms.map((firm) => {
     const contracts = simulation.contracts.filter((contract) => contract.buyerId === firm.id || contract.supplierId === firm.id);
     const hasOperatingSupply = simulation.contracts.some((contract) => contract.use === "operations" && contract.buyerId === firm.id);
     const product = PRODUCTS[firm.sells];
@@ -360,7 +361,21 @@ function updateInterface() {
       ${contracts.map((contract) => `<span class="contract${contract.shortfallToday ? " shortfall" : ""}">${describeContract(contract, PRODUCTS)}</span>`).join("")}
     `;
     return card;
-  }));
+  });
+  const opportunityCards = simulation.firmOpportunities().map((opportunity) => {
+    const description = describeFirmOpportunity(opportunity);
+    const card = document.createElement("article");
+    card.className = `firm-card opportunity-card ${opportunity.status}`;
+    card.innerHTML = `
+      <span class="firm-card-heading"><b>Potential ${opportunity.name}</b><i class="status ${opportunity.ready ? "ready" : "potential"}">${opportunity.ready ? "ready" : "not ready"}</i></span>
+      <span class="pipeline">Could sell ${PRODUCTS.cafeService.name}; would use ${PRODUCTS.produce.name} from Morrow Fields.</span>
+      <span class="firm-stats">${description.evidence}</span>
+      <span class="firm-stats">${description.resources}</span>
+      <span class="opportunity-reason">${description.explanation}</span>
+    `;
+    return card;
+  });
+  elements["firm-grid"].replaceChildren(...firmCards, ...opportunityCards);
   const firm = simulation.firms[selectedFirm];
   elements["firm-decision-title"].textContent = `${firm.name} owner decisions`;
   renderDecisions(firm, elements["firm-decision-stream"]);

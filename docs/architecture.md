@@ -72,6 +72,10 @@ Converts complete synthetic decision traces into a deterministic, versioned obse
 
 Converts product, pipeline, and supply-contract state into display strings. It contains no economic decisions and is covered by focused Node tests.
 
+### `src/firm-opportunity-presentation.js`
+
+Formats domain-owned formation evidence and blockers for the firm panel. It does not calculate demand, choose a founder, create a firm, or move cash.
+
 ### `src/map-presentation.js`
 
 Owns deterministic canvas presentation geometry: full-name firm landmark bounds, employee orbit targets that clear workplace plaques, the deceased cross-and-base marker, and browser-safe light/dark canvas color resolution. These helpers keep display-only layout testable without moving economic decisions out of the simulation.
@@ -92,7 +96,7 @@ Uses Node’s built-in test runner. Tests directly exercise the simulation witho
 
 ## State ownership
 
-`TownSimulation` owns people, firms, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, playback timing, pause state, speed, and canvas dimensions.
+`TownSimulation` owns people, configured archetypes, runtime firm instances, opportunity observations, contracts, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, playback timing, pause state, speed, and canvas dimensions. Runtime firms may be appended but are never removed, so their numeric IDs remain valid references and their stable `archetypeId:instanceNumber` identities preserve lifecycle history.
 
 Person `x` and `y` positions are currently mutated by the renderer even though they live on simulation entities. The renderer derives workplace, job-application, Common Park, and cemetery destinations from domain state, but those positions are display-only and must never influence domain decisions. Moving them into a view model would strengthen the boundary.
 

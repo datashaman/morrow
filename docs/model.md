@@ -37,7 +37,9 @@ Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.
 
 ### Firms
 
-Six firms are configured in `src/config.js`. The product catalog gives every traded thing a stable identifier, label, and unit; each firm declares the product it sells, its input when it has one, its source, and how its output is obtained.
+Six firm archetypes are configured in `src/config.js`. An archetype defines a repeatable kind of business, product pipeline, prices, staffing assumptions, and map location. A runtime firm is a distinct instance with its own numeric entity ID, stable archetype-and-sequence identity such as `cafe:1`, founding day, founder, cash, workers, contracts, and history. Closed instances remain in the town record rather than being rewritten as a new business.
+
+The product catalog gives every traded thing a stable identifier, label, and unit; each archetype declares the product it sells, its input when it has one, its source, and how its output is obtained.
 
 | Firm | Sells | Made or supplied by | Starting retail/contract price | Base wage | Starting staff |
 |---|---|---|---:|---:|---:|
@@ -48,7 +50,21 @@ Six firms are configured in `src/config.js`. The product catalog gives every tra
 | Common Café | Prepared café service | Morrow Fields produce, prepared by café staff | 2.2 | 6.4 | 2 |
 | Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.25 wholesale | 5.8 | 7 |
 
-Every firm begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first six people are assigned as owners, one per firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, and Morrow Fields are currently marked vital because they provide the lowest-priced food, the only housing service, and the sole agricultural input respectively.
+Each configured starting instance begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first six people are assigned as owners, one per starting firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, and Morrow Fields are currently marked vital because they provide the lowest-priced food, the only housing service, and the sole agricultural input respectively.
+
+#### Private café formation
+
+The first endogenous private-formation path applies only when the Common Café archetype is absent at initialization. The absent archetype remains off the map and appears in the firm panel as an opportunity rather than an operating firm.
+
+Every settlement records the number of living people who could legally consider a café purchase before the discretionary-demand draw: a person focused on belonging with the price plus 7 cash reserved, or an acutely stressed person eligible for short-term comfort spending. After seven observations, expected daily revenue is:
+
+`mean potential customers × café price × discretionaryDemand × 0.50 capture rate`
+
+Formation requires that revenue cover two wages plus daily produce and daily-equivalent maintenance inputs with an 8% margin buffer. It also requires both configured suppliers to be active, two unemployed living workers, and an unemployed founder who is not already an active owner. The founder must hold the exact 40 startup capital above ten days of current food-and-housing essentials. These periods, capture rate, buffer, and capital rules are gameplay hypotheses rather than calibrated entrepreneurship behavior.
+
+The qualifying founder is selected deterministically by recovery preference, cash, then citizen ID. The 40 transfer is exact and creates the firm's only opening cash: the new instance starts with zero inventory and obtains produce and maintenance through newly created contracts. The founder and one other available worker become its initial staff. Founder and firm retain the observation, legal alternatives, `entrepreneur-v1` decision, funding ledgers, and life events. The same seed and state therefore reproduce the founder and opening day without consuming simulation randomness.
+
+A prior failed café instance currently blocks private replacement; that later lifecycle is tracked separately from first formation.
 
 The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 4.85 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.82 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 

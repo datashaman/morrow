@@ -21,6 +21,11 @@ import {
   MIN_FOOD_QUALITY,
   MISSED_MAINTENANCE_CAPACITY,
   NAMES,
+  OPPORTUNITY_DEMAND_CAPTURE_RATE,
+  OPPORTUNITY_MARGIN_BUFFER,
+  OPPORTUNITY_OBSERVATION_DAYS,
+  OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
+  OPPORTUNITY_STARTUP_CAPITAL,
   PHASES,
   PRICE_ADJUSTMENT_RATE,
   PRICE_CEILING_MULTIPLIER,
@@ -47,31 +52,29 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy() } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [] } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
+    this.latentFirmNames = [...latentFirmNames];
     this.reset();
   }
 
-  reset(seed = this.seed) {
-    this.seed = seed;
-    this.random = createRandom(seed);
-    this.day = 1;
-    this.phase = 0;
-    this.flows = [];
-    this.controlSequence = 0;
-    this.controlHistory = [];
-    this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
-    this.firms = FIRMS.map((firm, id) => ({
-      ...firm,
+  createFirmInstance(archetype, id, { owner = id, cash = 150, founderCapital = cash, inventory = archetype.inventory, revenueEMA = archetype.initialStaff * archetype.wage * STAFFING_REVENUE_BUFFER, instanceNumber = 1, foundingDay = 1 } = {}) {
+    return {
+      ...archetype,
       kind: "firm",
       id,
-      cash: 150,
-      basePrice: firm.price,
-      minimumPrice: roundMoney(firm.price * PRICE_FLOOR_MULTIPLIER),
-      maximumPrice: roundMoney(firm.price * PRICE_CEILING_MULTIPLIER),
-      owner: id,
+      instanceNumber,
+      instanceId: `${archetype.archetypeId}:${instanceNumber}`,
+      foundingDay,
+      founderCapital,
+      cash,
+      inventory,
+      basePrice: archetype.price,
+      minimumPrice: roundMoney(archetype.price * PRICE_FLOOR_MULTIPLIER),
+      maximumPrice: roundMoney(archetype.price * PRICE_CEILING_MULTIPLIER),
+      owner,
       employees: [],
       sales: 0,
       inputCosts: 0,
@@ -96,8 +99,8 @@ export class TownSimulation {
       rescueCount: 0,
       lastRescueDay: null,
       trouble: 0,
-      revenueEMA: firm.initialStaff * firm.wage * STAFFING_REVENUE_BUFFER,
-      targetStaff: firm.initialStaff,
+      revenueEMA,
+      targetStaff: archetype.initialStaff,
       vacancyAge: 0,
       overstaffedDays: 0,
       ownerDecision: {
@@ -115,8 +118,8 @@ export class TownSimulation {
         continuation: "not assessed",
         continuationReason: "financing has not been assessed",
         priceDay: null,
-        price: firm.price,
-        previousPrice: firm.price,
+        price: archetype.price,
+        previousPrice: archetype.price,
         priceDecision: "not reviewed",
         priceReason: "the first pricing window is still open",
       },
@@ -125,10 +128,28 @@ export class TownSimulation {
       decisions: [],
       ledger: [],
       events: [],
-    }));
-    this.contracts = SUPPLY_CONTRACTS.map((contract, id) => ({
+    };
+  }
+
+  reset(seed = this.seed) {
+    this.seed = seed;
+    this.random = createRandom(seed);
+    this.day = 1;
+    this.phase = 0;
+    this.flows = [];
+    this.controlSequence = 0;
+    this.controlHistory = [];
+    this.opportunitySequence = 0;
+    this.opportunityHistory = [];
+    this.opportunityWindows = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, []]));
+    this.firmInstanceCounts = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, 0]));
+    this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
+    this.firms = FIRMS.filter((archetype) => !this.latentFirmNames.includes(archetype.name)).map((archetype, id) => {
+      this.firmInstanceCounts[archetype.archetypeId] = 1;
+      return this.createFirmInstance(archetype, id);
+    });
+    this.contracts = SUPPLY_CONTRACTS.map((contract) => ({
       ...contract,
-      id,
       baseUnitPrice: contract.unitPrice,
       supplierId: this.firms.findIndex((firm) => firm.name === contract.supplier),
       buyerId: this.firms.findIndex((firm) => firm.name === contract.buyer),
@@ -136,7 +157,7 @@ export class TownSimulation {
       requestedToday: 0,
       deliveredToday: 0,
       shortfallToday: 0,
-    }));
+    })).filter((contract) => contract.supplierId >= 0 && contract.buyerId >= 0).map((contract, id) => ({ ...contract, id }));
     this.contracts.filter((contract) => contract.use === "operations").forEach((contract) => {
       this.firms[contract.buyerId].operatingSupplies = contract.targetStock;
     });
@@ -281,6 +302,188 @@ export class TownSimulation {
         throw new Error(`Invalid supply contract ${contract.id}`);
       }
     });
+  }
+
+  firmArchetype(archetypeId) {
+    return FIRMS.find((archetype) => archetype.archetypeId === archetypeId) ?? null;
+  }
+
+  contractTemplatesFor(archetype) {
+    return SUPPLY_CONTRACTS.filter((contract) => contract.supplier === archetype.name || contract.buyer === archetype.name);
+  }
+
+  cafeDemandCount(archetype) {
+    return this.people.filter((person) => person.alive && (
+      (person.focus === "belonging" && person.cash > archetype.price + 7)
+      || (person.scarcityError && person.stress > 0.65 && person.cash + 1e-9 >= archetype.price)
+    )).length;
+  }
+
+  founderCandidates() {
+    const protectedCash = roundMoney(this.essentialCost() * OPPORTUNITY_PROTECTED_RUNWAY_DAYS);
+    return this.people
+      .filter((person) => person.alive
+        && person.employer < 0
+        && !this.firms.some((firm) => firm.active && firm.owner === person.id)
+        && person.cash + 1e-9 >= OPPORTUNITY_STARTUP_CAPITAL + protectedCash)
+      .sort((a, b) => (
+        b.ownerRecoveryThreshold - a.ownerRecoveryThreshold
+        || b.cash - a.cash
+        || a.id - b.id
+      ));
+  }
+
+  opportunityEvidence(archetype, observations = this.opportunityWindows[archetype.archetypeId] ?? []) {
+    const instances = this.firms.filter((firm) => firm.archetypeId === archetype.archetypeId);
+    const activeInstance = instances.find((firm) => firm.active);
+    const requiredWorkers = archetype.initialStaff;
+    const founder = this.founderCandidates()[0] ?? null;
+    const unemployedWorkers = this.replacementWorkers(this.people.length);
+    const availableWorkers = founder
+      ? [founder, ...unemployedWorkers.filter((person) => person.id !== founder.id)].slice(0, requiredWorkers)
+      : unemployedWorkers.slice(0, requiredWorkers);
+    const templates = this.contractTemplatesFor(archetype);
+    const supplierStates = templates
+      .filter((contract) => contract.buyer === archetype.name)
+      .map((contract) => {
+        const supplier = this.firms.find((firm) => firm.active && firm.name === contract.supplier);
+        return { name: contract.supplier, product: contract.product, available: Boolean(supplier), firmId: supplier?.id ?? null };
+      });
+    const expectedDailyCustomers = observations.length
+      ? observations.reduce((sum, observation) => sum + observation.potentialCustomers, 0) / observations.length
+      : 0;
+    const expectedDailyRevenue = roundMoney(
+      expectedDailyCustomers
+      * archetype.price
+      * (this.policy.discretionaryDemand / 100)
+      * OPPORTUNITY_DEMAND_CAPTURE_RATE,
+    );
+    const expectedDailyCost = roundMoney(
+      Math.max(this.policy.minimumWage, archetype.wage) * requiredWorkers
+      + templates.filter((contract) => contract.buyer === archetype.name).reduce(
+        (sum, contract) => sum + contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1),
+        0,
+      ),
+    );
+    const reasons = [];
+    if (activeInstance) reasons.push(`${activeInstance.name} is already operating`);
+    else if (instances.length) reasons.push("a previous café instance failed; private replacement is deferred");
+    if (observations.length < OPPORTUNITY_OBSERVATION_DAYS) reasons.push(`${OPPORTUNITY_OBSERVATION_DAYS - observations.length} observation day${OPPORTUNITY_OBSERVATION_DAYS - observations.length === 1 ? "" : "s"} still required`);
+    if (expectedDailyRevenue + 1e-9 < expectedDailyCost * OPPORTUNITY_MARGIN_BUFFER) reasons.push("observed demand does not cover expected wages and inputs with a margin buffer");
+    const missingSuppliers = supplierStates.filter((supplier) => !supplier.available).map((supplier) => supplier.name);
+    if (missingSuppliers.length) reasons.push(`missing active supplier${missingSuppliers.length === 1 ? "" : "s"}: ${missingSuppliers.join(", ")}`);
+    if (availableWorkers.length < requiredWorkers) reasons.push(`${requiredWorkers - availableWorkers.length} more unemployed worker${requiredWorkers - availableWorkers.length === 1 ? " is" : "s are"} required`);
+    if (!founder) reasons.push(`no unemployed founder can invest ${OPPORTUNITY_STARTUP_CAPITAL.toFixed(1)} while protecting ${OPPORTUNITY_PROTECTED_RUNWAY_DAYS} days of essentials`);
+    return Object.freeze({
+      archetypeId: archetype.archetypeId,
+      name: archetype.name,
+      status: reasons.length ? "not-ready" : "ready",
+      ready: reasons.length === 0,
+      observedDays: observations.length,
+      requiredObservationDays: OPPORTUNITY_OBSERVATION_DAYS,
+      latestPotentialCustomers: observations.at(-1)?.potentialCustomers ?? 0,
+      expectedDailyCustomers,
+      expectedDailyRevenue,
+      expectedDailyCost,
+      marginBuffer: OPPORTUNITY_MARGIN_BUFFER,
+      startupCapital: OPPORTUNITY_STARTUP_CAPITAL,
+      protectedRunwayDays: OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
+      requiredWorkers,
+      availableWorkerIds: availableWorkers.map((person) => person.id),
+      founderId: founder?.id ?? null,
+      founderName: founder?.name ?? null,
+      suppliers: supplierStates,
+      reasons: Object.freeze(reasons),
+    });
+  }
+
+  firmOpportunities() {
+    const cafe = this.firmArchetype("cafe");
+    if (!cafe || this.firms.some((firm) => firm.active && firm.archetypeId === cafe.archetypeId)) return [];
+    return [this.opportunityEvidence(cafe)];
+  }
+
+  addContractsForFirm(firm) {
+    this.contractTemplatesFor(firm).forEach((template) => {
+      const supplier = template.supplier === firm.name
+        ? firm
+        : this.firms.find((candidate) => candidate.active && candidate.name === template.supplier);
+      const buyer = template.buyer === firm.name
+        ? firm
+        : this.firms.find((candidate) => candidate.active && candidate.name === template.buyer);
+      if (!supplier || !buyer) return;
+      this.contracts.push({
+        ...template,
+        id: this.contracts.length,
+        baseUnitPrice: template.unitPrice,
+        supplierId: supplier.id,
+        buyerId: buyer.id,
+        active: true,
+        requestedToday: 0,
+        deliveredToday: 0,
+        shortfallToday: 0,
+      });
+    });
+  }
+
+  foundFirm(archetype, evidence) {
+    if (!evidence.ready) return null;
+    const founder = this.people[evidence.founderId];
+    const workers = evidence.availableWorkerIds.map((id) => this.people[id]).filter((person) => person.alive && person.employer < 0).slice(0, evidence.requiredWorkers);
+    if (!founder || workers.length < evidence.requiredWorkers || !workers.includes(founder)) return null;
+    const instanceNumber = (this.firmInstanceCounts[archetype.archetypeId] ?? 0) + 1;
+    const firm = this.createFirmInstance(archetype, this.firms.length, {
+      owner: founder.id,
+      cash: 0,
+      founderCapital: OPPORTUNITY_STARTUP_CAPITAL,
+      inventory: 0,
+      revenueEMA: 0,
+      instanceNumber,
+      foundingDay: this.day,
+    });
+    this.firms.push(firm);
+    this.firmInstanceCounts[archetype.archetypeId] = instanceNumber;
+    const founderBefore = founder.cash;
+    const firmBefore = firm.cash;
+    const paid = this.transfer(founder, firm, OPPORTUNITY_STARTUP_CAPITAL, { exact: true });
+    if (paid !== OPPORTUNITY_STARTUP_CAPITAL) {
+      this.firms.pop();
+      this.firmInstanceCounts[archetype.archetypeId] = instanceNumber - 1;
+      return null;
+    }
+    this.ledger(founder, { direction: "out", amount: paid, text: `founder capital to ${firm.name}`, before: founderBefore });
+    this.ledger(firm, { direction: "in", amount: paid, text: `founder capital from ${founder.name}`, before: firmBefore });
+    workers.forEach((person) => this.hire(firm, person));
+    this.addContractsForFirm(firm);
+    const observation = Object.freeze({ kind: "firm-formation", ...structuredClone(evidence), firmId: firm.id, instanceId: firm.instanceId });
+    const legalActions = Object.freeze(["wait-to-found", `found-firm:${archetype.archetypeId}`]);
+    const decision = {
+      action: `found-firm:${archetype.archetypeId}`,
+      policy: "entrepreneur-v1",
+      reasons: ["observed demand, suppliers, staffing, and protected founder capital passed the formation gate"],
+      scores: { "wait-to-found": 0, [`found-firm:${archetype.archetypeId}`]: roundMoney(evidence.expectedDailyRevenue - evidence.expectedDailyCost * evidence.marginBuffer) },
+    };
+    this.recordDecision(founder, observation, legalActions, decision, "Settlement");
+    this.recordDecision(firm, observation, legalActions, decision, "Settlement");
+    this.note(founder, `founded ${firm.name} with ${paid.toFixed(1)} of protected personal capital`, "good");
+    this.note(firm, `${founder.name} founded ${firm.name} after ${evidence.observedDays} days of viable demand evidence`, "good");
+    this.validateProductGraph();
+    return firm;
+  }
+
+  observeFirmOpportunities() {
+    const cafe = this.firmArchetype("cafe");
+    if (!cafe || this.firms.some((firm) => firm.active && firm.archetypeId === cafe.archetypeId)) return null;
+    const window = this.opportunityWindows[cafe.archetypeId];
+    window.push(Object.freeze({ day: this.day, potentialCustomers: this.cafeDemandCount(cafe) }));
+    if (window.length > OPPORTUNITY_OBSERVATION_DAYS) window.shift();
+    const evidence = this.opportunityEvidence(cafe, window);
+    this.opportunitySequence += 1;
+    const history = { day: this.day, sequence: this.opportunitySequence, ...structuredClone(evidence), foundedInstanceId: null };
+    this.opportunityHistory.unshift(history);
+    const firm = this.foundFirm(cafe, evidence);
+    if (firm) history.foundedInstanceId = firm.instanceId;
+    return firm ?? evidence;
   }
 
   note(person, text, kind = "neutral") {
@@ -577,7 +780,7 @@ export class TownSimulation {
       day: this.day,
       phase,
       sequence: person.decisionSequence,
-      policy: this.citizenPolicy.id ?? "unknown",
+      policy: decision.policy ?? this.citizenPolicy.id ?? "unknown",
       kind: observation.kind,
       observation: structuredClone(observation),
       legalActions: [...legalActions],
@@ -1171,6 +1374,7 @@ export class TownSimulation {
       this.updateStress(person);
       this.assessNeeds(person);
     });
+    this.observeFirmOpportunities();
     this.day += 1;
   }
 
@@ -1668,8 +1872,12 @@ export class TownSimulation {
   assertInvariants() {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
+    if (this.firms.some((firm, id) => firm.id !== id)) throw new Error("Firm entity IDs must remain stable array references");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
     if (this.people.some((person) => person.employer >= 0 && person.jobApplicationFirm >= 0)) throw new Error("An employed person cannot remain a job applicant");
+    if (this.people.some((person) => person.employer >= 0 && (!this.firms[person.employer]?.active || !this.firms[person.employer].employees.includes(person.id)))) throw new Error("Employment references must be reciprocal and active");
+    if (this.firms.some((firm) => firm.employees.some((personId) => this.people[personId]?.employer !== firm.id))) throw new Error("Firm employee references must be reciprocal");
+    if (this.contracts.some((contract, id) => contract.id !== id || !this.firms[contract.supplierId] || !this.firms[contract.buyerId])) throw new Error("Supply contract references must remain valid");
     if (this.firms.some((firm) => !firm.active && !["insolvent", "receivership"].includes(firm.status))) throw new Error("An inactive firm must be insolvent or in receivership");
     this.people.forEach((person) => {
       this.friendIds(person).forEach((friendId) => {
