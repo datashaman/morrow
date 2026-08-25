@@ -110,6 +110,10 @@ app.innerHTML = `
         <summary>Town policy</summary>
         <div class="policy-grid" id="policy-grid"></div>
       </details>
+      <details>
+        <summary>Run history</summary>
+        <ol class="control-history" id="control-history" tabindex="0" aria-label="Policy and neural-control changes, newest first"></ol>
+      </details>
     </section>
   </section>
 `;
@@ -127,7 +131,7 @@ const commonPark = { x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 };
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail", "neural-control", "policy-status",
-  "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid",
+  "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -137,6 +141,7 @@ const policyControls = [
   ["discretionaryDemand", "Discretionary demand", 0, 100, 1, (value) => `${value}%`],
   ["shockRisk", "Economic shocks", 0, 100, 1, (value) => `${value}%`],
 ];
+const policyLabels = Object.fromEntries(policyControls.map(([name, label]) => [name, label]));
 
 function buildControls() {
   elements["person-select"].replaceChildren(...simulation.people.map((person) => {
@@ -157,13 +162,32 @@ function buildControls() {
     heading.append(output);
     input.type = "range";
     Object.assign(input, { min, max, step, value: simulation.policy[name] });
-    input.addEventListener("input", () => {
-      simulation.setPolicy(name, input.value);
-      output.textContent = format(Number(input.value));
-    });
+    input.addEventListener("input", () => { output.textContent = format(Number(input.value)); });
+    input.addEventListener("change", () => { simulation.setPolicy(name, input.value); updateInterface(); });
     wrapper.append(heading, input);
     return wrapper;
   }));
+}
+
+function renderControlHistory(history) {
+  elements["control-history"].replaceChildren(...history.map((entry) => {
+    const item = document.createElement("li");
+    const label = entry.type === "policy" ? policyLabels[entry.setting] : "Neural personal-time control";
+    const before = entry.type === "policy" ? entry.before : entry.before ? "on" : "off";
+    const after = entry.type === "policy" ? entry.after : entry.after ? "on" : "off";
+    const time = document.createElement("time");
+    const change = document.createElement("span");
+    time.textContent = `D${entry.day} · ${entry.phaseName}`;
+    change.textContent = `${label}: ${before} → ${after}`;
+    item.append(time, change);
+    return item;
+  }));
+  if (!history.length) {
+    const item = document.createElement("li");
+    item.className = "control-history-empty";
+    item.textContent = "No mid-run control changes.";
+    elements["control-history"].append(item);
+  }
 }
 
 const money = (value) => value.toFixed(1);
@@ -295,6 +319,7 @@ function updateInterface() {
   elements.clock.textContent = `Day ${state.day} · ${state.phaseName}${playback.clockSuffix}`;
   elements["neural-control"].checked = state.citizenPolicy.mode === "neural";
   elements["policy-status"].textContent = `${state.citizenPolicy.mode === "neural" ? "Neural controls personal time" : "Motivation policy controls all choices"} · ${state.citizenPolicy.weightsVersion} · gate v${state.citizenPolicy.gateVersion} passed`;
+  renderControlHistory(state.controlHistory);
   elements.money.textContent = `${(state.totalMoney / state.initialMoney * 100).toFixed(2)}%`;
   elements["money-detail"].textContent = `${money(state.totalMoney)} of ${money(state.initialMoney)} remains on ledgers`;
   elements.employment.textContent = `${state.alive ? Math.round(state.employed / state.alive * 100) : 0}%`;

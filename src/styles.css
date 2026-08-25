@@ -118,6 +118,10 @@ summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
 .policy-grid label > span { display: flex; justify-content: space-between; gap: 0.5rem; color: var(--muted); font-size: 0.78rem; }
 .policy-grid output { color: var(--text); font-variant-numeric: tabular-nums; }
 .policy-grid input { width: 100%; accent-color: var(--accent); }
+.control-history { max-height: 12rem; overflow-y: auto; margin: 0.75rem 0 0; padding: 0; list-style: none; border: 1px solid var(--border); border-radius: 8px; }
+.control-history li { display: grid; grid-template-columns: minmax(8rem, 0.25fr) 1fr; gap: 0.75rem; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--border); }
+.control-history li:last-child { border-bottom: 0; }
+.control-history time, .control-history-empty { color: var(--muted); }
 
 @media (max-width: 760px) {
   .town-shell { width: min(100% - 1rem, 1120px); padding-top: 1rem; }

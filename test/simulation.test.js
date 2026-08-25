@@ -15,6 +15,40 @@ test("money remains inside the closed economy", () => {
   assert.ok(Math.abs(town.totalMoney() - initial) <= 0.1);
 });
 
+test("mid-run policy changes retain complete before-and-after control history", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.day = 12;
+  town.phase = 4;
+
+  town.setPolicy("supportRate", 60);
+  town.setPolicy("supportRate", 60);
+  town.setPolicy("minimumWage", 5.8);
+
+  assert.deepEqual(town.controlHistory, [
+    { day: 12, phase: 4, phaseName: "Housing & bills", sequence: 2, type: "policy", setting: "minimumWage", before: 5, after: 5.8 },
+    { day: 12, phase: 4, phaseName: "Housing & bills", sequence: 1, type: "policy", setting: "supportRate", before: 35, after: 60 },
+  ]);
+  assert.deepEqual(town.snapshot().controlHistory, town.controlHistory);
+});
+
+test("neural switches are audited and reset starts a fresh run history", () => {
+  const town = new TownSimulation({ seed: 42 });
+
+  town.setNeuralControl(true);
+  town.setNeuralControl(true);
+  town.setNeuralControl(false);
+
+  assert.deepEqual(town.controlHistory.map(({ type, setting, before, after }) => ({ type, setting, before, after })), [
+    { type: "neural-control", setting: "personalTime", before: true, after: false },
+    { type: "neural-control", setting: "personalTime", before: false, after: true },
+  ]);
+
+  town.reset();
+
+  assert.deepEqual(town.controlHistory, []);
+  assert.equal(town.controlSequence, 0);
+});
+
 test("a citizen retains their complete in-memory activity history", () => {
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];

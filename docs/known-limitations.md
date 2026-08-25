@@ -77,7 +77,7 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 - The canvas moves employees toward employers, current applicants toward the firm named by their domain application, other unemployed people toward the Common Park, and deceased people toward the cemetery continuously, not according to the seven economic phases. The map does not create applications or employment; park movement and the cemetery remain illustrative, and the park provides no shelter, food, services, or social effects.
 - Person positions are mutated by rendering and live on domain entities, weakening separation between simulation and view state.
 - The UI shows complete citizen and firm histories, owner-decision traces, and current firm pipelines, but no town-wide distributions, inequality measures, network graph, cross-entity trace query, or aggregate supply-chain history.
-- Economic slider changes and neural-control toggles apply mid-run without a town-level policy event history. Individual decision traces do identify the controller, fallback, schema, gate, and weights used at decision time.
+- Economic slider changes and neural-control toggles have a town-level before/after run history, and individual decision traces identify the controller, fallback, schema, gate, and weights used at decision time. Runs still cannot be exported or compared interactively.
 - There is no visible seed control or reset confirmation.
 - Browser behaviour is not covered by automated tests.
 - Directly opening `index.html` through `file://` may fail; Vite must serve the modules.

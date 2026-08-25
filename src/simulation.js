@@ -60,6 +60,8 @@ export class TownSimulation {
     this.day = 1;
     this.phase = 0;
     this.flows = [];
+    this.controlSequence = 0;
+    this.controlHistory = [];
     this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
     this.firms = FIRMS.map((firm, id) => ({
       ...firm,
@@ -216,13 +218,36 @@ export class TownSimulation {
 
   setPolicy(name, value) {
     if (!(name in this.policy)) throw new Error(`Unknown policy: ${name}`);
-    this.policy[name] = Number(value);
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) throw new Error(`Invalid policy value for ${name}`);
+    const before = this.policy[name];
+    if (before === numericValue) return numericValue;
+    this.policy[name] = numericValue;
+    this.recordControlChange("policy", name, before, numericValue);
+    return numericValue;
   }
 
   setNeuralControl(enabled) {
     if (typeof this.citizenPolicy.setEnabled !== "function") throw new Error("The active citizen policy does not support neural control switching");
-    this.citizenPolicy.setEnabled(Boolean(enabled));
+    const before = this.policyMetadata().mode === "neural";
+    const after = Boolean(enabled);
+    this.citizenPolicy.setEnabled(after);
+    if (before !== after) this.recordControlChange("neural-control", "personalTime", before, after);
     return this.policyMetadata();
+  }
+
+  recordControlChange(type, setting, before, after) {
+    this.controlSequence += 1;
+    this.controlHistory.unshift(Object.freeze({
+      day: this.day,
+      phase: this.phase,
+      phaseName: PHASES[this.phase],
+      sequence: this.controlSequence,
+      type,
+      setting,
+      before,
+      after,
+    }));
   }
 
   policyMetadata() {
@@ -1675,6 +1700,7 @@ export class TownSimulation {
       hungry: this.people.filter((person) => person.alive && person.hungryDays > 0).length,
       unhoused: this.people.filter((person) => person.alive && !person.housed).length,
       citizenPolicy: this.policyMetadata(),
+      controlHistory: this.controlHistory.map((entry) => ({ ...entry })),
     };
   }
 }

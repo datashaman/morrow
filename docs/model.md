@@ -16,6 +16,8 @@ One simulated day has seven phases. `step()` executes the current phase and adva
 
 The day counter increments during settlement. A full day therefore requires seven calls to `step()`.
 
+Policy sliders commit on release, and neural personal-time control changes immediately. Every value change records the current day and phase, setting, and before/after value in a complete newest-first run history. Repeating the current value creates no duplicate. Reset begins a fresh history while retaining the currently selected policy configuration and controller mode as the new run's starting state.
+
 ## Entities
 
 ### People
