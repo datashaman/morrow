@@ -49,6 +49,13 @@ app.innerHTML = `
       </div>
       <p class="person-summary" id="person-summary"></p>
       <div class="needs" id="needs"></div>
+      <section class="motivation-panel" aria-labelledby="knowledge-title">
+        <div class="motivation-heading">
+          <h2 id="knowledge-title">Knowledge</h2>
+          <div class="motivation-profile" id="knowledge-profile"></div>
+        </div>
+        <ol class="decision-stream" id="learning-stream" tabindex="0" aria-label="Citizen learning history, newest first"></ol>
+      </section>
       <section class="motivation-panel" aria-labelledby="motivation-title">
         <div class="motivation-heading">
           <h2 id="motivation-title">Motivation</h2>
@@ -134,7 +141,7 @@ const commonPark = COMMON_PARK;
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail", "neural-control", "policy-status", "town-stage",
-  "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
+  "person-select", "focus", "person-summary", "needs", "knowledge-profile", "learning-stream", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -290,6 +297,30 @@ function renderMotivations(person) {
   renderDecisions(person, elements["decision-stream"]);
 }
 
+function renderKnowledge(person) {
+  elements["knowledge-profile"].replaceChildren(...["general", "retail", "inventory"].map((domain) => {
+    const item = document.createElement("span");
+    item.innerHTML = `${domain[0].toUpperCase()}${domain.slice(1)} <b>${percent(person.knowledgeProfile[domain])}</b>`;
+    return item;
+  }));
+  const stream = elements["learning-stream"];
+  const followingNewest = stream.scrollTop <= 8;
+  const previousScrollHeight = stream.scrollHeight;
+  const previousScrollTop = stream.scrollTop;
+  stream.replaceChildren(...person.learningHistory.map((record) => {
+    const item = document.createElement("li");
+    item.innerHTML = `<time>D${record.day} · ${record.phase}</time><b>${record.domain[0].toUpperCase()}${record.domain.slice(1)} knowledge</b><span>${record.sourceName}: ${percent(record.before)} → ${percent(record.after)}</span><small>${record.rule}</small>`;
+    return item;
+  }));
+  if (!person.learningHistory.length) {
+    const item = document.createElement("li");
+    item.className = "decision-empty";
+    item.textContent = "No learning has been recorded yet.";
+    stream.append(item);
+  }
+  if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
+}
+
 function updateInterface() {
   const state = simulation.snapshot();
   const playback = playbackPresentation(state.alive, paused);
@@ -353,6 +384,7 @@ function updateInterface() {
     return item;
   }));
 
+  renderKnowledge(person);
   renderMotivations(person);
   renderActivity(person, elements["activity-filter"].value, elements["activity-stream"]);
 

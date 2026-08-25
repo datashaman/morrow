@@ -51,6 +51,8 @@ import {
   PRICE_REVIEW_DAYS,
   PRODUCTS,
   RENT_INTERVAL_DAYS,
+  RETAIL_COURSE_INVENTORY_TRANSFER_RATE,
+  RETAIL_COURSE_LEARNING_RATE,
   RETAIL_WORK_LEARNING_RATE,
   STAFFING_REVENUE_BUFFER,
   SUPPORT_RUNWAY_TARGET_DAYS,
@@ -1008,15 +1010,16 @@ export class TownSimulation {
     return Math.floor(capacity * firm.operationalReadiness);
   }
 
-  applyKnowledgeLearning(person, { source, sourceId, sourceName, domain, rate, rule }) {
+  applyKnowledgeLearning(person, { source, sourceId, sourceName, domain, rate = null, target = null, rule, phase = PHASES[this.phase] ?? "Production" }) {
     if (!this.knowledgeEnabled || !person.alive || !["general", "retail", "inventory"].includes(domain)) return null;
     const before = person.knowledgeProfile[domain];
-    const after = Math.round(clamp(before + rate * (1 - before)) * 1_000_000) / 1_000_000;
+    const nextValue = target === null ? before + rate * (1 - before) : target;
+    const after = Math.round(clamp(nextValue) * 1_000_000) / 1_000_000;
     if (after <= before) return null;
     person.knowledgeProfile[domain] = after;
     const record = {
       day: this.day,
-      phase: PHASES[this.phase] ?? "Production",
+      phase,
       source,
       sourceId,
       sourceName,
@@ -1039,6 +1042,7 @@ export class TownSimulation {
         domain: "retail",
         rate: RETAIL_WORK_LEARNING_RATE,
         rule: "attended-grocery-shift-retail-v1",
+        phase: "Production",
       }),
       this.applyKnowledgeLearning(person, {
         source: "workplace",
@@ -1047,8 +1051,21 @@ export class TownSimulation {
         domain: "inventory",
         rate: INVENTORY_WORK_LEARNING_RATE,
         rule: "attended-grocery-shift-inventory-v1",
+        phase: "Production",
       }),
     ].filter(Boolean);
+  }
+
+  syncGeneralKnowledge(person, { source, sourceId, sourceName, rule, phase = "Personal time" }) {
+    return this.applyKnowledgeLearning(person, {
+      source,
+      sourceId,
+      sourceName,
+      domain: "general",
+      target: person.skill,
+      rule,
+      phase,
+    });
   }
 
   maintainFirm(firm) {
@@ -1629,8 +1646,12 @@ export class TownSimulation {
       action: `buy-education:${school.id}`,
       firmId: school.id,
       firmName: school.name,
+      course: "retail-operations",
+      knowledgeDomain: "retail",
       totalPrice: school.price,
       skillGain: EDUCATION_SKILL_GAIN,
+      retailLearningRate: RETAIL_COURSE_LEARNING_RATE,
+      inventoryTransferRate: RETAIL_COURSE_INVENTORY_TRANSFER_RATE,
       capacityAvailable: school.transactionsToday < this.transactionCapacity(school),
     } : null;
     const legalActions = Object.freeze(["defer-education", ...(option ? [option.action] : [])]);
@@ -1655,8 +1676,32 @@ export class TownSimulation {
     person.educationSeller = school.id;
     person.lastEducationDay = this.day;
     person.skill = clamp(person.skill + EDUCATION_SKILL_GAIN, 0, 0.95);
+    this.syncGeneralKnowledge(person, {
+      source: "education",
+      sourceId: school.id,
+      sourceName: school.name,
+      rule: "paid-retail-course-general-skill-v1",
+    });
+    this.applyKnowledgeLearning(person, {
+      source: "education",
+      sourceId: school.id,
+      sourceName: school.name,
+      domain: "retail",
+      rate: RETAIL_COURSE_LEARNING_RATE,
+      rule: "paid-retail-course-retail-v1",
+      phase: "Personal time",
+    });
+    this.applyKnowledgeLearning(person, {
+      source: "education",
+      sourceId: school.id,
+      sourceName: school.name,
+      domain: "inventory",
+      rate: RETAIL_COURSE_INVENTORY_TRANSFER_RATE,
+      rule: "paid-retail-course-inventory-transfer-v1",
+      phase: "Personal time",
+    });
     person.growth = clamp(person.growth + 0.015);
-    this.note(person, `a lesson raised skill from ${Math.round(beforeSkill * 100)}% to ${Math.round(person.skill * 100)}%`, "good");
+    this.note(person, `a retail operations course raised skill from ${Math.round(beforeSkill * 100)}% to ${Math.round(person.skill * 100)}% and added retail knowledge`, "good");
     return true;
   }
 
@@ -1689,6 +1734,12 @@ export class TownSimulation {
     }
     if (activity === "self-study") {
       person.skill = clamp(person.skill + 0.003);
+      this.syncGeneralKnowledge(person, {
+        source: "self-study",
+        sourceId: person.id,
+        sourceName: person.name,
+        rule: "free-self-study-general-v1",
+      });
       person.growth = clamp(person.growth + 0.006);
       return true;
     }
@@ -1751,6 +1802,12 @@ export class TownSimulation {
     }
     if (decision.action === "buy-learning-tools" && this.buy(person, makers, 1, "learning tools")) {
       person.skill = clamp(person.skill + 0.02);
+      this.syncGeneralKnowledge(person, {
+        source: "learning-tools",
+        sourceId: makers.id,
+        sourceName: makers.name,
+        rule: "paid-learning-tools-general-v1",
+      });
       person.growth = clamp(person.growth + 0.04);
       return true;
     }

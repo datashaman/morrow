@@ -29,7 +29,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Agriculture, paid finite haulage, supply contracts and procurement, production, payroll, food, housing, discretionary activity, and settlement
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Hunger, bounded self-care and clinical treatment, health, stress, scarcity errors, arrears, eviction, rehousing, and death
-- Paid, finite education that gradually changes skill without guaranteeing employment
+- Paid, finite education that gradually changes general skill and explicit vocational knowledge without guaranteeing employment
 - Explicit fabrication, construction-material supply, finite dwellings, and paid building projects
 - Friendships and social encounters
 - Maslow-inspired needs and current behavioural focus

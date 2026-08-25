@@ -6,6 +6,8 @@ import {
   EDUCATION_SKILL_THRESHOLD,
   OPPORTUNITY_OBSERVATION_DAYS,
   OPPORTUNITY_STARTUP_CAPITAL,
+  RETAIL_COURSE_INVENTORY_TRANSFER_RATE,
+  RETAIL_COURSE_LEARNING_RATE,
 } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
@@ -14,6 +16,7 @@ function prepareStudents(town, skill = 0.3) {
     person.cash = 100;
     person.health = 0.9;
     person.skill = skill;
+    person.knowledgeProfile.general = skill;
   });
   town.initialMoney = town.totalMoney();
 }
@@ -82,6 +85,7 @@ test("a paid lesson transfers exact cash and gradually raises bounded skill", ()
   const student = town.people.find((person) => person.id !== school.owner);
   student.cash = 30;
   student.skill = 0.3;
+  student.knowledgeProfile.general = 0.3;
   student.stress = 0;
   student.motivationProfile = { ...student.motivationProfile, mastery: 1.3, planning: 1.3, security: 0.7, avoidance: 0.7 };
   school.inventory = 2;
@@ -94,10 +98,19 @@ test("a paid lesson transfers exact cash and gradually raises bounded skill", ()
   assert.equal(school.cash, schoolBefore + school.price);
   assert.equal(school.inventory, 1);
   assert.equal(student.skill, 0.3 + EDUCATION_SKILL_GAIN);
+  assert.equal(student.knowledgeProfile.general, student.skill);
+  assert.equal(student.knowledgeProfile.retail, RETAIL_COURSE_LEARNING_RATE);
+  assert.equal(student.knowledgeProfile.inventory, RETAIL_COURSE_INVENTORY_TRANSFER_RATE);
+  assert.deepEqual(student.learningHistory.map(({ source, sourceName, domain, rule }) => ({ source, sourceName, domain, rule })), [
+    { source: "education", sourceName: school.name, domain: "inventory", rule: "paid-retail-course-inventory-transfer-v1" },
+    { source: "education", sourceName: school.name, domain: "retail", rule: "paid-retail-course-retail-v1" },
+    { source: "education", sourceName: school.name, domain: "general", rule: "paid-retail-course-general-skill-v1" },
+  ]);
+  assert.ok(student.learningHistory.every((record) => record.phase === "Personal time" && record.after > record.before));
   assert.equal(student.educationSeller, school.id);
   assert.match(student.ledger[0].text, /bought 1 lesson from Morrow School/);
   assert.equal(student.decisions[0].kind, "education");
-  assert.match(student.events[0].text, /a lesson raised skill/);
+  assert.match(student.events[0].text, /retail operations course raised skill/);
   town.assertInvariants();
 });
 
@@ -107,11 +120,12 @@ test("education protects essential reserves and cannot create a partial purchase
   const reserve = town.essentialCost() * EDUCATION_RESERVE_DAYS;
   student.cash = school.price + reserve - 0.01;
   student.skill = 0.3;
+  student.knowledgeProfile.general = 0.3;
   school.inventory = 2;
-  const before = { cash: student.cash, skill: student.skill, stock: school.inventory };
+  const before = { cash: student.cash, skill: student.skill, knowledge: structuredClone(student.knowledgeProfile), learning: structuredClone(student.learningHistory), stock: school.inventory };
 
   assert.equal(town.considerEducation(student, school), false);
-  assert.deepEqual({ cash: student.cash, skill: student.skill, stock: school.inventory }, before);
+  assert.deepEqual({ cash: student.cash, skill: student.skill, knowledge: student.knowledgeProfile, learning: student.learningHistory, stock: school.inventory }, before);
   assert.deepEqual(student.decisions[0].legalActions, ["defer-education"]);
 });
 
