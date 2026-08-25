@@ -66,6 +66,7 @@ Current coverage protects:
 - attending-worker transaction limits and turned-away demand
 - economically supported vacancies, constrained expansion, and eventual hiring
 - agricultural production, cash-settled supply contracts, input costs, insolvency, and conserved one-time vital-business rescue
+- paired expanded-sector balance with hard invariant checks (`npm run evaluate:sectors`)
 - runway-based owner wage waivers and retained-surplus dividend decisions
 - owner equity contributions, voluntary insolvency, and constrained emergency distributions
 - deterministic reproduction from a seed

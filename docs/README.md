@@ -11,6 +11,7 @@
 - [Neural activation](./neural-activation.md): personal-time control boundary, held-out gate evidence, live fallback, and interpretation limits.
 - [Offline training](./offline-training.md): synthetic trajectories, optional Python training, weight artifacts, rewards, and golden compatibility tests.
 - [Known limitations](./known-limitations.md): simplifications, inactive controls, missing behaviours, and risks.
+- [Expanded-sector balance](./sector-balance.md): paired multi-seed evidence for jobs, firms, essential access, hardship, and new-sector regressions.
 - [Decision record](./decisions/0001-closed-individual-economy.md): foundational modeling decisions and their consequences.
 - [Personalization decision](./decisions/0002-retain-profile-only-personalization.md): research evidence for retaining stable profiles without embeddings or online adaptation.
 

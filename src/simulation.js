@@ -186,6 +186,7 @@ export class TownSimulation {
       shortfallToday: 0,
       transportLoadToday: 0,
       transportFeeToday: 0,
+      transportConstrainedToday: false,
     })).filter((contract) => contract.supplierId >= 0 && contract.buyerId >= 0).map((contract, id) => ({ ...contract, id }));
     this.contracts.filter((contract) => contract.use === "operations").forEach((contract) => {
       this.firms[contract.buyerId].operatingSupplies = contract.targetStock;
@@ -546,6 +547,7 @@ export class TownSimulation {
         shortfallToday: 0,
         transportLoadToday: 0,
         transportFeeToday: 0,
+        transportConstrainedToday: false,
       });
     });
   }
@@ -1116,6 +1118,7 @@ export class TownSimulation {
       contract.requestedToday = 0;
       contract.transportLoadToday = 0;
       contract.transportFeeToday = 0;
+      contract.transportConstrainedToday = false;
       contract.supplierUnitPriceToday = contract.unitPrice;
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
@@ -1188,6 +1191,7 @@ export class TownSimulation {
       contract.shortfallToday = contract.requestedToday - contract.deliveredToday;
       if (contract.shortfallToday > 0) {
         const transportCause = hauled && (!carrier || transportable < Math.min(contract.requestedToday, available, affordable));
+        contract.transportConstrainedToday = transportCause;
         this.note(buyer, transportCause
           ? `${carrier?.name ?? "No carrier"} could transport only ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s from ${supplier.name}`
           : `${supplier.name} delivered ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s`, "bad");

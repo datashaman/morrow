@@ -9,6 +9,7 @@
     "evaluate": "tsx scripts/evaluate-policies.ts",
     "evaluate:firms": "tsx scripts/evaluate-firm-viability.ts",
     "evaluate:development": "tsx scripts/evaluate-development.ts",
+    "evaluate:sectors": "tsx scripts/evaluate-sector-balance.ts",
     "evaluate:activation": "tsx scripts/evaluate-neural-activation.ts",
     "evaluate:personalization": "tsx scripts/evaluate-personalization.ts",
     "export:trajectories": "tsx scripts/export-trajectories.ts",

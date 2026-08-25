@@ -21,6 +21,7 @@ The app uses browser modules and should be served through Vite; opening `index.h
 npm test
 npm run build
 npm run evaluate
+npm run evaluate:sectors
 npm run evaluate:activation
 npm run evaluate:personalization -- --output personalization-report.json
 npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.json
@@ -32,6 +33,7 @@ npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.jso
 - `src/config.js` contains people, firms, phases, and policy defaults.
 - `src/random.js` provides seeded randomness for reproducible runs.
 - `src/policy-evaluation.ts` compares policy implementations across reproducible headless runs.
+- `src/sector-balance.ts` compares the historical foundation with the expanded health, education, construction, housing, and haulage economy.
 - `src/neural-policy.ts` runs one shared local neural network in shadow mode and behind a personal-time-only activation gate.
 - `src/neural-activation-evaluation.ts` verifies replay, invariants, domain containment, and bounded outcomes before activation.
 - `src/personalization-evaluation.ts` compares profile-only, learned-embedding, and bounded-adaptation research variants without exposing them in the runtime.
