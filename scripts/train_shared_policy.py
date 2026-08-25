@@ -13,7 +13,7 @@ from pathlib import Path
 ARTIFACT_FORMAT = "morrow-shared-policy-weights"
 ARTIFACT_FORMAT_VERSION = 1
 SUPPORTED_TRAJECTORY_SCHEMAS = {1, 2}
-SUPPORTED_NEURAL_SCHEMA = 1
+SUPPORTED_NEURAL_SCHEMA = 2
 OBJECTIVE = "reward-weighted-active-policy-imitation-v1"
 
 

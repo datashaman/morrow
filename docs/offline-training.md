@@ -60,6 +60,8 @@ These values are explicit gameplay hypotheses. They are not welfare, utility, he
 
 `loadSharedNeuralWeightArtifact()` rejects unknown formats, neural-schema or action-order mismatches, unsupported architectures, wrong matrix/vector shapes, missing golden vectors, and non-finite values before constructing runtime weights.
 
+The checked schema-v1 artifact and golden fixture remain accepted only through a named schema-v2 compatibility migration. That migration inserts three zero columns for general, retail, and inventory knowledge before the action features, appends zero knowledge to golden observations, and gives the loaded weights a migration suffix. It preserves old scores without claiming the old training learned from knowledge. New trajectory exports and newly trained artifacts use neural schema v2 directly.
+
 ## Cross-runtime golden test
 
 [`test/fixtures/python-exported-weights.json`](../test/fixtures/python-exported-weights.json) is a deliberately tiny artifact produced by the Python script. Node tests load it through the TypeScript validator and reproduce Python's expected score to within `1e-12`. This protects feature order, shape, activation, bias, and matrix-orientation compatibility.

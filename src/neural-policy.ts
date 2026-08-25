@@ -8,8 +8,10 @@ import type {
   MotivationProfile,
 } from "./citizen-policy.ts";
 
-export const NEURAL_SCHEMA_VERSION = 1;
-export const NEURAL_WEIGHTS_VERSION = "shared-mlp-seed-2901-h12-v1";
+export const NEURAL_SCHEMA_VERSION = 2;
+export const NEURAL_WEIGHTS_VERSION = "shared-mlp-seed-2901-h12-v2";
+export const LEGACY_NEURAL_SCHEMA_VERSION = 1;
+export const LEGACY_KNOWLEDGE_MIGRATION_SUFFIX = "-schema2-zero-knowledge";
 
 export const ACTION_KINDS = [
   "accept-job-offer", "decline-job-offer", "attend-shift", "miss-shift", "skip-job-search", "apply-job",
@@ -33,6 +35,7 @@ export const NEURAL_OBSERVATION_SCHEMA = Object.freeze({
   features: Object.freeze([
     "bias", ...OBSERVATION_KINDS.map((kind) => `kind:${kind}`), ...PROFILE_FEATURES.map((name) => `profile:${name}`),
     "stress", "health", "hungryDays", "runwayDays", "reliability", "safetyNeed", "firmTrouble", "optionCount", "firmRunwayDays", "ownerRunwayDays",
+    "knowledge:general", "knowledge:retail", "knowledge:inventory",
   ]),
 });
 
@@ -55,6 +58,7 @@ export function actionKind(action: string): ActionKind {
 export function encodeNeuralObservation(observation: CitizenObservation) {
   const source = observation as any;
   const profile = (source.profile ?? {}) as Partial<MotivationProfile>;
+  const knowledge = source.knowledgeProfile ?? {};
   const options = Array.isArray(source.options) ? source.options : [];
   return [
     1,
@@ -70,6 +74,9 @@ export function encodeNeuralObservation(observation: CitizenObservation) {
     clamp01(options.length / 8),
     clamp01(source.firmRunwayDays / 10),
     clamp01(source.ownerRunwayDays / 20),
+    clamp01(knowledge.general),
+    clamp01(knowledge.retail),
+    clamp01(knowledge.inventory),
   ];
 }
 
@@ -121,6 +128,49 @@ export type SharedNeuralWeightArtifact = Readonly<{
 }>;
 
 const expectedNeuralInputSize = () => NEURAL_OBSERVATION_SCHEMA.features.length + ACTION_KINDS.length + ACTION_NUMERIC_FEATURES.length;
+const KNOWLEDGE_FEATURE_COUNT = 3;
+
+export function migrateSharedNeuralWeightArtifactV1(value: unknown) {
+  const artifact = value as any;
+  if (!artifact || artifact.neuralSchemaVersion !== LEGACY_NEURAL_SCHEMA_VERSION) throw new Error("Expected a neural schema-v1 artifact");
+  const legacyObservationWidth = NEURAL_OBSERVATION_SCHEMA.features.length - KNOWLEDGE_FEATURE_COUNT;
+  const legacyInputSize = expectedNeuralInputSize() - KNOWLEDGE_FEATURE_COUNT;
+  if (artifact.architecture?.inputSize !== legacyInputSize) throw new Error("Invalid legacy neural input size");
+  if (!Array.isArray(artifact.weights?.hiddenWeights)
+    || artifact.weights.hiddenWeights.some((row: unknown) => !Array.isArray(row) || row.length !== legacyInputSize)) {
+    throw new Error("Invalid legacy hiddenWeights");
+  }
+  if (!Array.isArray(artifact.goldenVectors)
+    || artifact.goldenVectors.some((vector: any) => !Array.isArray(vector?.observation) || vector.observation.length !== legacyObservationWidth)) {
+    throw new Error("Invalid legacy golden observation width");
+  }
+  return {
+    ...artifact,
+    neuralSchemaVersion: NEURAL_SCHEMA_VERSION,
+    weightsVersion: `${artifact.weightsVersion}${LEGACY_KNOWLEDGE_MIGRATION_SUFFIX}`,
+    architecture: { ...artifact.architecture, inputSize: expectedNeuralInputSize() },
+    training: {
+      ...artifact.training,
+      migration: {
+        fromNeuralSchemaVersion: LEGACY_NEURAL_SCHEMA_VERSION,
+        rule: "append-zero-weight-general-retail-inventory-v1",
+        notice: "Compatibility migration only; knowledge inputs have no trained influence.",
+      },
+    },
+    weights: {
+      ...artifact.weights,
+      hiddenWeights: artifact.weights.hiddenWeights.map((row: number[]) => [
+        ...row.slice(0, legacyObservationWidth),
+        ...Array(KNOWLEDGE_FEATURE_COUNT).fill(0),
+        ...row.slice(legacyObservationWidth),
+      ]),
+    },
+    goldenVectors: artifact.goldenVectors.map((vector: any) => ({
+      ...vector,
+      observation: [...vector.observation, ...Array(KNOWLEDGE_FEATURE_COUNT).fill(0)],
+    })),
+  };
+}
 
 function finiteVector(value: unknown, length: number, label: string): number[] {
   if (!Array.isArray(value) || value.length !== length || value.some((item) => typeof item !== "number" || !Number.isFinite(item))) {
@@ -130,7 +180,10 @@ function finiteVector(value: unknown, length: number, label: string): number[] {
 }
 
 export function loadSharedNeuralWeightArtifact(value: unknown) {
-  const artifact = value as any;
+  const source = value as any;
+  const artifact = source?.neuralSchemaVersion === LEGACY_NEURAL_SCHEMA_VERSION
+    ? migrateSharedNeuralWeightArtifactV1(source)
+    : source;
   if (!artifact || artifact.format !== "morrow-shared-policy-weights" || artifact.formatVersion !== 1) throw new Error("Unsupported neural weight artifact format");
   if (artifact.neuralSchemaVersion !== NEURAL_SCHEMA_VERSION) throw new Error(`Neural schema mismatch: expected ${NEURAL_SCHEMA_VERSION}`);
   if (!Array.isArray(artifact.actionKinds) || artifact.actionKinds.length !== ACTION_KINDS.length || artifact.actionKinds.some((kind: string, index: number) => kind !== ACTION_KINDS[index])) {
@@ -180,7 +233,7 @@ export function createSharedNeuralWeights(seed = 2901, hiddenSize = 12): SharedN
   const weight = (scale: number) => (random() * 2 - 1) * scale;
   const inputScale = 0.8 / Math.sqrt(inputSize);
   return Object.freeze({
-    version: seed === 2901 && hiddenSize === 12 ? NEURAL_WEIGHTS_VERSION : `shared-mlp-seed-${seed}-h${hiddenSize}-v1`,
+    version: seed === 2901 && hiddenSize === 12 ? NEURAL_WEIGHTS_VERSION : `shared-mlp-seed-${seed}-h${hiddenSize}-v2`,
     hiddenWeights: Object.freeze(Array.from({ length: hiddenSize }, () => Object.freeze(Array.from({ length: inputSize }, () => weight(inputScale))))),
     hiddenBias: Object.freeze(Array.from({ length: hiddenSize }, () => weight(0.08))),
     outputWeights: Object.freeze(Array.from({ length: hiddenSize }, () => weight(0.35))),
@@ -356,8 +409,8 @@ export class GatedNeuralCitizenPolicy implements CitizenPolicy {
 
   decide(input: CitizenPolicyInput): CitizenPolicyDecision {
     const fallback = this.fallbackPolicy.decide(input);
-    // Health care was added after the versioned neural schema and activation gate.
-    // Keep it under the auditable motivation fallback until a future gate covers it.
+    // These domains remain outside the personal-time activation gate.
+    // Keep them under the auditable motivation fallback until a future gate covers them.
     if (["health", "education", "clinical-care"].includes(input.observation.kind)) return { ...fallback, policy: this.fallbackPolicy.id } as CitizenPolicyDecision;
     const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     const neuralControls = this.enabled && input.observation.kind === "personal-time";

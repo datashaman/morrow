@@ -27,6 +27,12 @@ export type MotivationProfile = Readonly<{
   avoidance: number;
 }>;
 
+export type KnowledgeProfile = Readonly<{
+  general: number;
+  retail: number;
+  inventory: number;
+}>;
+
 export type JobOfferObservation = Readonly<{
   kind: "job-offer";
   citizenId: number;
@@ -96,6 +102,7 @@ export type PersonalTimeObservation = Readonly<{
   relationshipCount: number;
   strongestRelationship: number;
   freeActivity?: "rest" | "park-social" | "self-study";
+  knowledgeProfile?: KnowledgeProfile;
   profile: MotivationProfile;
 }>;
 

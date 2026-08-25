@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   ACTION_KINDS,
+  LEGACY_KNOWLEDGE_MIGRATION_SUFFIX,
   loadSharedNeuralWeightArtifact,
   scoreNeuralInput,
 } from "../src/neural-policy.ts";
@@ -41,7 +42,15 @@ test("TypeScript validates Python-exported weights and reproduces their golden s
     assert.ok(Math.abs(actual - vector.expectedScore) < 1e-12);
   });
   assert.equal(loaded.artifact.training.objective, "reward-weighted-active-policy-imitation-v1");
-  assert.equal(loaded.weights.version, fixture.weightsVersion);
+  assert.equal(loaded.artifact.neuralSchemaVersion, 2);
+  assert.equal(loaded.weights.version, `${fixture.weightsVersion}${LEGACY_KNOWLEDGE_MIGRATION_SUFFIX}`);
+  assert.equal(loaded.artifact.training.migration.rule, "append-zero-weight-general-retail-inventory-v1");
+  const legacyObservationWidth = fixture.goldenVectors[0].observation.length;
+  loaded.weights.hiddenWeights.forEach((row, index) => {
+    assert.deepEqual(row.slice(legacyObservationWidth, legacyObservationWidth + 3), [0, 0, 0]);
+    assert.deepEqual(row.slice(0, legacyObservationWidth), fixture.weights.hiddenWeights[index].slice(0, legacyObservationWidth));
+    assert.deepEqual(row.slice(legacyObservationWidth + 3), fixture.weights.hiddenWeights[index].slice(legacyObservationWidth));
+  });
 });
 
 test("weight loading rejects incompatible schemas, shapes, and non-finite values", () => {

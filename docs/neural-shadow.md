@@ -10,13 +10,15 @@ There is no network per citizen and no raw citizen ID input. Citizens differ thr
 
 ## Versioned schemas
 
-Schema version 1 defines:
+Schema version 2 defines:
 
-- observation features: decision kind, seven profile weights, stress, health, hunger, runway, reliability, safety, firm trouble, option count, and owner/firm runway where applicable;
+- observation features: decision kind, seven profile weights, stress, health, hunger, runway, reliability, safety, firm trouble, option count, owner/firm runway where applicable, and bounded general, retail, and inventory knowledge;
 - action features: one-hot action kind plus bounded numeric values such as price, amount, quality, age, capacity, wage, and owner-option consequences;
 - a legal mask over 27 stable action kinds.
 
 Dynamic actions such as applying to a particular firm or buying a particular food quantity share an action kind but retain their concrete numeric option features. Changing feature order, normalization, action kinds, or mask meaning requires a new schema version. Changing fixed or trained parameters requires a new weights version.
+
+The bundled schema-v1 artifact is loaded through an explicit compatibility migration. Three zero-valued input weights are inserted between the old observation vector and action vector in every hidden row, and zero knowledge values are appended to its golden observations. Its scores therefore remain bit-for-bit equivalent for the same legacy observation/action pair. The migrated weights version is suffixed `schema2-zero-knowledge`: schema v2 can observe knowledge, but the bundled network has no trained knowledge effect.
 
 ## Shadow inference
 

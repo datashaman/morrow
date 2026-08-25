@@ -6,7 +6,7 @@ Food, housing, attendance, job search, job offers, and owner choices always rema
 
 ## Bundled candidate
 
-The artifact `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94` was trained with the standard-library Python workflow on 8,760 synthetic decisions from seeds 11, 22, 33, 44, and 55 over 15 days. Its objective is reward-weighted imitation of the active motivation policy. The model, rewards, and training set are hypotheses, not empirical behavioral evidence.
+The schema-v1 artifact `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94` was trained with the standard-library Python workflow on 8,760 synthetic decisions from seeds 11, 22, 33, 44, and 55 over 15 days. Runtime loading migrates it to schema v2 as `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94-schema2-zero-knowledge` by adding zero weights for the three knowledge inputs. Its objective is reward-weighted imitation of the active motivation policy; the migration does not retrain it or give knowledge causal influence. The model, rewards, and training set are hypotheses, not empirical behavioral evidence.
 
 ## Gate v1
 
@@ -23,7 +23,7 @@ The checked certificate uses seeds 101, 202, 303, 404, and 505 for 30 days and r
 - at least one neural-controlled decision in every candidate run and zero neural control outside personal time;
 - absolute deltas versus `motivation-v3` no greater than 5 percentage points survival, 5 percentage points employment, 2 hungry citizens, 2 unhoused citizens, and 1 insolvent firm.
 
-All checks passed. The candidate controlled a mean 1,196.4 personal-time decisions per run and chose the same action as the motivation fallback in every one, so all five bounded outcome deltas were exactly zero. This is a deliberately narrow tracer bullet: it establishes that a learned artifact can pass through the control path without changing these held-out runs, not that it improves decisions or will generalize.
+The schema-v2 gate re-evaluation passed every check. The candidate controlled 1,200 personal-time decisions per run and chose the same action as the motivation fallback in every one, so all five bounded outcome deltas were exactly zero. This is a deliberately narrow tracer bullet: it establishes that a migrated learned artifact can pass through the control path without changing these held-out runs, not that it improves decisions or will generalize.
 
 ## Runtime refusal and fallback
 

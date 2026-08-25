@@ -24,6 +24,7 @@ const personalObservation = {
   needs: { physiological: 1, safety: 0.5, belonging: 0.3, esteem: 0.4, growth: 0.2 },
   relationshipCount: 1,
   strongestRelationship: 0.5,
+  knowledgeProfile: { general: 0.6, retail: 0.4, inventory: 0.2 },
   profile: { comfort: 1, connection: 1, mastery: 1, security: 1, foodQuality: 1, planning: 1, avoidance: 1 },
 };
 
@@ -36,6 +37,7 @@ test("neural observation and action schemas are versioned and fixed-width", () =
   assert.equal(observation.length, NEURAL_OBSERVATION_SCHEMA.features.length);
   assert.equal(action.length, NEURAL_ACTION_SCHEMA.kinds.length + NEURAL_ACTION_SCHEMA.numericFeatures.length);
   assert.ok(observation.every(Number.isFinite));
+  assert.deepEqual(observation.slice(-3), [0.6, 0.4, 0.2]);
   assert.ok(action.every(Number.isFinite));
 });
 
@@ -81,7 +83,7 @@ test("shadow policy preserves the active choice and records the neural compariso
   assert.equal(decision.reasons[0], "active stayed in control");
   assert.ok(["do-nothing", "social-visit"].includes(decision.shadow.action));
   assert.equal(decision.shadow.diverged, decision.shadow.action !== decision.action);
-  assert.equal(decision.shadow.schemaVersion, 1);
+  assert.equal(decision.shadow.schemaVersion, 2);
 });
 
 test("the default town records neural shadow traces while its passed gate remains disabled", () => {
@@ -93,7 +95,7 @@ test("the default town records neural shadow traces while its passed gate remain
 
   assert.equal(town.citizenPolicy.fallbackPolicy instanceof MotivationCitizenPolicy, true);
   assert.equal(town.snapshot().citizenPolicy.mode, "deterministic");
-  assert.equal(person.decisions[0].shadow.policy, "neural-shadow-schema-1");
+  assert.equal(person.decisions[0].shadow.policy, "neural-shadow-schema-2");
   assert.ok(person.decisions[0].legalActions.includes(person.decisions[0].shadow.action));
 });
 

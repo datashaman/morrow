@@ -1776,6 +1776,7 @@ export class TownSimulation {
       relationshipCount: relationships.count,
       strongestRelationship: relationships.strongest,
       freeActivity,
+      knowledgeProfile: { ...person.knowledgeProfile },
       profile: { ...person.motivationProfile },
     });
     const frozenLegalActions = Object.freeze([...legalActions]);
