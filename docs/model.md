@@ -37,7 +37,9 @@ Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.
 
 ### Firms
 
-Six firm archetypes are configured in `src/config.js`. An archetype defines a repeatable kind of business, product pipeline, prices, staffing assumptions, and map location. A runtime firm is a distinct instance with its own numeric entity ID, stable archetype-and-sequence identity such as `cafe:1`, founding day, founder, cash, workers, contracts, and history. Closed instances remain in the town record rather than being rewritten as a new business.
+Six firm archetypes are configured in `src/config.js`. The interactive town starts with the four-firm essential foundation—Harvest Foods, HomeWorks, Makers Guild, and Morrow Fields—while Common Café and Green Basket begin as latent opportunities. The explicit six-firm initialization remains available to headless diagnostics so historical neural gates and viability comparisons retain their original scenario.
+
+An archetype defines a repeatable kind of business, product pipeline, prices, staffing assumptions, and map location. A runtime firm is a distinct instance with its own numeric entity ID, stable archetype-and-sequence identity such as `cafe:1`, founding day, founder, cash, workers, contracts, and history. Closed instances remain in the town record rather than being rewritten as a new business.
 
 The product catalog gives every traded thing a stable identifier, label, and unit; each archetype declares the product it sells, its input when it has one, its source, and how its output is obtained.
 
@@ -50,7 +52,7 @@ The product catalog gives every traded thing a stable identifier, label, and uni
 | Common Café | Prepared café service | Morrow Fields produce, prepared by café staff | 2.2 | 6.4 | 2 |
 | Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.25 wholesale | 5.8 | 7 |
 
-Each configured starting instance begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first six people are assigned as owners, one per starting firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, and Morrow Fields are currently marked vital because they provide the lowest-priced food, the only housing service, and the sole agricultural input respectively.
+Each operating starting instance begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first four people are assigned as owners in the interactive minimal start, one per starting firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, and Morrow Fields are currently marked vital because they provide the lowest-priced food, the only housing service, and the sole agricultural input respectively. The four active supply contracts connect agriculture to essential food and Makers Guild maintenance to the food shop, housing provider, and farm from day one.
 
 #### Private café and premium-food formation
 

@@ -1,5 +1,5 @@
 import "./styles.css";
-import { PHASES, PRODUCTS } from "./config.js";
+import { DEFAULT_LATENT_FIRM_NAMES, PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
 import { describeContract, describePipeline } from "./firm-presentation.js";
 import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-presentation.js";
@@ -119,7 +119,7 @@ app.innerHTML = `
   </section>
 `;
 
-const simulation = new TownSimulation();
+const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES });
 let selected = simulation.people.findIndex((person) => person.name === "Sizwe");
 let selectedFirm = 0;
 let paused = false;

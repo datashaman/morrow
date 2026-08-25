@@ -38,6 +38,7 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 - Insolvent firms do not liquidate inventory or other assets, distribute proceeds, or reorganize. Only configured essential housing, agriculture, and food operators can reopen under a treasury-appointed public operator; other firms do not gain a replacement owner or reopen.
 - Essential-sector re-entry reuses the closed firm's inventory, product, and name, and uses fixed funding, staffing, cooldown, and upstream rules rather than modeling incorporation, capital procurement, licensing, management selection, capacity planning, or competing entrants.
 - Endogenous private formation and replacement are limited to Common Café and Green Basket. Their seven-day opportunity window, 50% demand capture, 8% margin buffer, 40 startup capital, protected ten-day founder runway, deterministic founder ranking, 21-day post-failure cooldown, permanent exclusion of prior owners, and immediate staffing/contracts are gameplay hypotheses. Other archetypes cannot form privately, and there is no reputation, lender confidence, incorporation, acquisition, asset sale, or variable startup plan.
+- The interactive minimal start assumes one operating firm in each essential production, food, housing, and maintenance role. It does not model how those initial institutions were founded, and retaining a separate six-firm diagnostic scenario means evaluation results must identify their starting composition before being compared.
 
 ## Labour simplifications
 
