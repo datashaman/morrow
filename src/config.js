@@ -15,6 +15,7 @@ export const PRODUCTS = {
   housing: { name: "Weekly housing", unit: "tenancy-week" },
   learningGoods: { name: "Tools and repair kits", unit: "kit" },
   cafeService: { name: "Prepared café service", unit: "visit" },
+  medicine: { name: "Self-care medicine", unit: "dose" },
 };
 
 export const RENT_INTERVAL_DAYS = 7;
@@ -51,7 +52,11 @@ export const OPPORTUNITY_PROTECTED_RUNWAY_DAYS = 10;
 export const OPPORTUNITY_DEMAND_CAPTURE_RATE = 0.5;
 export const OPPORTUNITY_MARGIN_BUFFER = 1.08;
 export const PRIVATE_REENTRY_COOLDOWN_DAYS = 21;
-export const DEFAULT_LATENT_FIRM_NAMES = Object.freeze(["Common Café", "Green Basket"]);
+export const PRIVATE_FORMATION_ARCHETYPE_IDS = Object.freeze(["cafe", "premium-grocer", "apothecary"]);
+export const HEALTH_TREATMENT_THRESHOLD = 0.68;
+export const HEALTH_TREATMENT_RECOVERY = 0.08;
+export const HEALTH_TREATMENT_RESERVE_DAYS = 2;
+export const DEFAULT_LATENT_FIRM_NAMES = Object.freeze(["Common Café", "Green Basket", "Morrow Apothecary"]);
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",
@@ -67,6 +72,7 @@ export const FIRMS = [
   { archetypeId: "housing-provider", name: "HomeWorks", sector: "housing", vital: true, sells: "housing", input: null, source: null, production: "fixed-service", sourceDescription: "housing staff operate the town's current dwelling service", x: 0.80, y: 0.29, price: 6, wage: 7.2, productivity: 0, transactionsPerWorker: 10, inventory: 0, initialStaff: 4, maxStaff: 6 },
   { archetypeId: "toolmaker", name: "Makers Guild", sector: "goods", sells: "learningGoods", input: null, source: null, production: "direct", sourceDescription: "guild workers make tools and repair kits locally", x: 0.25, y: 0.73, price: 6, wage: 7.8, productivity: 2.1, transactionsPerWorker: 3, inventory: 18, initialStaff: 3, maxStaff: 6 },
   { archetypeId: "cafe", name: "Common Café", sector: "service", sells: "cafeService", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "café staff prepare visits using farm produce", x: 0.69, y: 0.73, price: 2.2, wage: 6.4, productivity: 0, transactionsPerWorker: 4, inventory: 6, initialStaff: 2, maxStaff: 4 },
+  { archetypeId: "apothecary", name: "Morrow Apothecary", sector: "health", sells: "medicine", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "apothecary workers compound farm produce into medicine", x: 0.56, y: 0.50, price: 3.6, wage: 6.8, productivity: 0, transactionsPerWorker: 6, inventory: 8, initialStaff: 2, formationStaff: 1, maxStaff: 4, defaultLatent: true },
   { archetypeId: "farm", name: "Morrow Fields", sector: "agriculture", vital: true, sells: "produce", input: null, source: null, production: "direct", sourceDescription: "farm workers grow produce locally", x: 0.08, y: 0.54, price: 1.1, wage: 5.8, productivity: 9, transactionsPerWorker: 8, inventory: 36, initialStaff: 7, maxStaff: 12 },
 ];
 
@@ -74,10 +80,12 @@ export const SUPPLY_CONTRACTS = [
   { supplier: "Morrow Fields", buyer: "Harvest Foods", product: "produce", output: "budgetFood", dailyQuantity: 22, unitPrice: 1.1 },
   { supplier: "Morrow Fields", buyer: "Green Basket", product: "produce", output: "premiumFood", dailyQuantity: 14, unitPrice: 1.25 },
   { supplier: "Morrow Fields", buyer: "Common Café", product: "produce", output: "cafeService", dailyQuantity: 3, unitPrice: 1.1 },
+  { supplier: "Morrow Fields", buyer: "Morrow Apothecary", product: "produce", output: "medicine", dailyQuantity: 6, unitPrice: 1.1 },
   { supplier: "Makers Guild", buyer: "Harvest Foods", product: "learningGoods", output: "budgetFood", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
   { supplier: "Makers Guild", buyer: "Green Basket", product: "learningGoods", output: "premiumFood", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
   { supplier: "Makers Guild", buyer: "HomeWorks", product: "learningGoods", output: "housing", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
   { supplier: "Makers Guild", buyer: "Common Café", product: "learningGoods", output: "cafeService", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
+  { supplier: "Makers Guild", buyer: "Morrow Apothecary", product: "learningGoods", output: "medicine", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
   { supplier: "Makers Guild", buyer: "Morrow Fields", product: "learningGoods", output: "produce", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
 ];
 

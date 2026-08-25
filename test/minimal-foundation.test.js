@@ -14,11 +14,11 @@ function runDays(town, days) {
   return town;
 }
 
-test("Morrow starts with an essential four-firm foundation and two visible opportunities", () => {
+test("Morrow starts with an essential four-firm foundation and three visible opportunities", () => {
   const town = minimalTown({ seed: 42 });
 
   assert.deepEqual(town.firms.map((firm) => firm.name), ["Harvest Foods", "HomeWorks", "Makers Guild", "Morrow Fields"]);
-  assert.deepEqual(town.firmOpportunities().map((opportunity) => opportunity.name), ["Common Café", "Green Basket"]);
+  assert.deepEqual(town.firmOpportunities().map((opportunity) => opportunity.name), ["Common Café", "Green Basket", "Morrow Apothecary"]);
   assert.ok(town.firmOpportunities().every((opportunity) => opportunity.observedDays === 0 && !opportunity.ready));
   assert.deepEqual(town.contracts.map((contract) => `${contract.supplier} → ${contract.buyer}`), [
     "Morrow Fields → Harvest Foods",

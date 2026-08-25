@@ -12,6 +12,9 @@ import {
   FRIENDSHIP_END_THRESHOLD,
   FOOD_HEALTH_RECOVERY,
   FOOD_QUALITY_DECAY_PER_DAY,
+  HEALTH_TREATMENT_RECOVERY,
+  HEALTH_TREATMENT_RESERVE_DAYS,
+  HEALTH_TREATMENT_THRESHOLD,
   HOUSING_DISPLACEMENT_RATE,
   HOUSING_RECEIVERSHIP_GRACE_DAYS,
   HOUSING_REPLACEMENT_STAFF,
@@ -27,6 +30,7 @@ import {
   OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
   OPPORTUNITY_STARTUP_CAPITAL,
   PHASES,
+  PRIVATE_FORMATION_ARCHETYPE_IDS,
   PRIVATE_REENTRY_COOLDOWN_DAYS,
   PRICE_ADJUSTMENT_RATE,
   PRICE_CEILING_MULTIPLIER,
@@ -146,7 +150,7 @@ export class TownSimulation {
     this.opportunityWindows = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, []]));
     this.firmInstanceCounts = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, 0]));
     this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
-    this.firms = FIRMS.filter((archetype) => !this.latentFirmNames.includes(archetype.name)).map((archetype, id) => {
+    this.firms = FIRMS.filter((archetype) => !archetype.defaultLatent && !this.latentFirmNames.includes(archetype.name)).map((archetype, id) => {
       this.firmInstanceCounts[archetype.archetypeId] = 1;
       return this.createFirmInstance(archetype, id);
     });
@@ -202,6 +206,8 @@ export class TownSimulation {
         lastFoodQuality: null,
         lastFoodAge: null,
         personalSeller: -1,
+        healthSeller: -1,
+        lastTreatmentDay: null,
         socialVenueToday: null,
         rentSeller: -1,
         homeX,
@@ -330,9 +336,17 @@ export class TownSimulation {
     }, 0);
   }
 
+  apothecaryDemandCount(archetype) {
+    const reserve = this.essentialCost() * HEALTH_TREATMENT_RESERVE_DAYS;
+    return this.people.filter((person) => person.alive
+      && person.health < HEALTH_TREATMENT_THRESHOLD
+      && person.cash + 1e-9 >= archetype.price + reserve).length;
+  }
+
   opportunityDemandCount(archetype) {
     if (archetype.archetypeId === "cafe") return this.cafeDemandCount(archetype);
     if (archetype.archetypeId === "premium-grocer") return this.premiumFoodDemandCount(archetype);
+    if (archetype.archetypeId === "apothecary") return this.apothecaryDemandCount(archetype);
     return 0;
   }
 
@@ -375,11 +389,12 @@ export class TownSimulation {
       ? observations.reduce((sum, observation) => sum + observation.potentialCustomers, 0) / observations.length
       : 0;
     const produceTemplate = templates.find((contract) => contract.buyer === archetype.name && contract.use !== "operations");
-    const expectedOutputUnits = archetype.archetypeId === "premium-grocer"
+    const demandScaledInputs = ["premium-grocer", "apothecary"].includes(archetype.archetypeId);
+    const expectedOutputUnits = demandScaledInputs
       ? Math.min(expectedDailyDemand * OPPORTUNITY_DEMAND_CAPTURE_RATE, produceTemplate?.dailyQuantity ?? Infinity)
       : expectedDailyDemand * (this.policy.discretionaryDemand / 100) * OPPORTUNITY_DEMAND_CAPTURE_RATE;
     const expectedDailyRevenue = roundMoney(expectedOutputUnits * archetype.price);
-    const variablePremiumInputs = archetype.archetypeId === "premium-grocer"
+    const variableDemandInputs = demandScaledInputs
       ? expectedOutputUnits * (produceTemplate?.unitPrice ?? 0)
       : null;
     const expectedDailyCost = roundMoney(
@@ -387,7 +402,7 @@ export class TownSimulation {
       + templates.filter((contract) => contract.buyer === archetype.name).reduce(
         (sum, contract) => sum + (contract.use === "operations"
           ? contract.dailyQuantity * contract.unitPrice / MAINTENANCE_INTERVAL_DAYS
-          : (variablePremiumInputs ?? contract.dailyQuantity * contract.unitPrice)),
+          : (variableDemandInputs ?? contract.dailyQuantity * contract.unitPrice)),
         0,
       ),
     );
@@ -408,7 +423,7 @@ export class TownSimulation {
       observedDays: observations.length,
       requiredObservationDays: OPPORTUNITY_OBSERVATION_DAYS,
       latestPotentialCustomers: observations.at(-1)?.potentialCustomers ?? 0,
-      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : "potential customers",
+      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : "potential customers",
       expectedDailyDemand,
       expectedDailyRevenue,
       expectedDailyCost,
@@ -429,7 +444,7 @@ export class TownSimulation {
   }
 
   firmOpportunities() {
-    return [this.firmArchetype("cafe"), this.firmArchetype("premium-grocer")]
+    return PRIVATE_FORMATION_ARCHETYPE_IDS.map((archetypeId) => this.firmArchetype(archetypeId))
       .filter((archetype) => archetype && !this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId))
       .map((archetype) => this.opportunityEvidence(archetype));
   }
@@ -505,7 +520,7 @@ export class TownSimulation {
 
   observeFirmOpportunities() {
     const results = [];
-    [this.firmArchetype("cafe"), this.firmArchetype("premium-grocer")].filter(Boolean).forEach((archetype) => {
+    PRIVATE_FORMATION_ARCHETYPE_IDS.map((archetypeId) => this.firmArchetype(archetypeId)).filter(Boolean).forEach((archetype) => {
       if (this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId)) return;
       const window = this.opportunityWindows[archetype.archetypeId];
       window.push(Object.freeze({ day: this.day, potentialCustomers: this.opportunityDemandCount(archetype) }));
@@ -944,7 +959,9 @@ export class TownSimulation {
     } else person.personalSeller = firm.id;
     const description = purpose === "food"
       ? `bought ${units} food portion${units === 1 ? "" : "s"} from ${firm.name}`
-      : `${purpose} to ${firm.name}`;
+      : purpose === "medicine"
+        ? `bought ${units} medicine dose${units === 1 ? "" : "s"} from ${firm.name}`
+        : `${purpose} to ${firm.name}`;
     this.ledger(person, { direction: "out", amount: paid, text: description, before });
     return paid;
   }
@@ -1264,14 +1281,55 @@ export class TownSimulation {
   personalPhase() {
     const café = this.firms.find((firm) => firm.active && firm.sector === "service" && firm.inventory >= 1);
     const makers = this.firms.find((firm) => firm.active && firm.sector === "goods" && firm.inventory >= 1);
+    const apothecary = this.firms.find((firm) => firm.active && firm.archetypeId === "apothecary" && firm.inventory >= 1);
     this.people.forEach((person) => {
       if (!person.alive) return;
+      this.considerHealthCare(person, apothecary);
       this.considerPersonalTime(person, café, makers);
     });
     ["café", "park"].forEach((venue) => this.pairSocialVisitors(
       this.people.filter((person) => person.alive && person.socialToday && person.socialVenueToday === venue),
       venue,
     ));
+  }
+
+  considerHealthCare(person, apothecary) {
+    if (!person.alive || person.health >= HEALTH_TREATMENT_THRESHOLD) return false;
+    const affordable = apothecary && person.cash + 1e-9 >= apothecary.price;
+    if (apothecary && !affordable) apothecary.priceRejectionsToday += 1;
+    const option = affordable ? {
+      action: `buy-medicine:${apothecary.id}`,
+      firmId: apothecary.id,
+      firmName: apothecary.name,
+      totalPrice: apothecary.price,
+      expectedRecovery: HEALTH_TREATMENT_RECOVERY,
+      capacityAvailable: apothecary.transactionsToday < this.transactionCapacity(apothecary),
+    } : null;
+    const legalActions = Object.freeze(["defer-treatment", ...(option ? [option.action] : [])]);
+    const observation = Object.freeze({
+      kind: "health",
+      citizenId: person.id,
+      citizenName: person.name,
+      health: person.health,
+      stress: person.stress,
+      hungryDays: person.hungryDays,
+      runwayDays: this.runwayDays(person),
+      profile: { ...person.motivationProfile },
+      options: option ? [{ ...option }] : [],
+    });
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal health action`);
+    }
+    this.recordDecision(person, observation, legalActions, decision, "Personal time");
+    if (!option || decision.action !== option.action) return false;
+    const beforeHealth = person.health;
+    if (!this.buy(person, apothecary, 1, "medicine")) return false;
+    person.healthSeller = apothecary.id;
+    person.lastTreatmentDay = this.day;
+    person.health = clamp(person.health + HEALTH_TREATMENT_RECOVERY, 0.08, 0.92);
+    this.note(person, `self-care medicine raised health from ${Math.round(beforeHealth * 100)}% to ${Math.round(person.health * 100)}%`, "good");
+    return true;
   }
 
   pairSocialVisitors(visitors, venue) {
@@ -1437,7 +1495,7 @@ export class TownSimulation {
     this.contracts.filter((contract) => contract.supplierId === firm.id || contract.buyerId === firm.id).forEach((contract) => {
       contract.active = false;
     });
-    if (["cafe", "premium-grocer"].includes(firm.archetypeId)) this.opportunityWindows[firm.archetypeId] = [];
+    if (PRIVATE_FORMATION_ARCHETYPE_IDS.includes(firm.archetypeId)) this.opportunityWindows[firm.archetypeId] = [];
     this.note(firm, entersReceivership ? `${reason}; housing operations entered receivership` : reason, "bad");
     return true;
   }

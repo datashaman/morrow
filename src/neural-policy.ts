@@ -264,6 +264,7 @@ export class ShadowCitizenPolicy implements CitizenPolicy {
 
   decide(input: CitizenPolicyInput): CitizenPolicyDecision {
     const active = this.activePolicy.decide(input);
+    if (input.observation.kind === "health") return { ...active, policy: this.activePolicy.id } as CitizenPolicyDecision;
     const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     const shadow: ShadowDecision = Object.freeze({
       policy: this.neuralPolicy.id,
@@ -355,6 +356,9 @@ export class GatedNeuralCitizenPolicy implements CitizenPolicy {
 
   decide(input: CitizenPolicyInput): CitizenPolicyDecision {
     const fallback = this.fallbackPolicy.decide(input);
+    // Health care was added after the versioned neural schema and activation gate.
+    // Keep it under the auditable motivation fallback until a future gate covers it.
+    if (input.observation.kind === "health") return { ...fallback, policy: this.fallbackPolicy.id } as CitizenPolicyDecision;
     const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     const neuralControls = this.enabled && input.observation.kind === "personal-time";
     const shadow: ShadowDecision = Object.freeze({

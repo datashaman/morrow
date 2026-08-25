@@ -61,6 +61,7 @@ export function exportTrajectoryDataset(config: TrajectoryExportConfig) {
     const weightsVersion = town.policyMetadata().weightsVersion;
     if (weightsVersion) weightsVersions.add(weightsVersion);
     town.people.forEach((person: any) => person.decisions.forEach((decision: any) => {
+      if (decision.kind === "health") return;
       const observationVector = encodeNeuralObservation(decision.observation);
       const legalActions = decision.legalActions.map((action: string) => ({
         action,

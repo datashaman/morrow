@@ -16,11 +16,15 @@ function createViableCafeDemand(town) {
   town.initialMoney = town.totalMoney();
 }
 
-function observeFullWindow(town) {
+function resultForArchetype(result, archetypeId) {
+  return Array.isArray(result) ? result.find((entry) => entry.archetypeId === archetypeId) : result;
+}
+
+function observeFullWindow(town, archetypeId = "cafe") {
   let result;
   for (let offset = 0; offset < OPPORTUNITY_OBSERVATION_DAYS; offset += 1) {
     town.day = offset + 1;
-    result = town.observeFirmOpportunities();
+    result = resultForArchetype(town.observeFirmOpportunities(), archetypeId);
   }
   return result;
 }
@@ -85,7 +89,7 @@ test("viable demand founds a zero-windfall café with exact capital, staff, cont
   assert.match(firm.ledger[0].text, /founder capital from/);
   assert.equal(founder.decisions[0].policy, "entrepreneur-v1");
   assert.equal(firm.decisions[0].chosenAction, "found-firm:cafe");
-  assert.equal(town.opportunityHistory[0].foundedInstanceId, "cafe:1");
+  assert.equal(town.opportunityHistory.find((entry) => entry.archetypeId === "cafe").foundedInstanceId, "cafe:1");
   town.assertInvariants();
 });
 
@@ -124,7 +128,7 @@ test("a closed café instance remains historical and enters a confidence cooldow
   town.day = 10;
   town.closeFirm(cafe);
 
-  const result = town.observeFirmOpportunities();
+  const result = resultForArchetype(town.observeFirmOpportunities(), "cafe");
 
   assert.equal(town.firms.includes(cafe), true);
   assert.equal(cafe.active, false);
@@ -152,11 +156,11 @@ test("material recovery after cooldown creates a separately funded replacement i
   assert.equal(town.firms.filter((firm) => firm.archetypeId === "cafe").length, 1);
   for (let day = 25; day <= 30; day += 1) {
     town.day = day;
-    const result = town.observeFirmOpportunities();
+    const result = resultForArchetype(town.observeFirmOpportunities(), "cafe");
     assert.equal(result.ready, false);
   }
   town.day = 31;
-  const replacement = town.observeFirmOpportunities();
+  const replacement = resultForArchetype(town.observeFirmOpportunities(), "cafe");
 
   assert.equal(replacement.instanceId, "cafe:2");
   assert.notEqual(replacement.owner, firstOwner);
@@ -181,7 +185,7 @@ test("premium food remains latent when households lack cash above near-term esse
   });
   town.initialMoney = town.totalMoney();
 
-  const result = observeFullWindow(town);
+  const result = observeFullWindow(town, "premium-grocer");
 
   assert.equal(result.archetypeId, "premium-grocer");
   assert.equal(result.ready, false);
@@ -199,7 +203,7 @@ test("household discretionary capacity can found a one-worker premium grocer", (
   town.initialMoney = town.totalMoney();
   const totalBefore = town.totalMoney();
 
-  const firm = observeFullWindow(town);
+  const firm = observeFullWindow(town, "premium-grocer");
 
   assert.equal(firm.archetypeId, "premium-grocer");
   assert.equal(firm.instanceId, "premium-grocer:1");
@@ -226,7 +230,7 @@ test("agriculture absence blocks otherwise viable premium-food formation", () =>
   farm.active = false;
   farm.status = "insolvent";
 
-  const result = observeFullWindow(town);
+  const result = observeFullWindow(town, "premium-grocer");
 
   assert.equal(result.ready, false);
   assert.match(result.reasons.join(" "), /missing active supplier: Morrow Fields/);

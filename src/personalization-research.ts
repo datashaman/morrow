@@ -109,8 +109,8 @@ export class PersonalizationResearchPolicy implements CitizenPolicy {
 
   decide(input: CitizenPolicyInput): CitizenPolicyDecision {
     const fallback = this.fallbackPolicy.decide(input);
-    const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     if (input.observation.kind !== "personal-time") return fallback;
+    const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     const citizenId = input.observation.citizenId;
     const embedding = this.embeddings[citizenId] ?? Array(PERSONALIZATION_ACTIONS.length).fill(0);
     const adaptation = this.variant === "bounded-adaptation" ? this.adaptationFor(citizenId) : Array(PERSONALIZATION_ACTIONS.length).fill(0);

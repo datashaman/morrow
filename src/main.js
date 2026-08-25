@@ -301,6 +301,9 @@ function updateInterface() {
   const employer = person.employer >= 0 ? simulation.firms[person.employer].name : "no employer";
   const owned = simulation.firms.find((firm) => firm.active && firm.owner === person.id);
   const foodSeller = person.foodSeller >= 0 ? simulation.firms[person.foodSeller].name : "not yet chosen";
+  const healthCare = person.healthSeller >= 0
+    ? `last self-care from ${simulation.firms[person.healthSeller].name} on day ${person.lastTreatmentDay}`
+    : "no self-care purchase yet";
   const foodAge = person.lastFoodAge === 0 ? "fresh" : `${person.lastFoodAge} day${person.lastFoodAge === 1 ? "" : "s"} stored`;
   const foodQuality = person.lastFoodQuality === null ? "no meal yet" : `last meal ${percent(person.lastFoodQuality)} quality; ${foodAge}`;
   const pantry = `${person.foodStock.length} meal${person.foodStock.length === 1 ? "" : "s"} stored`;
@@ -333,7 +336,7 @@ function updateInterface() {
   elements["town-stage"].innerHTML = `<span><small>Current town stage</small><strong>${state.townStage.label}</strong></span><p>${state.townStage.description} Essential reliability ${percent(state.townStage.evidence.essentialReliability)} · employment ${percent(state.townStage.evidence.employmentRate)} · ten-day reserves ${percent(state.townStage.evidence.reserveShare)} · discretionary demand ${percent(state.townStage.evidence.discretionaryDemand)} · persistent optional sectors ${state.townStage.evidence.persistentOptionalSectors}/${state.townStage.evidence.activeOptionalSectors}.</p>`;
   elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
   elements["person-summary"].textContent = person.alive
-    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
+    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)}; ${healthCare} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
     : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · estate ${money(person.estateTransferred)} transferred to treasury · remaining cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
   elements.needs.hidden = !person.alive;
 
@@ -366,11 +369,15 @@ function updateInterface() {
   });
   const opportunityCards = simulation.firmOpportunities().map((opportunity) => {
     const description = describeFirmOpportunity(opportunity);
+    const archetype = simulation.firmArchetype(opportunity.archetypeId);
+    const inputDescription = archetype.input && archetype.source
+      ? `; would use ${PRODUCTS[archetype.input].name} from ${archetype.source}`
+      : "";
     const card = document.createElement("article");
     card.className = `firm-card opportunity-card ${opportunity.status}`;
     card.innerHTML = `
       <span class="firm-card-heading"><b>Potential ${opportunity.name}</b><i class="status ${opportunity.ready ? "ready" : "potential"}">${opportunity.ready ? "ready" : "not ready"}</i></span>
-      <span class="pipeline">Could sell ${PRODUCTS[simulation.firmArchetype(opportunity.archetypeId).sells].name}; would use ${PRODUCTS.produce.name} from Morrow Fields.</span>
+      <span class="pipeline">Could sell ${PRODUCTS[archetype.sells].name}${inputDescription}.</span>
       <span class="firm-stats">${description.evidence}</span>
       <span class="firm-stats">${description.resources}</span>
       <span class="opportunity-reason">${description.explanation}</span>

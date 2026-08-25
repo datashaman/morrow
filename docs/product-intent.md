@@ -28,7 +28,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - A treasury that receives taxes and redistributes support
 - Agriculture, basic supply contracts and procurement, production, payroll, food, housing, discretionary activity, and settlement
 - Employment, layoffs, vacancies, hiring, and firm closure
-- Hunger, health, stress, scarcity errors, arrears, eviction, rehousing, and death
+- Hunger, bounded self-care, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Friendships and social encounters
 - Maslow-inspired needs and current behavioural focus
 - Auditable cash transfers and deterministic replay
