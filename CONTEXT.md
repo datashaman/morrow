@@ -48,6 +48,18 @@ The visualization became large enough that it was migrated into this repository.
 
 The confirmed product name is “Morrow.” The repository lives at `/Users/marlinf/Projects/datashaman/morrow`.
 
+## Language
+
+**Funded employment opportunity**:
+A real vacancy backed by an explicit paying counterparty and available through the town's job market. It provides a credible path to earned income without guaranteeing that a particular citizen applies, receives an offer, accepts, or remains employed.
+_Avoid_: Employment target, guaranteed job
+
+### Example dialogue
+
+> **Developer:** Should the early economy hold employment above a fixed percentage?
+>
+> **Domain expert:** No. It should provide funded employment opportunities; hiring outcomes may still vary and unemployment must remain possible.
+
 ## Where to continue
 
 Use [docs/README.md](./docs/README.md) as the documentation index. The most important unresolved work is listed in [docs/known-limitations.md](./docs/known-limitations.md).
