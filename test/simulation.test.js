@@ -1601,6 +1601,76 @@ test("personal-time motivations choose only available affordable actions and ret
   assert.equal(cashPoorPerson.ledger.length, 0);
 });
 
+test("free rest lowers stress without moving cash", () => {
+  const town = new TownSimulation({ seed: 42, policy: { discretionaryDemand: 0 } });
+  const person = town.people.find((candidate) => candidate.employer < 0 && candidate.id >= town.firms.length);
+  person.cash = 0;
+  person.hungryDays = 1;
+  person.stress = 0.8;
+  const treasuryBefore = town.government.cash;
+
+  town.considerPersonalTime(person, null, null);
+
+  assert.equal(person.decisions[0].chosenAction, "do-nothing");
+  assert.equal(person.decisions[0].observation.freeActivity, "rest");
+  assert.equal(person.stress, 0.775);
+  assert.equal(person.cash, 0);
+  assert.equal(town.government.cash, treasuryBefore);
+  assert.equal(person.ledger.length, 0);
+});
+
+test("free park visitors can form a traceable friendship", () => {
+  const town = new TownSimulation({ seed: 42, policy: { discretionaryDemand: 0 } });
+  const [a, b] = town.people;
+  town.people.slice(2).forEach((person) => town.die(person, "test park cohort"));
+  [a, b].forEach((person) => {
+    person.health = 1;
+    person.hungryDays = 0;
+    person.housed = true;
+    person.cash = 100;
+    person.relationships = {};
+    person.lastSocialDay = -20;
+    person.motivationProfile = { ...person.motivationProfile, connection: 1.3, security: 0.7 };
+  });
+  town.random = () => 0;
+
+  town.personalPhase();
+
+  assert.equal(a.decisions[0].observation.freeActivity, "park-social");
+  assert.equal(b.decisions[0].observation.freeActivity, "park-social");
+  assert.ok(a.relationships[b.id]);
+  assert.equal(a.lastSocialDay, town.day);
+  assert.match(a.events[0].text, /park encounter became friendship/);
+});
+
+test("free self-study creates bounded growth without creating money", () => {
+  const town = new TownSimulation({ seed: 42, policy: { discretionaryDemand: 0 } });
+  const person = town.people[0];
+  person.health = 1;
+  person.hungryDays = 0;
+  person.housed = true;
+  person.cash = 100;
+  person.growth = 0.2;
+  person.relationships = {};
+  person.socialCapacity = 3;
+  person.lastSocialDay = town.day;
+  town.people.slice(1, 4).forEach((friend) => {
+    friend.relationships = {};
+    town.formFriendship(person, friend, 1, town.day);
+    person.relationships[friend.id].strength = 1;
+  });
+  const skillBefore = person.skill;
+  const growthBefore = person.growth;
+  const moneyBefore = town.totalMoney();
+
+  town.considerPersonalTime(person, null, null);
+
+  assert.equal(person.decisions[0].observation.freeActivity, "self-study");
+  assert.equal(person.skill, skillBefore + 0.003);
+  assert.equal(person.growth, growthBefore + 0.006);
+  assert.equal(town.totalMoney(), moneyBefore);
+});
+
 test("food quality and security motivations can prefer different legal sellers", () => {
   const policy = new MotivationCitizenPolicy();
   const cheapAction = "buy-food:0:3";

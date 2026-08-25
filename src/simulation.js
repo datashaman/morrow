@@ -177,6 +177,7 @@ export class TownSimulation {
         lastFoodQuality: null,
         lastFoodAge: null,
         personalSeller: -1,
+        socialVenueToday: null,
         rentSeller: -1,
         homeX,
         homeY,
@@ -608,6 +609,7 @@ export class TownSimulation {
     person.deathDay = this.day;
     person.attended = false;
     person.socialToday = false;
+    person.socialVenueToday = null;
     person.rentArrears = 0;
     const estateBefore = person.cash;
     person.estateTransferred = this.transfer(person, this.government, estateBefore, { exact: true });
@@ -837,6 +839,7 @@ export class TownSimulation {
     this.people.forEach((person) => {
       if (!person.alive) return;
       person.socialToday = false;
+      person.socialVenueToday = null;
       this.considerFood(person, foodFirms);
     });
   }
@@ -1002,16 +1005,47 @@ export class TownSimulation {
       if (!person.alive) return;
       this.considerPersonalTime(person, café, makers);
     });
-    const social = this.people.filter((person) => person.alive && person.socialToday).sort(() => this.random() - 0.5);
+    ["café", "park"].forEach((venue) => this.pairSocialVisitors(
+      this.people.filter((person) => person.alive && person.socialToday && person.socialVenueToday === venue),
+      venue,
+    ));
+  }
+
+  pairSocialVisitors(visitors, venue) {
+    const social = [...visitors].sort(() => this.random() - 0.5);
     for (let index = 0; index + 1 < social.length; index += 2) {
       const a = social[index];
       const b = social[index + 1];
       const existingFriendship = Boolean(a.relationships[b.id]);
       if (this.recordSocialContact(a, b) && !existingFriendship) {
-        this.note(a, `a café encounter became friendship with ${b.name}`, "good");
-        this.note(b, `a café encounter became friendship with ${a.name}`, "good");
+        this.note(a, `a ${venue} encounter became friendship with ${b.name}`, "good");
+        this.note(b, `a ${venue} encounter became friendship with ${a.name}`, "good");
       }
     }
+  }
+
+  freePersonalActivity(person) {
+    const relationships = this.relationshipStats(person);
+    const sociallyDisconnected = relationships.count === 0 || this.day - person.lastSocialDay > 3;
+    if (["esteem", "growth"].includes(person.focus)) return "self-study";
+    if (!person.hungryDays && sociallyDisconnected && person.motivationProfile.connection >= person.motivationProfile.security) return "park-social";
+    return "rest";
+  }
+
+  applyFreePersonalActivity(person, activity) {
+    if (activity === "park-social") {
+      person.socialToday = true;
+      person.socialVenueToday = "park";
+      return true;
+    }
+    if (activity === "self-study") {
+      person.skill = clamp(person.skill + 0.003);
+      person.growth = clamp(person.growth + 0.006);
+      return true;
+    }
+    person.stress = clamp(person.stress - 0.025);
+    if (!person.hungryDays) person.health = clamp(person.health + 0.0015, 0.08, 1);
+    return true;
   }
 
   considerPersonalTime(person, café, makers) {
@@ -1030,6 +1064,7 @@ export class TownSimulation {
       if (["esteem", "growth"].includes(person.focus) && canBuy(makers, 10)) legalActions.push("buy-learning-tools");
     }
     const relationships = this.relationshipStats(person);
+    const freeActivity = this.freePersonalActivity(person);
     const observation = Object.freeze({
       kind: "personal-time",
       citizenId: person.id,
@@ -1040,6 +1075,7 @@ export class TownSimulation {
       needs: { ...person.needs },
       relationshipCount: relationships.count,
       strongestRelationship: relationships.strongest,
+      freeActivity,
       profile: { ...person.motivationProfile },
     });
     const frozenLegalActions = Object.freeze([...legalActions]);
@@ -1048,6 +1084,8 @@ export class TownSimulation {
       throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal personal-time action`);
     }
     this.recordDecision(person, observation, frozenLegalActions, decision, "Personal time");
+
+    if (decision.action === "do-nothing") return this.applyFreePersonalActivity(person, freeActivity);
 
     if (decision.action === "buy-comfort" && this.buy(person, café, 1, "short-term comfort")) {
       person.stress = clamp(person.stress - 0.035);
@@ -1059,6 +1097,7 @@ export class TownSimulation {
     }
     if (decision.action === "social-visit" && this.buy(person, café, 1, "social visit")) {
       person.socialToday = true;
+      person.socialVenueToday = "café";
       return true;
     }
     if (decision.action === "buy-learning-tools" && this.buy(person, makers, 1, "learning tools")) {

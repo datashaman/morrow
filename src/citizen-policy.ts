@@ -92,6 +92,7 @@ export type PersonalTimeObservation = Readonly<{
   needs: Readonly<Record<string, number>>;
   relationshipCount: number;
   strongestRelationship: number;
+  freeActivity?: "rest" | "park-social" | "self-study";
   profile: MotivationProfile;
 }>;
 
@@ -326,7 +327,11 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
       scores[candidate] > scores[best] ? candidate : best
     ));
     const actionReasons: Record<PersonalTimeAction, string> = {
-      "do-nothing": "Doing nothing",
+      "do-nothing": observation.freeActivity === "park-social"
+        ? "Free time in the park"
+        : observation.freeActivity === "self-study"
+          ? "Self-directed learning"
+          : "Rest",
       "buy-comfort": "Short-term comfort",
       "social-visit": "A social visit",
       "buy-learning-tools": "Learning tools",

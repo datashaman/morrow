@@ -177,7 +177,6 @@ const staticActionNames = {
   "attend-shift": "Attended shift",
   "miss-shift": "Missed shift",
   "skip-job-search": "Did not apply for work",
-  "do-nothing": "Did nothing",
   "buy-comfort": "Bought short-term comfort",
   "social-visit": "Made a social visit",
   "buy-learning-tools": "Bought learning tools",
@@ -187,6 +186,11 @@ const staticActionNames = {
 };
 
 function actionName(decision, action) {
+  if (action === "do-nothing") {
+    if (decision.observation.freeActivity === "park-social") return "Spent free time in the park";
+    if (decision.observation.freeActivity === "self-study") return "Practiced independently";
+    return "Rested";
+  }
   if (staticActionNames[action]) return staticActionNames[action];
   const option = decision.observation.options?.find((candidate) => candidate.action === action);
   if (option?.label) return option.label;

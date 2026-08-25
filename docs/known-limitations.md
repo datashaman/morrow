@@ -10,7 +10,7 @@ Friendships gain strength through café contact and decay after periods without 
 
 ### Stress recovery is narrow
 
-Stress falls through financial runway, stable employment, food, housing, friendship strength, recent contact, and a small immediate comfort purchase. There is no direct recovery from rest, sleep, health care, resolving arrears, predictable schedules, time safely housed, autonomy, or treatment.
+Stress falls through financial runway, stable employment, food, housing, friendship strength, recent contact, a small immediate comfort purchase, and a bounded free-rest action. There is no distinct sleep schedule, health care, recovery from resolving arrears, predictable schedules, time safely housed, autonomy model, or treatment.
 
 ### No saved or shareable run
 
@@ -54,7 +54,7 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 - People are isolated individuals rather than households or families.
 - There is no age, disability, gender, caregiving, migration, birth, or demographic replacement.
 - Friendships are symmetric, strength-weighted, and capped by a fixed capacity.
-- Social contact occurs only through paid café visits.
+- Social contact occurs through paid café visits and free Common Park visits, but there are no home, workplace, neighborhood, online, family, or organized-group encounters.
 - Friends do not lend money, share food or housing, refer one another for jobs, transmit stress, or provide care.
 - There are no institutions beyond firms and the treasury.
 

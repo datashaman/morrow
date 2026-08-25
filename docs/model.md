@@ -164,18 +164,20 @@ When HomeWorks becomes insolvent, ordinary rent and rehousing transactions stop 
 
 ### 6. Personal time
 
-The current focus is reassessed before choosing an activity. The discretionary-demand policy determines whether optional purchases enter the legal-action set: 0% leaves only doing nothing, while 100% allows every otherwise eligible café or goods action to be considered. It does not affect food or housing.
+The current focus is reassessed before choosing an activity. The discretionary-demand policy determines whether optional purchases enter the legal-action set: 0% leaves only a free contextual activity, while 100% allows every otherwise eligible café or goods action to be considered. It does not affect food or housing.
 
 Each citizen has stable comfort, connection, mastery, security, food-quality, planning, and avoidance weights between 0.70 and 1.30. They are generated from an isolated combination of the town seed and citizen ID, so they do not consume or disturb the main simulation random sequence. The values are hypotheses for producing heterogeneous stories, not measured personality traits.
 
-The simulation constructs the currently legal personal-time actions from living status, focus, affordability, inventory, seller transaction capacity, and the discretionary-demand result. Doing nothing is always legal. `motivation-v3` scores only that set:
+The simulation constructs the currently legal personal-time actions from living status, focus, affordability, inventory, seller transaction capacity, and the discretionary-demand result. The schema-stable `do-nothing` action is always legal, but its recorded meaning and consequence are now contextual: rest, free park social time, or self-study. This retains compatibility with the gated neural action schema while removing the inert outcome. `motivation-v3` scores only the legal set:
 
-- Doing nothing rises with the security weight and a runway shortfall below twelve days.
+- Free personal time rises with the security weight and a runway shortfall below twelve days.
 - Short-term comfort rises with the comfort weight and stress.
 - A social visit rises with the connection weight and unmet belonging.
 - Learning tools rise with the mastery weight and unmet esteem and growth.
 
 The highest-scoring legal action is selected deterministically. `TownSimulation` validates it, performs any exact purchase, and applies consequences. The citizen retains the observation, legal alternatives, scores, chosen action, reasons, and policy version as a decision trace. The selected-citizen panel shows the stable weights and the complete newest-first decision history.
+
+Free time uses the current need assessment and stable motivation profile without spending or creating cash. Esteem or growth focus produces self-study, increasing skill by 0.003 and growth by 0.006. A fed, socially disconnected person whose connection weight is at least their security weight goes to the Common Park; park visitors are paired using the same seeded contact and friendship rules as café visitors. Otherwise the person rests, reducing stress by 0.025 and, when not hungry, restoring 0.0015 health. The UI names the contextual activity rather than displaying “did nothing.” These small effects are bounded gameplay hypotheses; free activity does not supply food, housing, wages, or guaranteed social contact.
 
 Every default decision also passes through one shared, deterministic, schema-versioned neural network. The bundled weights were trained offline by reward-weighted imitation on 8,760 synthetic decisions from five fixed training seeds over 15 days. The network scores concrete legal alternatives plus synthetic illegal action kinds for mask diagnosis. The trace records its legal choice, probability-normalized legal scores, unmasked preference, any invalid pre-mask preference, legal mask, and weights/schema versions.
 
@@ -187,7 +189,7 @@ The runtime does not add learned citizen embeddings or mutable online adaptation
 - A person focused on belonging may buy a social visit if they retain more than seven cash after its price.
 - A person focused on esteem or growth may buy learning tools if they retain more than ten cash after the price. This increases skill by 0.02 and growth by 0.04.
 
-Social visitors are shuffled and paired. Contact refreshes the pair's contact date and increases an existing friendship's strength by 0.18, capped at 1. If they are not already friends and both have capacity, a mutual friendship begins at strength 0.60.
+Café and park visitors are shuffled and paired within their venue. Contact refreshes the pair's contact date and increases an existing friendship's strength by 0.18, capped at 1. If they are not already friends and both have capacity, a mutual friendship begins at strength 0.60.
 
 After five days without contact, friendship strength declines by 0.015 per day. A friendship below 0.20 ends symmetrically and both people receive a life event. Friendship strength affects belonging and the social-isolation component of stress; friendships do not yet transfer money, food, housing, care, or job referrals. These decay values are gameplay hypotheses selected to allow visible turnover without erasing the initial network immediately.
 
