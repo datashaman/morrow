@@ -30,6 +30,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Hunger, bounded self-care, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Paid, finite education that gradually changes skill without guaranteeing employment
+- Explicit fabrication and construction-material supply between firms
 - Friendships and social encounters
 - Maslow-inspired needs and current behavioural focus
 - Auditable cash transfers and deterministic replay

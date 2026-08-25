@@ -89,6 +89,7 @@ export class TownSimulation {
       sales: 0,
       inputCosts: 0,
       operatingSupplies: 0,
+      constructionSupplies: 0,
       operationalReadiness: 1,
       lastMaintenanceDay: 0,
       receivershipDay: null,
@@ -311,8 +312,9 @@ export class TownSimulation {
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
       const validOperatingInput = contract.use === "operations" && buyer.sells === contract.output;
+      const validConstructionInput = contract.use === "construction" && buyer.sector === "housing" && contract.output === "housing";
       const validResaleInput = contract.use !== "operations" && buyer.input === contract.product && buyer.sells === contract.output;
-      if (!supplier || !buyer || supplier.sells !== contract.product || (!validOperatingInput && !validResaleInput)) {
+      if (!supplier || !buyer || supplier.sells !== contract.product || (!validOperatingInput && !validConstructionInput && !validResaleInput)) {
         throw new Error(`Invalid supply contract ${contract.id}`);
       }
     });
@@ -356,11 +358,16 @@ export class TownSimulation {
       && person.cash + 1e-9 >= archetype.price + reserve).length;
   }
 
+  constructionMaterialDemandCount() {
+    return this.firms.some((firm) => firm.active && firm.archetypeId === "housing-provider") ? 1 : 0;
+  }
+
   opportunityDemandCount(archetype) {
     if (archetype.archetypeId === "cafe") return this.cafeDemandCount(archetype);
     if (archetype.archetypeId === "premium-grocer") return this.premiumFoodDemandCount(archetype);
     if (archetype.archetypeId === "apothecary") return this.apothecaryDemandCount(archetype);
     if (archetype.archetypeId === "school") return this.educationDemandCount(archetype);
+    if (archetype.archetypeId === "materials-yard") return this.constructionMaterialDemandCount();
     return 0;
   }
 
@@ -403,10 +410,11 @@ export class TownSimulation {
       ? observations.reduce((sum, observation) => sum + observation.potentialCustomers, 0) / observations.length
       : 0;
     const produceTemplate = templates.find((contract) => contract.buyer === archetype.name && contract.use !== "operations");
-    const demandScaledInputs = ["premium-grocer", "apothecary", "school"].includes(archetype.archetypeId);
+    const demandScaledInputs = ["premium-grocer", "apothecary", "school", "materials-yard"].includes(archetype.archetypeId);
     const outputCapacity = produceTemplate?.dailyQuantity ?? archetype.transactionsPerWorker * requiredWorkers;
+    const demandCaptureRate = archetype.archetypeId === "materials-yard" ? 1 : OPPORTUNITY_DEMAND_CAPTURE_RATE;
     const expectedOutputUnits = demandScaledInputs
-      ? Math.min(expectedDailyDemand * OPPORTUNITY_DEMAND_CAPTURE_RATE, outputCapacity)
+      ? Math.min(expectedDailyDemand * demandCaptureRate, outputCapacity)
       : expectedDailyDemand * (this.policy.discretionaryDemand / 100) * OPPORTUNITY_DEMAND_CAPTURE_RATE;
     const expectedDailyRevenue = roundMoney(expectedOutputUnits * archetype.price);
     const variableDemandInputs = demandScaledInputs
@@ -438,7 +446,7 @@ export class TownSimulation {
       observedDays: observations.length,
       requiredObservationDays: OPPORTUNITY_OBSERVATION_DAYS,
       latestPotentialCustomers: observations.at(-1)?.potentialCustomers ?? 0,
-      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : archetype.archetypeId === "school" ? "eligible students" : "potential customers",
+      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : archetype.archetypeId === "school" ? "eligible students" : archetype.archetypeId === "materials-yard" ? "housing material bundles" : "potential customers",
       expectedDailyDemand,
       expectedDailyRevenue,
       expectedDailyCost,
@@ -1001,6 +1009,10 @@ export class TownSimulation {
 
   productionPhase() {
     this.firms.forEach((firm) => this.maintainFirm(firm));
+    this.firms.filter((firm) => firm.active && firm.sector === "housing").forEach((firm) => {
+      const constructionContract = this.contracts.find((contract) => contract.active && contract.use === "construction" && contract.buyerId === firm.id);
+      if (constructionContract && firm.constructionSupplies >= 1) firm.constructionSupplies -= 1;
+    });
     this.people.forEach((person) => {
       if (!person.alive) {
         person.attended = false;
@@ -1028,7 +1040,9 @@ export class TownSimulation {
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
       if (!contract.active || !supplier.active || !buyer.active) return;
-      const buyerStock = contract.use === "operations" ? buyer.operatingSupplies : buyer.inventory;
+      const buyerStock = contract.use === "operations"
+        ? buyer.operatingSupplies
+        : contract.use === "construction" ? buyer.constructionSupplies : buyer.inventory;
       const targetStock = contract.targetStock ?? contract.dailyQuantity * 2;
       contract.requestedToday = Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(targetStock - buyerStock)));
       const available = Math.floor(supplier.inventory);
@@ -1043,6 +1057,7 @@ export class TownSimulation {
         if (paid === cost) {
           supplier.inventory -= units;
           if (contract.use === "operations") buyer.operatingSupplies += units;
+          else if (contract.use === "construction") buyer.constructionSupplies += units;
           else buyer.inventory += units;
           supplier.sales += paid;
           supplier.unitsSold += units;
