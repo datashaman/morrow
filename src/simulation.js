@@ -1010,7 +1010,10 @@ export class TownSimulation {
     firm.attemptedTransactions += 1;
     if (firm.transactionsToday >= this.transactionCapacity(firm)) {
       firm.turnedAwayTransactions += 1;
-      this.note(person, `${firm.name} could not serve the ${purpose} transaction`, "bad");
+      const description = purpose === "food"
+        ? "food purchase"
+        : purpose;
+      this.note(person, `${firm.name} had no staffed capacity for the ${description}`, "bad");
       return false;
     }
     firm.transactionsToday += 1;
@@ -1270,13 +1273,22 @@ export class TownSimulation {
   }
 
   foodPhase() {
-    const foodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food" && firm.inventory >= 1).sort((a, b) => a.price - b.price);
-    this.people.forEach((person) => {
-      if (!person.alive) return;
+    const foodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food").sort((a, b) => a.price - b.price);
+    this.foodAccessOrder().forEach((person) => {
       person.socialToday = false;
       person.socialVenueToday = null;
       this.considerFood(person, foodFirms);
     });
+  }
+
+  foodAccessOrder() {
+    const populationSize = this.people.length;
+    const rotatingRank = (person) => (person.id - this.day + populationSize) % populationSize;
+    return this.people.filter((person) => person.alive).sort((a, b) => (
+      b.hungryDays - a.hungryDays
+      || a.health - b.health
+      || rotatingRank(a) - rotatingRank(b)
+    ));
   }
 
   considerFood(person, foodFirms) {
@@ -1312,7 +1324,11 @@ export class TownSimulation {
           };
         });
       });
-    if (!person.foodStock.length && !options.length && foodFirms.length) foodFirms[0].priceRejectionsToday += 1;
+    if (!person.foodStock.length && !options.length && foodFirms.length) {
+      const stockedFirms = foodFirms.filter((firm) => firm.inventory >= 1);
+      if (stockedFirms.length) stockedFirms[0].priceRejectionsToday += 1;
+      else this.note(person, "no food stock was available to purchase", "bad");
+    }
     const legalActions = Object.freeze(["skip-food", ...options.map((option) => option.action)]);
     const observation = Object.freeze({
       kind: "food",

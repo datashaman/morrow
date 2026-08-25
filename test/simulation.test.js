@@ -761,6 +761,54 @@ test("sustainable food production prevents a solvent later shopper from starving
   assert.ok(person.cash > town.essentialCost());
 });
 
+test("food access prioritizes vulnerability and rotates otherwise equal citizens", () => {
+  const town = new TownSimulation({ seed: 42 });
+  town.people.forEach((person) => {
+    person.hungryDays = 0;
+    person.health = 0.8;
+  });
+  town.people[12].hungryDays = 2;
+  town.people[18].health = 0.3;
+
+  town.day = 1;
+  const firstDay = town.foodAccessOrder().map((person) => person.id);
+  town.day = 2;
+  const secondDay = town.foodAccessOrder().map((person) => person.id);
+
+  assert.deepEqual(firstDay.slice(0, 2), [12, 18]);
+  assert.deepEqual(secondDay.slice(0, 2), [12, 18]);
+  assert.notEqual(firstDay[2], secondDay[2]);
+  assert.deepEqual(firstDay, new TownSimulation({ seed: 42 }).people.map((person) => person.id).sort((a, b) => {
+    const people = town.people;
+    return people[b].hungryDays - people[a].hungryDays
+      || people[a].health - people[b].health
+      || ((a - 1 + people.length) % people.length) - ((b - 1 + people.length) % people.length);
+  }));
+});
+
+test("food failures distinguish staffed capacity from unavailable stock", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const person = town.people[0];
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  town.people.slice(1).forEach((other) => { other.alive = false; });
+  town.firms.filter((firm) => firm.sector === "food" && firm !== harvest).forEach((firm) => { firm.active = false; });
+  person.cash = 20;
+  person.foodStock = [];
+  harvest.inventory = 3;
+  harvest.employees.forEach((id) => { town.people[id].attended = false; });
+
+  town.foodPhase();
+
+  assert.match(person.events[0].text, /had no staffed capacity for the food purchase/);
+
+  person.events = [];
+  person.hungryDays = 0;
+  harvest.inventory = 0;
+  town.foodPhase();
+
+  assert.match(person.events[0].text, /no food stock was available to purchase/);
+});
+
 test("higher-quality food replenishes more health", () => {
   const eatFrom = (sellerName) => {
     const town = new TownSimulation({ seed: 42 });
@@ -1066,7 +1114,7 @@ test("attending staff cap the number of daily transactions", () => {
   assert.equal(firm.transactionsToday, 2);
   assert.equal(firm.attemptedTransactions, 3);
   assert.equal(firm.turnedAwayTransactions, 1);
-  assert.match(buyers[2].events[0].text, /could not serve/);
+  assert.match(buyers[2].events[0].text, /had no staffed capacity/);
 });
 
 test("bulk units contribute their full realized income through one transaction", () => {
