@@ -129,5 +129,65 @@ test("a closed café instance remains historical and blocks private replacement"
   assert.equal(cafe.active, false);
   assert.equal(town.firms.filter((firm) => firm.archetypeId === "cafe").length, 1);
   assert.equal(result.ready, false);
-  assert.match(result.reasons.join(" "), /previous café instance failed/);
+  assert.match(result.reasons.join(" "), /previous Common Café instance failed/);
+});
+
+test("premium food remains latent when households lack cash above near-term essentials", () => {
+  const town = new TownSimulation({ seed: 42, latentFirmNames: ["Green Basket"] });
+  town.people.forEach((person) => {
+    person.cash = 10;
+    person.foodStock = [];
+  });
+  town.initialMoney = town.totalMoney();
+
+  const result = observeFullWindow(town);
+
+  assert.equal(result.archetypeId, "premium-grocer");
+  assert.equal(result.ready, false);
+  assert.equal(result.expectedDailyDemand, 0);
+  assert.match(result.reasons.join(" "), /demand does not cover/);
+  assert.equal(town.firms.some((firm) => firm.archetypeId === "premium-grocer"), false);
+});
+
+test("household discretionary capacity can found a one-worker premium grocer", () => {
+  const town = new TownSimulation({ seed: 42, latentFirmNames: ["Green Basket"] });
+  town.people.forEach((person) => {
+    person.cash = 100;
+    person.foodStock = [];
+  });
+  town.initialMoney = town.totalMoney();
+  const totalBefore = town.totalMoney();
+
+  const firm = observeFullWindow(town);
+
+  assert.equal(firm.archetypeId, "premium-grocer");
+  assert.equal(firm.instanceId, "premium-grocer:1");
+  assert.equal(firm.employees.length, 1);
+  assert.equal(firm.employees[0], firm.owner);
+  assert.equal(firm.inventory, 0);
+  assert.equal(firm.cash, OPPORTUNITY_STARTUP_CAPITAL);
+  assert.equal(town.totalMoney(), totalBefore);
+  assert.deepEqual(
+    town.contracts.filter((contract) => contract.buyerId === firm.id).map((contract) => contract.supplier).sort(),
+    ["Makers Guild", "Morrow Fields"],
+  );
+  assert.equal(firm.decisions[0].policy, "entrepreneur-v1");
+});
+
+test("agriculture absence blocks otherwise viable premium-food formation", () => {
+  const town = new TownSimulation({ seed: 42, latentFirmNames: ["Green Basket"] });
+  town.people.forEach((person) => {
+    person.cash = 100;
+    person.foodStock = [];
+  });
+  town.initialMoney = town.totalMoney();
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  farm.active = false;
+  farm.status = "insolvent";
+
+  const result = observeFullWindow(town);
+
+  assert.equal(result.ready, false);
+  assert.match(result.reasons.join(" "), /missing active supplier: Morrow Fields/);
+  assert.equal(town.firms.some((firm) => firm.archetypeId === "premium-grocer"), false);
 });

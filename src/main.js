@@ -368,7 +368,7 @@ function updateInterface() {
     card.className = `firm-card opportunity-card ${opportunity.status}`;
     card.innerHTML = `
       <span class="firm-card-heading"><b>Potential ${opportunity.name}</b><i class="status ${opportunity.ready ? "ready" : "potential"}">${opportunity.ready ? "ready" : "not ready"}</i></span>
-      <span class="pipeline">Could sell ${PRODUCTS.cafeService.name}; would use ${PRODUCTS.produce.name} from Morrow Fields.</span>
+      <span class="pipeline">Could sell ${PRODUCTS[simulation.firmArchetype(opportunity.archetypeId).sells].name}; would use ${PRODUCTS.produce.name} from Morrow Fields.</span>
       <span class="firm-stats">${description.evidence}</span>
       <span class="firm-stats">${description.resources}</span>
       <span class="opportunity-reason">${description.explanation}</span>

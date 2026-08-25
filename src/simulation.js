@@ -60,7 +60,7 @@ export class TownSimulation {
     this.reset();
   }
 
-  createFirmInstance(archetype, id, { owner = id, cash = 150, founderCapital = cash, inventory = archetype.inventory, revenueEMA = archetype.initialStaff * archetype.wage * STAFFING_REVENUE_BUFFER, instanceNumber = 1, foundingDay = 1 } = {}) {
+  createFirmInstance(archetype, id, { owner = id, cash = 150, founderCapital = cash, inventory = archetype.inventory, revenueEMA = archetype.initialStaff * archetype.wage * STAFFING_REVENUE_BUFFER, targetStaff = archetype.initialStaff, instanceNumber = 1, foundingDay = 1 } = {}) {
     return {
       ...archetype,
       kind: "firm",
@@ -100,7 +100,7 @@ export class TownSimulation {
       lastRescueDay: null,
       trouble: 0,
       revenueEMA,
-      targetStaff: archetype.initialStaff,
+      targetStaff,
       vacancyAge: 0,
       overstaffedDays: 0,
       ownerDecision: {
@@ -319,6 +319,21 @@ export class TownSimulation {
     )).length;
   }
 
+  premiumFoodDemandCount(archetype) {
+    const reserve = this.essentialCost() * OPPORTUNITY_PROTECTED_RUNWAY_DAYS;
+    return this.people.reduce((total, person) => {
+      if (!person.alive || person.foodStock.length || person.cash + 1e-9 < archetype.price + reserve) return total;
+      const affordableUnits = Math.floor((person.cash - reserve + 1e-9) / archetype.price);
+      return total + Math.max(0, Math.min(person.foodReserveTarget, affordableUnits));
+    }, 0);
+  }
+
+  opportunityDemandCount(archetype) {
+    if (archetype.archetypeId === "cafe") return this.cafeDemandCount(archetype);
+    if (archetype.archetypeId === "premium-grocer") return this.premiumFoodDemandCount(archetype);
+    return 0;
+  }
+
   founderCandidates() {
     const protectedCash = roundMoney(this.essentialCost() * OPPORTUNITY_PROTECTED_RUNWAY_DAYS);
     return this.people
@@ -336,7 +351,7 @@ export class TownSimulation {
   opportunityEvidence(archetype, observations = this.opportunityWindows[archetype.archetypeId] ?? []) {
     const instances = this.firms.filter((firm) => firm.archetypeId === archetype.archetypeId);
     const activeInstance = instances.find((firm) => firm.active);
-    const requiredWorkers = archetype.initialStaff;
+    const requiredWorkers = archetype.formationStaff ?? archetype.initialStaff;
     const founder = this.founderCandidates()[0] ?? null;
     const unemployedWorkers = this.replacementWorkers(this.people.length);
     const availableWorkers = founder
@@ -349,25 +364,29 @@ export class TownSimulation {
         const supplier = this.firms.find((firm) => firm.active && firm.name === contract.supplier);
         return { name: contract.supplier, product: contract.product, available: Boolean(supplier), firmId: supplier?.id ?? null };
       });
-    const expectedDailyCustomers = observations.length
+    const expectedDailyDemand = observations.length
       ? observations.reduce((sum, observation) => sum + observation.potentialCustomers, 0) / observations.length
       : 0;
-    const expectedDailyRevenue = roundMoney(
-      expectedDailyCustomers
-      * archetype.price
-      * (this.policy.discretionaryDemand / 100)
-      * OPPORTUNITY_DEMAND_CAPTURE_RATE,
-    );
+    const produceTemplate = templates.find((contract) => contract.buyer === archetype.name && contract.use !== "operations");
+    const expectedOutputUnits = archetype.archetypeId === "premium-grocer"
+      ? Math.min(expectedDailyDemand * OPPORTUNITY_DEMAND_CAPTURE_RATE, produceTemplate?.dailyQuantity ?? Infinity)
+      : expectedDailyDemand * (this.policy.discretionaryDemand / 100) * OPPORTUNITY_DEMAND_CAPTURE_RATE;
+    const expectedDailyRevenue = roundMoney(expectedOutputUnits * archetype.price);
+    const variablePremiumInputs = archetype.archetypeId === "premium-grocer"
+      ? expectedOutputUnits * (produceTemplate?.unitPrice ?? 0)
+      : null;
     const expectedDailyCost = roundMoney(
       Math.max(this.policy.minimumWage, archetype.wage) * requiredWorkers
       + templates.filter((contract) => contract.buyer === archetype.name).reduce(
-        (sum, contract) => sum + contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1),
+        (sum, contract) => sum + (contract.use === "operations"
+          ? contract.dailyQuantity * contract.unitPrice / MAINTENANCE_INTERVAL_DAYS
+          : (variablePremiumInputs ?? contract.dailyQuantity * contract.unitPrice)),
         0,
       ),
     );
     const reasons = [];
     if (activeInstance) reasons.push(`${activeInstance.name} is already operating`);
-    else if (instances.length) reasons.push("a previous café instance failed; private replacement is deferred");
+    else if (instances.length) reasons.push(`a previous ${archetype.name} instance failed; private replacement is deferred`);
     if (observations.length < OPPORTUNITY_OBSERVATION_DAYS) reasons.push(`${OPPORTUNITY_OBSERVATION_DAYS - observations.length} observation day${OPPORTUNITY_OBSERVATION_DAYS - observations.length === 1 ? "" : "s"} still required`);
     if (expectedDailyRevenue + 1e-9 < expectedDailyCost * OPPORTUNITY_MARGIN_BUFFER) reasons.push("observed demand does not cover expected wages and inputs with a margin buffer");
     const missingSuppliers = supplierStates.filter((supplier) => !supplier.available).map((supplier) => supplier.name);
@@ -382,7 +401,8 @@ export class TownSimulation {
       observedDays: observations.length,
       requiredObservationDays: OPPORTUNITY_OBSERVATION_DAYS,
       latestPotentialCustomers: observations.at(-1)?.potentialCustomers ?? 0,
-      expectedDailyCustomers,
+      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : "potential customers",
+      expectedDailyDemand,
       expectedDailyRevenue,
       expectedDailyCost,
       marginBuffer: OPPORTUNITY_MARGIN_BUFFER,
@@ -398,9 +418,9 @@ export class TownSimulation {
   }
 
   firmOpportunities() {
-    const cafe = this.firmArchetype("cafe");
-    if (!cafe || this.firms.some((firm) => firm.active && firm.archetypeId === cafe.archetypeId)) return [];
-    return [this.opportunityEvidence(cafe)];
+    return [this.firmArchetype("cafe"), this.firmArchetype("premium-grocer")]
+      .filter((archetype) => archetype && !this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId))
+      .map((archetype) => this.opportunityEvidence(archetype));
   }
 
   addContractsForFirm(firm) {
@@ -438,6 +458,7 @@ export class TownSimulation {
       founderCapital: OPPORTUNITY_STARTUP_CAPITAL,
       inventory: 0,
       revenueEMA: 0,
+      targetStaff: evidence.requiredWorkers,
       instanceNumber,
       foundingDay: this.day,
     });
@@ -472,18 +493,21 @@ export class TownSimulation {
   }
 
   observeFirmOpportunities() {
-    const cafe = this.firmArchetype("cafe");
-    if (!cafe || this.firms.some((firm) => firm.active && firm.archetypeId === cafe.archetypeId)) return null;
-    const window = this.opportunityWindows[cafe.archetypeId];
-    window.push(Object.freeze({ day: this.day, potentialCustomers: this.cafeDemandCount(cafe) }));
-    if (window.length > OPPORTUNITY_OBSERVATION_DAYS) window.shift();
-    const evidence = this.opportunityEvidence(cafe, window);
-    this.opportunitySequence += 1;
-    const history = { day: this.day, sequence: this.opportunitySequence, ...structuredClone(evidence), foundedInstanceId: null };
-    this.opportunityHistory.unshift(history);
-    const firm = this.foundFirm(cafe, evidence);
-    if (firm) history.foundedInstanceId = firm.instanceId;
-    return firm ?? evidence;
+    const results = [];
+    [this.firmArchetype("cafe"), this.firmArchetype("premium-grocer")].filter(Boolean).forEach((archetype) => {
+      if (this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId)) return;
+      const window = this.opportunityWindows[archetype.archetypeId];
+      window.push(Object.freeze({ day: this.day, potentialCustomers: this.opportunityDemandCount(archetype) }));
+      if (window.length > OPPORTUNITY_OBSERVATION_DAYS) window.shift();
+      const evidence = this.opportunityEvidence(archetype, window);
+      this.opportunitySequence += 1;
+      const history = { day: this.day, sequence: this.opportunitySequence, ...structuredClone(evidence), foundedInstanceId: null };
+      this.opportunityHistory.unshift(history);
+      const firm = this.foundFirm(archetype, evidence);
+      if (firm) history.foundedInstanceId = firm.instanceId;
+      results.push(firm ?? evidence);
+    });
+    return results.length === 1 ? results[0] : results;
   }
 
   note(person, text, kind = "neutral") {

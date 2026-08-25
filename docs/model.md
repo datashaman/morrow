@@ -52,19 +52,21 @@ The product catalog gives every traded thing a stable identifier, label, and uni
 
 Each configured starting instance begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first six people are assigned as owners, one per starting firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, and Morrow Fields are currently marked vital because they provide the lowest-priced food, the only housing service, and the sole agricultural input respectively.
 
-#### Private café formation
+#### Private café and premium-food formation
 
-The first endogenous private-formation path applies only when the Common Café archetype is absent at initialization. The absent archetype remains off the map and appears in the firm panel as an opportunity rather than an operating firm.
+Endogenous private formation applies when the Common Café or Green Basket archetype is absent at initialization. An absent archetype remains off the map and appears in the firm panel as an opportunity rather than an operating firm.
 
 Every settlement records the number of living people who could legally consider a café purchase before the discretionary-demand draw: a person focused on belonging with the price plus 7 cash reserved, or an acutely stressed person eligible for short-term comfort spending. After seven observations, expected daily revenue is:
 
 `mean potential customers × café price × discretionaryDemand × 0.50 capture rate`
 
-Formation requires that revenue cover two wages plus daily produce and daily-equivalent maintenance inputs with an 8% margin buffer. It also requires both configured suppliers to be active, two unemployed living workers, and an unemployed founder who is not already an active owner. The founder must hold the exact 40 startup capital above ten days of current food-and-housing essentials. These periods, capture rate, buffer, and capital rules are gameplay hypotheses rather than calibrated entrepreneurship behavior.
+The premium-food opportunity counts portions sought by living people with an empty pantry who can retain ten days of current essentials after paying the premium price. Expected sales capture 50% of those eligible portions, bounded by the produce contract. A founder-only opening is permitted because one attending grocer can handle the initial transaction load; income-supported staffing can expand it later.
+
+Formation requires that revenue cover the minimum staffing route, demand-scaled produce, and daily-equivalent maintenance inputs with an 8% margin buffer. It also requires every configured supplier to be active, enough unemployed living workers, and an unemployed founder who is not already an active owner. The founder must hold the exact 40 startup capital above ten days of current food-and-housing essentials. These periods, capture rate, buffer, capital, and minimum-staff rules are gameplay hypotheses rather than calibrated entrepreneurship behavior.
 
 The qualifying founder is selected deterministically by recovery preference, cash, then citizen ID. The 40 transfer is exact and creates the firm's only opening cash: the new instance starts with zero inventory and obtains produce and maintenance through newly created contracts. The founder and one other available worker become its initial staff. Founder and firm retain the observation, legal alternatives, `entrepreneur-v1` decision, funding ledgers, and life events. The same seed and state therefore reproduce the founder and opening day without consuming simulation randomness.
 
-A prior failed café instance currently blocks private replacement; that later lifecycle is tracked separately from first formation.
+A prior failed café or premium-grocer instance currently blocks private replacement; that later lifecycle is tracked separately from first formation.
 
 The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 4.85 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.82 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 
