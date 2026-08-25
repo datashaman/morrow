@@ -123,6 +123,9 @@ export class TownSimulation {
       publiclyOperated: false,
       unitsSold: 0,
       transactionsToday: 0,
+      knowledgeCapacityCarry: 0,
+      knowledgeCapacitySlotsToday: 0,
+      lastKnowledgeCapacityDay: null,
       attemptedTransactions: 0,
       turnedAwayTransactions: 0,
       priceRejectionsToday: 0,
@@ -1003,11 +1006,37 @@ export class TownSimulation {
     const capacity = firm.employees.reduce((total, id) => {
       const person = this.people[id];
       if (!person.attended) return total;
-      if (!this.knowledgeEnabled || firm.archetypeId !== "everyday-grocer") return total + firm.transactionsPerWorker;
-      const vocationalKnowledge = (person.knowledgeProfile.retail + person.knowledgeProfile.inventory) / 2;
-      return total + firm.transactionsPerWorker * (1 + vocationalKnowledge * GROCERY_KNOWLEDGE_CAPACITY_BONUS);
+      return total + firm.transactionsPerWorker;
     }, 0);
-    return Math.floor(capacity * firm.operationalReadiness);
+    const knowledgeSlots = this.knowledgeEnabled && firm.archetypeId === "everyday-grocer"
+      ? firm.knowledgeCapacitySlotsToday
+      : 0;
+    return Math.floor(capacity * firm.operationalReadiness) + knowledgeSlots;
+  }
+
+  knowledgeCapacityContribution(firm) {
+    if (!this.knowledgeEnabled || !firm.active || firm.archetypeId !== "everyday-grocer") return 0;
+    const contribution = firm.employees.reduce((total, id) => {
+      const person = this.people[id];
+      if (!person.attended) return total;
+      const vocationalKnowledge = (person.knowledgeProfile.retail + person.knowledgeProfile.inventory) / 2;
+      return total + firm.transactionsPerWorker * vocationalKnowledge * GROCERY_KNOWLEDGE_CAPACITY_BONUS;
+    }, 0);
+    return Math.round(contribution * firm.operationalReadiness * 1_000_000) / 1_000_000;
+  }
+
+  accrueKnowledgeCapacity(firm) {
+    if (firm.lastKnowledgeCapacityDay === this.day) return firm.knowledgeCapacitySlotsToday;
+    firm.lastKnowledgeCapacityDay = this.day;
+    firm.knowledgeCapacitySlotsToday = 0;
+    const contribution = this.knowledgeCapacityContribution(firm);
+    if (!contribution) return 0;
+    const accumulated = Math.round((firm.knowledgeCapacityCarry + contribution) * 1_000_000) / 1_000_000;
+    const slots = Math.floor(accumulated + 1e-9);
+    firm.knowledgeCapacityCarry = Math.round((accumulated - slots) * 1_000_000) / 1_000_000;
+    firm.knowledgeCapacitySlotsToday = slots;
+    if (slots > 0) this.note(firm, `worker knowledge made ${slots} extra transaction slot${slots === 1 ? "" : "s"} available; ${(firm.knowledgeCapacityCarry * 100).toFixed(1)}% carry remains`, "good");
+    return slots;
   }
 
   applyKnowledgeLearning(person, { source, sourceId, sourceName, domain, rate = null, target = null, rule, phase = PHASES[this.phase] ?? "Production" }) {
@@ -1163,6 +1192,7 @@ export class TownSimulation {
       this.considerAttendance(person, firm);
       this.applyWorkplaceLearning(person, firm);
     });
+    this.firms.forEach((firm) => this.accrueKnowledgeCapacity(firm));
     this.firms.forEach((firm) => {
       if (!firm.active || firm.production !== "direct") return;
       firm.inventory += firm.employees.reduce((sum, id) => {
@@ -2346,6 +2376,7 @@ export class TownSimulation {
     firm.inputCosts = 0;
     firm.unitsSold = 0;
     firm.transactionsToday = 0;
+    firm.knowledgeCapacitySlotsToday = 0;
     firm.attemptedTransactions = 0;
     firm.turnedAwayTransactions = 0;
     firm.priceRejectionsToday = 0;
@@ -2389,6 +2420,11 @@ export class TownSimulation {
     if (this.firms.some((firm) => firm.employees.some((personId) => this.people[personId]?.employer !== firm.id))) throw new Error("Firm employee references must be reciprocal");
     if (this.contracts.some((contract, id) => contract.id !== id || !this.firms[contract.supplierId] || !this.firms[contract.buyerId])) throw new Error("Supply contract references must remain valid");
     if (this.firms.some((firm) => !firm.active && !["insolvent", "receivership"].includes(firm.status))) throw new Error("An inactive firm must be insolvent or in receivership");
+    if (this.firms.some((firm) => !Number.isFinite(firm.knowledgeCapacityCarry)
+      || firm.knowledgeCapacityCarry < 0
+      || firm.knowledgeCapacityCarry >= 1
+      || !Number.isInteger(firm.knowledgeCapacitySlotsToday)
+      || firm.knowledgeCapacitySlotsToday < 0)) throw new Error("Invalid knowledge capacity accumulator");
     this.people.forEach((person) => {
       this.friendIds(person).forEach((friendId) => {
         const reciprocal = this.people[friendId].relationships[person.id];

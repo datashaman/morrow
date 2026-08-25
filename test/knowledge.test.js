@@ -20,6 +20,11 @@ test("citizens begin with versioned general knowledge and no vocational knowledg
     });
     assert.deepEqual(person.learningHistory, []);
   });
+  town.firms.forEach((firm) => {
+    assert.equal(firm.knowledgeCapacityCarry, 0);
+    assert.equal(firm.knowledgeCapacitySlotsToday, 0);
+    assert.equal(firm.lastKnowledgeCapacityDay, null);
+  });
 });
 
 test("an attended grocery shift records bounded retail and inventory learning", () => {
@@ -55,7 +60,7 @@ test("absence and unrelated work create no vocational learning", () => {
   assert.deepEqual(housingWorker.learningHistory, []);
 });
 
-test("grocery knowledge gives only the configured capped transaction-capacity bonus", () => {
+test("grocery knowledge accumulates a bounded contribution into whole daily slots", () => {
   const town = new TownSimulation({ seed: 42 });
   const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
   const housing = town.firms.find((firm) => firm.archetypeId === "housing-provider");
@@ -73,8 +78,115 @@ test("grocery knowledge gives only the configured capped transaction-capacity bo
     town.people[id].knowledgeProfile.inventory = 1;
   });
 
+  const moneyBefore = town.totalMoney();
+  assert.equal(town.accrueKnowledgeCapacity(grocer), Math.floor(baseGroceryCapacity * GROCERY_KNOWLEDGE_CAPACITY_BONUS));
+  assert.equal(grocer.knowledgeCapacityCarry, 0.3);
   assert.equal(town.transactionCapacity(grocer), Math.floor(baseGroceryCapacity * (1 + GROCERY_KNOWLEDGE_CAPACITY_BONUS)));
   assert.equal(town.transactionCapacity(housing), baseHousingCapacity);
+  assert.equal(town.totalMoney(), moneyBefore);
+  assert.match(grocer.events[0].text, /worker knowledge made 6 extra transaction slots available; 30.0% carry remains/);
+});
+
+test("knowledge capacity accrues once per day and capacity reads are pure", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  grocer.employees.forEach((id) => {
+    town.people[id].attended = true;
+    town.people[id].knowledgeProfile.retail = 0.2;
+    town.people[id].knowledgeProfile.inventory = 0.2;
+  });
+
+  assert.equal(town.accrueKnowledgeCapacity(grocer), 1);
+  const accrued = { carry: grocer.knowledgeCapacityCarry, slots: grocer.knowledgeCapacitySlotsToday, events: grocer.events.length };
+  assert.equal(town.accrueKnowledgeCapacity(grocer), accrued.slots);
+  assert.equal(town.transactionCapacity(grocer), grocer.employees.length * grocer.transactionsPerWorker + 1);
+  assert.equal(town.transactionCapacity(grocer), grocer.employees.length * grocer.transactionsPerWorker + 1);
+  assert.deepEqual({ carry: grocer.knowledgeCapacityCarry, slots: grocer.knowledgeCapacitySlotsToday, events: grocer.events.length }, accrued);
+
+  town.day += 1;
+  assert.equal(town.accrueKnowledgeCapacity(grocer), 1);
+  assert.equal(grocer.knowledgeCapacityCarry, 0.52);
+  grocer.cash = 1_000;
+  town.initialMoney = town.totalMoney();
+  town.finishFirmSettlement(grocer);
+  assert.equal(grocer.knowledgeCapacitySlotsToday, 0);
+  assert.equal(grocer.knowledgeCapacityCarry, 0.52);
+});
+
+test("production accrues capacity after attended workplace learning", () => {
+  const citizenPolicy = {
+    id: "always-attend-test",
+    decide: ({ observation, legalActions }) => ({
+      action: observation.kind === "attendance" ? "attend-shift" : legalActions[0],
+      reasons: ["test policy"],
+    }),
+  };
+  const town = new TownSimulation({ seed: 42, citizenPolicy });
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+
+  town.productionPhase();
+
+  assert.equal(grocer.lastKnowledgeCapacityDay, town.day);
+  assert.ok(grocer.knowledgeCapacityCarry > 0);
+  assert.ok(grocer.employees.every((id) => town.people[id].learningHistory.length === 2));
+  const before = { carry: grocer.knowledgeCapacityCarry, slots: grocer.knowledgeCapacitySlotsToday };
+  town.accrueKnowledgeCapacity(grocer);
+  assert.deepEqual({ carry: grocer.knowledgeCapacityCarry, slots: grocer.knowledgeCapacitySlotsToday }, before);
+});
+
+test("an earned knowledge slot can serve one additional transaction that day", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const shopper = town.people.find((person) => !grocer.employees.includes(person.id));
+  grocer.employees.forEach((id) => {
+    town.people[id].attended = true;
+    town.people[id].knowledgeProfile.retail = 0.2;
+    town.people[id].knowledgeProfile.inventory = 0.2;
+  });
+  town.accrueKnowledgeCapacity(grocer);
+  const scalarCapacity = grocer.employees.length * grocer.transactionsPerWorker;
+  grocer.transactionsToday = scalarCapacity;
+
+  assert.equal(town.requestTransaction(grocer, shopper, "food"), true);
+  assert.equal(town.requestTransaction(grocer, shopper, "food"), false);
+  assert.equal(grocer.transactionsToday, scalarCapacity + 1);
+  assert.match(shopper.events[0].text, /no staffed capacity/);
+});
+
+test("absence, unrelated sectors, inactive firms, and disabled knowledge accrue no capacity", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const housing = town.firms.find((firm) => firm.archetypeId === "housing-provider");
+  grocer.knowledgeCapacityCarry = 0.4;
+  grocer.employees.forEach((id) => {
+    town.people[id].attended = false;
+    town.people[id].knowledgeProfile.retail = 1;
+    town.people[id].knowledgeProfile.inventory = 1;
+  });
+  housing.employees.forEach((id) => {
+    town.people[id].attended = true;
+    town.people[id].knowledgeProfile.retail = 1;
+    town.people[id].knowledgeProfile.inventory = 1;
+  });
+
+  assert.equal(town.accrueKnowledgeCapacity(grocer), 0);
+  assert.equal(grocer.knowledgeCapacityCarry, 0.4);
+  assert.equal(town.accrueKnowledgeCapacity(housing), 0);
+  assert.equal(housing.knowledgeCapacityCarry, 0);
+  town.day += 1;
+  grocer.active = false;
+  assert.equal(town.accrueKnowledgeCapacity(grocer), 0);
+  assert.equal(grocer.knowledgeCapacityCarry, 0.4);
+
+  const disabled = new TownSimulation({ seed: 42, knowledgeEnabled: false });
+  const disabledGrocer = disabled.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  disabledGrocer.employees.forEach((id) => {
+    disabled.people[id].attended = true;
+    disabled.people[id].knowledgeProfile.retail = 1;
+    disabled.people[id].knowledgeProfile.inventory = 1;
+  });
+  assert.equal(disabled.accrueKnowledgeCapacity(disabledGrocer), 0);
+  assert.equal(disabled.transactionCapacity(disabledGrocer), disabledGrocer.employees.length * disabledGrocer.transactionsPerWorker);
 });
 
 test("knowledge can be disabled for a scalar-skill baseline without changing money", () => {
@@ -89,6 +201,7 @@ test("knowledge can be disabled for a scalar-skill baseline without changing mon
   const moneyBefore = town.totalMoney();
 
   assert.deepEqual(town.applyWorkplaceLearning(worker, grocer), []);
+  assert.equal(town.accrueKnowledgeCapacity(grocer), 0);
   assert.equal(town.transactionCapacity(grocer), grocer.employees.length * grocer.transactionsPerWorker);
   assert.equal(town.totalMoney(), moneyBefore);
 });

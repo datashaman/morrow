@@ -16,6 +16,7 @@ test("knowledge evaluation is deterministic, serializable, and invariant-safe", 
     scalarBaselineHasNoLearning: true,
     learningObserved: true,
     capacityEffectObserved: true,
+    discreteCapacityEffectObserved: true,
   });
 });
 
@@ -26,6 +27,7 @@ test("knowledge evaluation reports learning, capacity, and paired town outcomes"
   assert.ok(pair.knowledge.learning.records > 0);
   assert.ok(pair.knowledge.learning.sourceCounts.workplace > 0);
   assert.ok(pair.knowledge.grocery.grossKnowledgeBonusCapacityPointDays >= 1);
+  assert.ok(pair.knowledge.grocery.discreteBonusCapacityPointDays >= 1);
   assert.equal(typeof pair.deltas.groceryTransactions, "number");
   assert.equal(typeof pair.deltas.alive, "number");
   assert.equal(typeof pair.deltas.employed, "number");

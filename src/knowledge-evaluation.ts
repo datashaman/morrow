@@ -127,6 +127,7 @@ export function evaluateKnowledgeTracer(config: KnowledgeEvaluationConfig) {
     scalarBaselineHasNoLearning: pairs.every((pair) => pair.scalar.learning.records === 0),
     learningObserved: sum(pairs.map((pair) => pair.knowledge.learning.records)) > 0,
     capacityEffectObserved: sum(pairs.map((pair) => pair.knowledge.grocery.grossKnowledgeBonusCapacityPointDays)) >= 1,
+    discreteCapacityEffectObserved: sum(pairs.map((pair) => pair.knowledge.grocery.discreteBonusCapacityPointDays)) >= 1,
   };
   return {
     metadata: {
@@ -137,7 +138,7 @@ export function evaluateKnowledgeTracer(config: KnowledgeEvaluationConfig) {
       phasesPerDay: PHASES.length,
       baseline: "scalar skill with knowledge updates and effects disabled",
       candidate: "knowledge-v1 workplace/course learning and grocery-capacity effect",
-      hypothesis: "Across the fixed run set, knowledge-v1 should create auditable learning and at least one gross grocery capacity-point-day without violating cash conservation.",
+      hypothesis: "Across the fixed run set, knowledge-v1 should create auditable learning, at least one gross grocery capacity-point-day, and at least one accumulated whole transaction slot without violating cash conservation.",
       interpretation: "Deterministic gameplay comparison only; not empirical evidence about learning, productivity, education, or labor markets.",
     },
     status: Object.values(checks).every(Boolean) ? "passed" : "failed",
