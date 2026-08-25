@@ -22,10 +22,14 @@ import {
   HEALTH_TREATMENT_RESERVE_DAYS,
   HEALTH_TREATMENT_THRESHOLD,
   HOUSING_DISPLACEMENT_RATE,
+  HOUSING_PROJECT_CAPACITY_GAIN,
+  HOUSING_REPAIR_GRACE_DAYS,
+  HOUSING_REPAIR_INTERVAL_DAYS,
   HOUSING_RECEIVERSHIP_GRACE_DAYS,
   HOUSING_REPLACEMENT_STAFF,
   HOUSING_RESTART_COST,
   INITIAL_FRIENDSHIP_STRENGTH,
+  INITIAL_DWELLING_CAPACITY,
   MAINTENANCE_INTERVAL_DAYS,
   MIN_FOOD_QUALITY,
   MISSED_MAINTENANCE_CAPACITY,
@@ -64,12 +68,13 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
     this.latentFirmNames = [...latentFirmNames];
     this.formationArchetypeIds = [...formationArchetypeIds];
+    this.housingCapacityEnabled = housingCapacityEnabled;
     this.reset();
   }
 
@@ -92,7 +97,10 @@ export class TownSimulation {
       sales: 0,
       inputCosts: 0,
       operatingSupplies: 0,
-      constructionSupplies: 0,
+      dwellingCapacity: archetype.sector === "housing" ? INITIAL_DWELLING_CAPACITY : null,
+      lastHousingProjectDay: archetype.sector === "housing" ? 1 : null,
+      completedHousingProjects: 0,
+      lastCapacityLossDay: null,
       operationalReadiness: 1,
       lastMaintenanceDay: 0,
       receivershipDay: null,
@@ -317,9 +325,9 @@ export class TownSimulation {
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
       const validOperatingInput = contract.use === "operations" && buyer.sells === contract.output;
-      const validConstructionInput = contract.use === "construction" && buyer.sector === "housing" && contract.output === "housing";
+      const validConstructionProject = contract.use === "construction-project" && buyer.sector === "housing" && contract.output === "housing";
       const validResaleInput = contract.use !== "operations" && buyer.input === contract.product && buyer.sells === contract.output;
-      if (!supplier || !buyer || supplier.sells !== contract.product || (!validOperatingInput && !validConstructionInput && !validResaleInput)) {
+      if (!supplier || !buyer || supplier.sells !== contract.product || (!validOperatingInput && !validConstructionProject && !validResaleInput)) {
         throw new Error(`Invalid supply contract ${contract.id}`);
       }
     });
@@ -374,6 +382,22 @@ export class TownSimulation {
       && person.cash + 1e-9 >= archetype.price + reserve).length;
   }
 
+  housingOccupancy() {
+    return this.people.filter((person) => person.alive && person.housed).length;
+  }
+
+  housingProjectDemand(housing = this.firms.find((firm) => firm.active && firm.sector === "housing")) {
+    if (!this.housingCapacityEnabled || !housing?.active) return null;
+    const vacancies = Math.max(0, housing.dwellingCapacity - this.housingOccupancy());
+    if (vacancies <= HOUSING_PROJECT_CAPACITY_GAIN) return "expansion";
+    if (this.day - housing.lastHousingProjectDay >= HOUSING_REPAIR_INTERVAL_DAYS) return "repair";
+    return null;
+  }
+
+  builderDemandCount() {
+    return this.housingProjectDemand() ? 1 : 0;
+  }
+
   opportunityDemandCount(archetype) {
     if (archetype.archetypeId === "cafe") return this.cafeDemandCount(archetype);
     if (archetype.archetypeId === "premium-grocer") return this.premiumFoodDemandCount(archetype);
@@ -381,6 +405,7 @@ export class TownSimulation {
     if (archetype.archetypeId === "school") return this.educationDemandCount(archetype);
     if (archetype.archetypeId === "materials-yard") return this.constructionMaterialDemandCount();
     if (archetype.archetypeId === "clinic") return this.clinicDemandCount(archetype);
+    if (archetype.archetypeId === "builder") return this.builderDemandCount();
     return 0;
   }
 
@@ -423,9 +448,9 @@ export class TownSimulation {
       ? observations.reduce((sum, observation) => sum + observation.potentialCustomers, 0) / observations.length
       : 0;
     const produceTemplate = templates.find((contract) => contract.buyer === archetype.name && contract.use !== "operations");
-    const demandScaledInputs = ["premium-grocer", "apothecary", "school", "materials-yard", "clinic"].includes(archetype.archetypeId);
+    const demandScaledInputs = ["premium-grocer", "apothecary", "school", "materials-yard", "clinic", "builder"].includes(archetype.archetypeId);
     const outputCapacity = produceTemplate?.dailyQuantity ?? archetype.transactionsPerWorker * requiredWorkers;
-    const demandCaptureRate = archetype.archetypeId === "materials-yard" ? 1 : OPPORTUNITY_DEMAND_CAPTURE_RATE;
+    const demandCaptureRate = ["materials-yard", "builder"].includes(archetype.archetypeId) ? 1 : OPPORTUNITY_DEMAND_CAPTURE_RATE;
     const expectedOutputUnits = demandScaledInputs
       ? Math.min(expectedDailyDemand * demandCaptureRate, outputCapacity)
       : expectedDailyDemand * (this.policy.discretionaryDemand / 100) * OPPORTUNITY_DEMAND_CAPTURE_RATE;
@@ -459,7 +484,7 @@ export class TownSimulation {
       observedDays: observations.length,
       requiredObservationDays: OPPORTUNITY_OBSERVATION_DAYS,
       latestPotentialCustomers: observations.at(-1)?.potentialCustomers ?? 0,
-      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : archetype.archetypeId === "school" ? "eligible students" : archetype.archetypeId === "materials-yard" ? "housing material bundles" : archetype.archetypeId === "clinic" ? "severe-care patients" : "potential customers",
+      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : archetype.archetypeId === "school" ? "eligible students" : archetype.archetypeId === "materials-yard" ? "housing material bundles" : archetype.archetypeId === "clinic" ? "severe-care patients" : archetype.archetypeId === "builder" ? "housing projects" : "potential customers",
       expectedDailyDemand,
       expectedDailyRevenue,
       expectedDailyCost,
@@ -1024,10 +1049,6 @@ export class TownSimulation {
 
   productionPhase() {
     this.firms.forEach((firm) => this.maintainFirm(firm));
-    this.firms.filter((firm) => firm.active && firm.sector === "housing").forEach((firm) => {
-      const constructionContract = this.contracts.find((contract) => contract.active && contract.use === "construction" && contract.buyerId === firm.id);
-      if (constructionContract && firm.constructionSupplies >= 1) firm.constructionSupplies -= 1;
-    });
     this.people.forEach((person) => {
       if (!person.alive) {
         person.attended = false;
@@ -1057,9 +1078,12 @@ export class TownSimulation {
       if (!contract.active || !supplier.active || !buyer.active) return;
       const buyerStock = contract.use === "operations"
         ? buyer.operatingSupplies
-        : contract.use === "construction" ? buyer.constructionSupplies : buyer.inventory;
+        : contract.use === "construction-project" ? 0 : buyer.inventory;
       const targetStock = contract.targetStock ?? contract.dailyQuantity * 2;
-      contract.requestedToday = Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(targetStock - buyerStock)));
+      const housingProject = contract.use === "construction-project" ? this.housingProjectDemand(buyer) : null;
+      contract.requestedToday = contract.use === "construction-project"
+        ? Number(Boolean(housingProject))
+        : Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(targetStock - buyerStock)));
       const available = Math.floor(supplier.inventory);
       const affordable = Math.floor((buyer.cash + 1e-9) / contract.unitPrice);
       const units = Math.min(contract.requestedToday, available, affordable);
@@ -1072,7 +1096,14 @@ export class TownSimulation {
         if (paid === cost) {
           supplier.inventory -= units;
           if (contract.use === "operations") buyer.operatingSupplies += units;
-          else if (contract.use === "construction") buyer.constructionSupplies += units;
+          else if (contract.use === "construction-project") {
+            if (housingProject === "expansion") buyer.dwellingCapacity += HOUSING_PROJECT_CAPACITY_GAIN * units;
+            buyer.lastHousingProjectDay = this.day;
+            buyer.completedHousingProjects += units;
+            this.note(buyer, housingProject === "expansion"
+              ? `${supplier.name} expanded dwelling capacity to ${buyer.dwellingCapacity}`
+              : `${supplier.name} completed a housing repair project`, "good");
+          }
           else buyer.inventory += units;
           supplier.sales += paid;
           supplier.unitsSold += units;
@@ -1268,13 +1299,15 @@ export class TownSimulation {
     const wasHoused = person.housed;
     const due = roundMoney(wasHoused ? housing.price : housing.price * 3);
     const canPay = person.cash + 1e-9 >= due;
+    const occupancy = this.housingOccupancy();
+    const dwellingAvailable = !this.housingCapacityEnabled || wasHoused || occupancy < housing.dwellingCapacity;
     if (!canPay) housing.priceRejectionsToday += 1;
-    const option = canPay ? {
+    const option = canPay && dwellingAvailable ? {
       action: `${wasHoused ? "pay-housing" : "secure-housing"}:${housing.id}`,
       firmId: housing.id,
       firmName: housing.name,
       totalPrice: due,
-      capacityAvailable: housing.transactionsToday < this.transactionCapacity(housing),
+      capacityAvailable: dwellingAvailable && housing.transactionsToday < this.transactionCapacity(housing),
     } : null;
     const inactiveAction = wasHoused ? "defer-housing" : "remain-unhoused";
     const legalActions = Object.freeze([inactiveAction, ...(option ? [option.action] : [])]);
@@ -1284,6 +1317,8 @@ export class TownSimulation {
       citizenName: person.name,
       housed: wasHoused,
       rentArrears: person.rentArrears,
+      dwellingCapacity: housing.dwellingCapacity,
+      housingOccupancy: occupancy,
       stress: person.stress,
       runwayDays: this.runwayDays(person),
       scarcityError: person.scarcityError,
@@ -1564,6 +1599,7 @@ export class TownSimulation {
   settlementPhase() {
     this.resolveHousingReceivership();
     this.resolveEssentialSectorReentry();
+    this.resolveHousingCapacity();
     const budget = this.government.cash * (this.policy.supportRate / 100) * 0.18;
     let spent = 0;
     const vulnerable = this.people.filter((person) => person.alive).sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
@@ -1603,12 +1639,35 @@ export class TownSimulation {
     this.day += 1;
   }
 
+  resolveHousingCapacity() {
+    const housing = this.firms.find((firm) => firm.sector === "housing");
+    if (!this.housingCapacityEnabled || !housing?.active || housing.lastCapacityLossDay === this.day) return false;
+    const overdueDays = this.day - housing.lastHousingProjectDay - HOUSING_REPAIR_INTERVAL_DAYS;
+    if (overdueDays <= HOUSING_REPAIR_GRACE_DAYS) return false;
+    housing.lastCapacityLossDay = this.day;
+    housing.dwellingCapacity = Math.max(0, housing.dwellingCapacity - 1);
+    this.note(housing, `deferred repairs reduced dwelling capacity to ${housing.dwellingCapacity}`, "bad");
+    const overflow = Math.max(0, this.housingOccupancy() - housing.dwellingCapacity);
+    this.people.filter((person) => person.alive && person.housed)
+      .sort((a, b) => a.cash - b.cash || a.id - b.id)
+      .slice(0, overflow)
+      .forEach((person) => {
+        person.housed = false;
+        person.rentArrears = 0;
+        this.note(person, "deferred building repairs removed their dwelling from service", "bad");
+      });
+    return true;
+  }
+
   nextOperatingNeed(firm) {
     const wage = Math.max(this.policy.minimumWage, firm.wage);
     const payroll = wage * Math.max(1, firm.employees.length);
     const inputs = this.contracts
       .filter((contract) => contract.active && contract.buyerId === firm.id)
-      .reduce((total, contract) => total + contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1), 0);
+      .reduce((total, contract) => {
+        if (contract.use === "construction-project" && !this.housingProjectDemand(firm)) return total;
+        return total + contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1);
+      }, 0);
     return roundMoney(payroll + inputs);
   }
 

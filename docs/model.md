@@ -37,7 +37,7 @@ Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.
 
 ### Firms
 
-Ten firm archetypes are configured in `src/config.js`. The interactive town starts with the four-firm essential foundation—Harvest Foods, HomeWorks, Makers Guild, and Morrow Fields—while Common Café, Green Basket, Morrow Apothecary, Morrow School, Morrow Materials, and Morrow Clinic begin as latent opportunities. Historical viability diagnostics explicitly restrict their formation set to the original café and premium grocer so earlier comparisons retain their scenario.
+Eleven firm archetypes are configured in `src/config.js`. The interactive town starts with the four-firm essential foundation—Harvest Foods, HomeWorks, Makers Guild, and Morrow Fields—while Common Café, Green Basket, Morrow Apothecary, Morrow School, Morrow Materials, Morrow Clinic, and Morrow Builders begin as latent opportunities. Historical viability diagnostics explicitly restrict their formation set to the original café and premium grocer so earlier comparisons retain their scenario.
 
 An archetype defines a repeatable kind of business, product pipeline, prices, staffing assumptions, and map location. A runtime firm is a distinct instance with its own numeric entity ID, stable archetype-and-sequence identity such as `cafe:1`, founding day, founder, cash, workers, contracts, and history. Closed instances remain in the town record rather than being rewritten as a new business.
 
@@ -54,13 +54,14 @@ The product catalog gives every traded thing a stable identifier, label, and uni
 | Morrow School | Worker education | Finite lessons provided directly by teachers | 4.5 | 7.0 | 2 |
 | Morrow Materials | Construction bundles | Makers Guild kits, assembled by yard workers | 16.0 | 7.4 | 2 |
 | Morrow Clinic | Clinical treatment | Morrow Apothecary medicine, used by clinical staff | 7.5 | 8.0 | 2 |
+| Morrow Builders | Building projects | Morrow Materials bundles, used by construction workers | 28.0 | 8.0 | 2 |
 | Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.25 wholesale | 5.8 | 7 |
 
 Each operating starting instance begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first four people are assigned as owners in the interactive minimal start, one per starting firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, and Morrow Fields are currently marked vital because they provide the lowest-priced food, the only housing service, and the sole agricultural input respectively. The four active supply contracts connect agriculture to essential food and Makers Guild maintenance to the food shop, housing provider, and farm from day one.
 
-#### Private café, premium-food, apothecary, school, materials, and clinic formation
+#### Private café, premium-food, apothecary, school, materials, clinic, and builder formation
 
-Endogenous private formation applies when the Common Café, Green Basket, Morrow Apothecary, Morrow School, Morrow Materials, or Morrow Clinic archetype is absent at initialization. An absent archetype remains off the map and appears in the firm panel as an opportunity rather than an operating firm.
+Endogenous private formation applies when the Common Café, Green Basket, Morrow Apothecary, Morrow School, Morrow Materials, Morrow Clinic, or Morrow Builders archetype is absent at initialization. An absent archetype remains off the map and appears in the firm panel as an opportunity rather than an operating firm.
 
 Every settlement records the number of living people who could legally consider a café purchase before the discretionary-demand draw: a person focused on belonging with the price plus 7 cash reserved, or an acutely stressed person eligible for short-term comfort spending. After seven observations, expected daily revenue is:
 
@@ -72,15 +73,17 @@ The apothecary opportunity counts living people below 68% health who can retain 
 
 The school opportunity counts living people below 72% skill who can retain three days of current essentials after buying one 4.5 lesson. Expected daily lessons capture 50% of eligible students and are bounded by the founding teacher's five-transaction capacity. A founder-only opening can later expand to five income-supported teaching jobs. Lessons are direct production: attending teachers create finite service inventory during production rather than consuming a material input.
 
-The materials opportunity observes one recurring daily housing-maintenance bundle whenever HomeWorks is active. A founder-only yard is viable only when the expected 16 revenue covers its 7.4 wage, one 5 Makers Guild fabrication kit per bundle, daily-equivalent maintenance, and the shared 8% margin buffer. The yard converts one guild kit into one stocked construction bundle and can expand from one to four income-supported jobs. This deliberately narrow launch customer keeps the first materials pipeline explicit before construction projects are added; the demand quantity and conversion are balance hypotheses.
+The materials opportunity observes one recurring daily construction bundle whenever HomeWorks is active. A founder-only yard is viable only when the expected 16 revenue covers its 7.4 wage, one 5 Makers Guild fabrication kit per bundle, daily-equivalent maintenance, and the shared 8% margin buffer. The yard converts one guild kit into one stocked construction bundle and can expand from one to four income-supported jobs. Its downstream contract becomes active when a builder forms.
 
 The clinic opportunity counts living people below 38% health who could retain one current essential-cost day after a 7.5 appointment. Expected treatment captures 50% of those patients, bounded by four daily medicine inputs. Formation also requires an operating Morrow Apothecary. One founding clinician can serve four appointments and later expand to five income-supported jobs. The health threshold, reserve, price, one-dose-to-one-appointment conversion, recovery, and capacity are uncalibrated gameplay hypotheses.
 
+The builder opportunity observes one project per day while HomeWorks is at or within two dwellings of full occupancy, or when a periodic repair is due. Formation requires an operating Morrow Materials. One founding builder can turn one 16 material bundle into a 28 exact project for HomeWorks, while ordinary Makers Guild maintenance remains a separate input. Realized project income can later support up to five jobs. Demand can disappear after capacity expands, so construction insolvency remains possible.
+
 Formation requires that revenue cover the minimum staffing route, demand-scaled produce, and daily-equivalent maintenance inputs with an 8% margin buffer. It also requires every configured supplier to be active, enough unemployed living workers, and an unemployed founder who is not already an active owner. The founder must hold the exact 40 startup capital above ten days of current food-and-housing essentials. These periods, capture rate, buffer, capital, and minimum-staff rules are gameplay hypotheses rather than calibrated entrepreneurship behavior.
 
-The qualifying founder is selected deterministically by recovery preference, cash, then citizen ID. The 40 transfer is exact and creates the firm's only opening cash: the new instance starts with zero inventory and obtains configured inputs and maintenance through newly created contracts. The firm hires its configured formation staff: two people for a café and the founder alone for a premium grocer, apothecary, school, materials yard, or clinic. Founder and firm retain the observation, legal alternatives, `entrepreneur-v1` decision, funding ledgers, and life events. The same seed and state therefore reproduce the founder and opening day without consuming simulation randomness.
+The qualifying founder is selected deterministically by recovery preference, cash, then citizen ID. The 40 transfer is exact and creates the firm's only opening cash: the new instance starts with zero inventory and obtains configured inputs and maintenance through newly created contracts. The firm hires its configured formation staff: two people for a café and the founder alone for a premium grocer, apothecary, school, materials yard, clinic, or builder. Founder and firm retain the observation, legal alternatives, `entrepreneur-v1` decision, funding ledgers, and life events. The same seed and state therefore reproduce the founder and opening day without consuming simulation randomness.
 
-When a café, premium grocer, apothecary, school, materials yard, or clinic closes, its instance, owner, ledger, decisions, events, cash, and inactive contracts remain historical. Its opportunity window resets and a 21-day confidence cooldown begins. During the cooldown the panel continues to show current demand, supplier, worker, founder, revenue, and cost evidence, but formation is not legal. After the cooldown, seven recent viable observations can create a new sequential instance such as `cafe:2`.
+When a café, premium grocer, apothecary, school, materials yard, clinic, or builder closes, its instance, owner, ledger, decisions, events, cash, and inactive contracts remain historical. Its opportunity window resets and a 21-day confidence cooldown begins. During the cooldown the panel continues to show current demand, supplier, worker, founder, revenue, and cost evidence, but formation is not legal. After the cooldown, seven recent viable observations can create a new sequential instance such as `cafe:2`.
 
 A replacement cannot reuse any prior owner of that archetype. It receives no cash, stock, contracts, or history from the failed business: a different qualifying founder transfers the same exact protected capital, workers are hired from current unemployment, and new contracts are appended against active suppliers. The old and new instances remain separately selectable in the firm panel; when a replacement is operating, the town map shows the current building rather than drawing overlapping historical landmarks. The 21-day confidence period and permanent exclusion of prior owners are gameplay hypotheses rather than calibrated re-entry behavior.
 
@@ -160,9 +163,9 @@ For direct producers, each attending employee adds inventory according to:
 
 `(0.42 + skill × 0.75) × firmProductivity × health × (1 − stress × 0.32)`
 
-Morrow Fields applies this rule to farm produce, Makers Guild applies it to tools and repair kits, and teachers apply it to finite lesson capacity. Food retailers, the café, apothecary, and materials yard do not create saleable stock during production; they acquire and convert their configured input in the next phase. These multipliers and one-input-unit-to-one-output-unit conversions are balance hypotheses, not empirical yields. Lower health, stress, absence, layoffs, uneven access, and missed maintenance can still reduce available goods and services.
+Morrow Fields applies this rule to farm produce, Makers Guild applies it to tools and repair kits, and teachers apply it to finite lesson capacity. Food retailers, the café, apothecary, materials yard, and builder do not create saleable stock during production; they acquire and convert their configured input in the next phase. These multipliers and one-input-unit-to-one-output-unit conversions are balance hypotheses, not empirical yields. Lower health, stress, absence, layoffs, uneven access, and missed maintenance can still reduce available goods and services.
 
-HomeWorks operates a fixed service and does not produce or consume housing inventory.
+HomeWorks operates the town's finite dwelling capacity rather than producing saleable housing inventory.
 
 ### 2. Supply and procurement
 
@@ -170,7 +173,7 @@ Morrow Fields has immediate-settlement supply contracts with Harvest Foods, Gree
 
 Makers Guild has immediate-settlement maintenance contracts with every other starting firm. Each buyer holds one operating kit separately from saleable inventory. Every three days it consumes a kit; procurement then replenishes toward one kit when stock and buyer cash permit. Missing a maintenance cycle reduces direct production and transaction capacity to 65% until a later kit is consumed. This makes locally produced tools an input to agriculture, retail, housing, and café operations while citizen learning-tool purchases remain a secondary market. The three-day interval, one-kit target, price of 5, and 65% constrained capacity are balance hypotheses.
 
-When Morrow Materials forms, a separate Makers Guild fabrication contract delivers one 5 kit that the staffed yard converts one-for-one into a construction bundle. A second immediate-settlement contract can deliver one 16 bundle per day to HomeWorks, which holds construction supplies separately from generic maintenance kits and consumes one available bundle each production phase. Missing construction stock does not yet reduce dwelling capacity; that consequence belongs to the later finite-housing slice.
+When Morrow Materials forms, a separate Makers Guild fabrication contract delivers one 5 kit that the staffed yard converts one-for-one into a construction bundle. When Morrow Builders also forms, an immediate-settlement contract can deliver one 16 bundle per day to the builder. A second exact contract sells a completed 28 project to HomeWorks only when an expansion or repair is currently required. The same procurement phase can carry a stocked material bundle through the builder into the paid project; both transfers retain counterpart ledgers.
 
 When Morrow Clinic forms, Morrow Apothecary can deliver up to four medicine doses per day at its current supplier-linked price. Each dose becomes one stocked clinical appointment. The clinic also needs the ordinary maintenance contract. Apothecary shortage, clinic cash, maintenance, attending clinicians, appointment inventory, and transaction capacity can all prevent care.
 
@@ -205,6 +208,8 @@ Consuming a meal reduces `hungryDays` by one and restores health by its effectiv
 ### 5. Housing and bills
 
 HomeWorks is the only current housing provider.
+
+The interactive town begins with 40 occupied dwellings. Rehousing is legal only when occupancy is below capacity; an affordable citizen cannot rent a nonexistent dwelling. When vacancies fall to two or fewer, HomeWorks demands an expansion project. An exact builder project consumes one stocked construction bundle and adds two dwellings. Once more spare capacity exists, the next project is a repair after fourteen days rather than another expansion. If no repair completes within a further seven-day grace period, capacity falls by one dwelling per day and the least-resourced housed citizens are displaced until occupancy fits. Each project, capacity loss, and displacement is recorded. These quantities and deterministic displacement ranking are gameplay hypotheses.
 
 - A housed person owes one rent of 6.0 every seven days, beginning on day 1 and recurring on days 8, 15, and so on.
 - An unhoused person may attempt rehousing on any day and needs three rents, 18.0, to secure housing again. This represents a deposit plus rent.

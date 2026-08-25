@@ -140,6 +140,8 @@ export type HousingObservation = Readonly<{
   citizenName: string;
   housed: boolean;
   rentArrears: number;
+  dwellingCapacity: number;
+  housingOccupancy: number;
   stress: number;
   runwayDays: number;
   scarcityError: boolean;

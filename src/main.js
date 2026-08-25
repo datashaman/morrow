@@ -120,7 +120,7 @@ app.innerHTML = `
   </section>
 `;
 
-const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES });
+const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true });
 let selected = simulation.people.findIndex((person) => person.name === "Sizwe");
 let selectedFirm = 0;
 let paused = false;
@@ -367,7 +367,7 @@ function updateInterface() {
     card.innerHTML = `
       <span class="firm-card-heading"><b>${firmInstanceLabel(firm, simulation.firms)}</b><i class="status ${firm.status}">${firm.status}</i></span>
       <span class="pipeline">${describePipeline(firm, PRODUCTS)}</span>
-      <span class="firm-stats">${firm.vital ? "Vital · " : ""}${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.employees.length}/${firm.targetStaff} staff · ${firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""} · ${money(firm.revenueEMA)} smoothed net income${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}</span>
+      <span class="firm-stats">${firm.vital ? "Vital · " : ""}${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.employees.length}/${firm.targetStaff} staff · ${firm.sector === "housing" ? `${simulation.housingOccupancy()}/${firm.dwellingCapacity} dwellings occupied` : firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""} · ${money(firm.revenueEMA)} smoothed net income${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}</span>
       <span class="owner-choice">Owner choice · price ${firm.ownerDecision.priceDecision}${firm.ownerDecision.priceDay ? ` on D${firm.ownerDecision.priceDay}` : ""} at ${price(firm.ownerDecision.price)}: ${firm.ownerDecision.priceReason} · wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason} · capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason} · ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason} · ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}</span>
       ${contracts.map((contract) => `<span class="contract${contract.shortfallToday ? " shortfall" : ""}">${describeContract(contract, PRODUCTS)}</span>`).join("")}
     `;

@@ -30,7 +30,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Hunger, bounded self-care and clinical treatment, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Paid, finite education that gradually changes skill without guaranteeing employment
-- Explicit fabrication and construction-material supply between firms
+- Explicit fabrication, construction-material supply, finite dwellings, and paid building projects
 - Friendships and social encounters
 - Maslow-inspired needs and current behavioural focus
 - Auditable cash transfers and deterministic replay
@@ -41,7 +41,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Claiming psychological or economic calibration
 - Real currencies, inflation, credit markets, banking, or interest
 - Demographic reproduction, migration, households, or families
-- Land, construction, housing capacity, or detailed physical logistics
+- Land ownership, detailed buildings, or physical logistics
 - A server, database, accounts, multiplayer operation, or saved runs
 - Formal validation against empirical datasets
 

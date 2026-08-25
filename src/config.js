@@ -19,6 +19,7 @@ export const PRODUCTS = {
   education: { name: "Worker education", unit: "lesson" },
   constructionMaterials: { name: "Construction materials", unit: "bundle" },
   clinicalCare: { name: "Clinical treatment", unit: "appointment" },
+  constructionService: { name: "Building project", unit: "project" },
 };
 
 export const RENT_INTERVAL_DAYS = 7;
@@ -41,6 +42,10 @@ export const HOUSING_RECEIVERSHIP_GRACE_DAYS = 7;
 export const HOUSING_RESTART_COST = 90;
 export const HOUSING_DISPLACEMENT_RATE = 0.2;
 export const HOUSING_REPLACEMENT_STAFF = 2;
+export const INITIAL_DWELLING_CAPACITY = 40;
+export const HOUSING_PROJECT_CAPACITY_GAIN = 2;
+export const HOUSING_REPAIR_INTERVAL_DAYS = 14;
+export const HOUSING_REPAIR_GRACE_DAYS = 7;
 export const ESSENTIAL_REENTRY_COOLDOWN_DAYS = 14;
 export const ESSENTIAL_REENTRY_COST = 90;
 export const ESSENTIAL_REENTRY_STAFF = 2;
@@ -55,7 +60,7 @@ export const OPPORTUNITY_PROTECTED_RUNWAY_DAYS = 10;
 export const OPPORTUNITY_DEMAND_CAPTURE_RATE = 0.5;
 export const OPPORTUNITY_MARGIN_BUFFER = 1.08;
 export const PRIVATE_REENTRY_COOLDOWN_DAYS = 21;
-export const PRIVATE_FORMATION_ARCHETYPE_IDS = Object.freeze(["cafe", "premium-grocer", "apothecary", "school", "materials-yard", "clinic"]);
+export const PRIVATE_FORMATION_ARCHETYPE_IDS = Object.freeze(["cafe", "premium-grocer", "apothecary", "school", "materials-yard", "clinic", "builder"]);
 export const HEALTH_TREATMENT_THRESHOLD = 0.68;
 export const HEALTH_TREATMENT_RECOVERY = 0.08;
 export const HEALTH_TREATMENT_RESERVE_DAYS = 2;
@@ -65,7 +70,7 @@ export const EDUCATION_RESERVE_DAYS = 3;
 export const CLINIC_TREATMENT_THRESHOLD = 0.38;
 export const CLINIC_TREATMENT_RECOVERY = 0.18;
 export const CLINIC_TREATMENT_RESERVE_DAYS = 1;
-export const DEFAULT_LATENT_FIRM_NAMES = Object.freeze(["Common Café", "Green Basket", "Morrow Apothecary", "Morrow School", "Morrow Materials", "Morrow Clinic"]);
+export const DEFAULT_LATENT_FIRM_NAMES = Object.freeze(["Common Café", "Green Basket", "Morrow Apothecary", "Morrow School", "Morrow Materials", "Morrow Clinic", "Morrow Builders"]);
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",
@@ -85,6 +90,7 @@ export const FIRMS = [
   { archetypeId: "school", name: "Morrow School", sector: "education", sells: "education", input: null, source: null, production: "direct", sourceDescription: "teachers provide finite lessons that gradually improve worker skill", x: 0.86, y: 0.46, price: 4.5, wage: 7, productivity: 4, transactionsPerWorker: 5, inventory: 8, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true },
   { archetypeId: "materials-yard", name: "Morrow Materials", sector: "construction", sells: "constructionMaterials", input: "learningGoods", source: "Makers Guild", production: "sourced", sourceDescription: "yard workers assemble guild-made kits into construction bundles", x: 0.12, y: 0.12, price: 16, wage: 7.4, productivity: 0, transactionsPerWorker: 4, inventory: 4, initialStaff: 2, formationStaff: 1, maxStaff: 4, defaultLatent: true },
   { archetypeId: "clinic", name: "Morrow Clinic", sector: "health", sells: "clinicalCare", input: "medicine", source: "Morrow Apothecary", production: "sourced", sourceDescription: "clinical staff use apothecary medicine for stronger treatment", x: 0.82, y: 0.08, price: 7.5, wage: 8, productivity: 0, transactionsPerWorker: 4, inventory: 4, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true },
+  { archetypeId: "builder", name: "Morrow Builders", sector: "construction", sells: "constructionService", input: "constructionMaterials", source: "Morrow Materials", production: "sourced", sourceDescription: "builders turn material bundles into housing expansion and repair projects", x: 0.64, y: 0.88, price: 28, wage: 8, productivity: 0, transactionsPerWorker: 3, inventory: 2, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true },
   { archetypeId: "farm", name: "Morrow Fields", sector: "agriculture", vital: true, sells: "produce", input: null, source: null, production: "direct", sourceDescription: "farm workers grow produce locally", x: 0.08, y: 0.54, price: 1.1, wage: 5.8, productivity: 9, transactionsPerWorker: 8, inventory: 36, initialStaff: 7, maxStaff: 12 },
 ];
 
@@ -101,9 +107,11 @@ export const SUPPLY_CONTRACTS = [
   { supplier: "Makers Guild", buyer: "Morrow School", product: "learningGoods", output: "education", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
   { supplier: "Makers Guild", buyer: "Morrow Materials", product: "learningGoods", output: "constructionMaterials", dailyQuantity: 1, unitPrice: 5 },
   { supplier: "Makers Guild", buyer: "Morrow Materials", product: "learningGoods", output: "constructionMaterials", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
-  { supplier: "Morrow Materials", buyer: "HomeWorks", product: "constructionMaterials", output: "housing", use: "construction", targetStock: 2, dailyQuantity: 1, unitPrice: 16 },
   { supplier: "Morrow Apothecary", buyer: "Morrow Clinic", product: "medicine", output: "clinicalCare", dailyQuantity: 4, unitPrice: 3.6 },
   { supplier: "Makers Guild", buyer: "Morrow Clinic", product: "learningGoods", output: "clinicalCare", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
+  { supplier: "Morrow Materials", buyer: "Morrow Builders", product: "constructionMaterials", output: "constructionService", dailyQuantity: 1, unitPrice: 16 },
+  { supplier: "Makers Guild", buyer: "Morrow Builders", product: "learningGoods", output: "constructionService", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
+  { supplier: "Morrow Builders", buyer: "HomeWorks", product: "constructionService", output: "housing", use: "construction-project", dailyQuantity: 1, unitPrice: 28 },
   { supplier: "Makers Guild", buyer: "Morrow Fields", product: "learningGoods", output: "produce", use: "operations", targetStock: 1, dailyQuantity: 1, unitPrice: 5 },
 ];
 

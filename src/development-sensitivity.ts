@@ -18,7 +18,7 @@ export const DEFAULT_DEVELOPMENT_SCENARIOS: readonly Scenario[] = Object.freeze(
 const round = (value: number) => Math.round(value * 1000) / 1000;
 
 function evaluateDevelopmentRun(seed: number, days: number, scenario: Scenario) {
-  const town: any = new TownSimulation({ seed, policy: scenario.policy, latentFirmNames: [...DEFAULT_LATENT_FIRM_NAMES] } as any);
+  const town: any = new TownSimulation({ seed, policy: scenario.policy, latentFirmNames: [...DEFAULT_LATENT_FIRM_NAMES], housingCapacityEnabled: true } as any);
   const initialStage = town.snapshot().townStage;
   const stageTransitions: any[] = [];
   let previousStage = initialStage;

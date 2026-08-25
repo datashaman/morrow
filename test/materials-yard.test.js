@@ -20,7 +20,7 @@ function foundMaterialsYard(seed = 42) {
   return { town, yard: observeMaterialsWindow(town) };
 }
 
-test("Morrow Materials exposes an explicit guild-to-yard-to-housing pipeline", () => {
+test("Morrow Materials exposes the explicit guild-to-yard-to-builder pipeline", () => {
   const town = new TownSimulation({ seed: 42 });
   const archetype = town.firmArchetype("materials-yard");
   const templates = town.contractTemplatesFor(archetype);
@@ -29,7 +29,7 @@ test("Morrow Materials exposes an explicit guild-to-yard-to-housing pipeline", (
   assert.equal(archetype.source, "Makers Guild");
   assert.equal(archetype.sells, "constructionMaterials");
   assert.ok(templates.some((contract) => contract.supplier === "Makers Guild" && contract.buyer === "Morrow Materials" && contract.use !== "operations"));
-  assert.ok(templates.some((contract) => contract.supplier === "Morrow Materials" && contract.buyer === "HomeWorks" && contract.use === "construction"));
+  assert.ok(templates.some((contract) => contract.supplier === "Morrow Materials" && contract.buyer === "Morrow Builders"));
 });
 
 test("active housing demand can found a one-worker materials yard", () => {
@@ -46,7 +46,7 @@ test("active housing demand can found a one-worker materials yard", () => {
   assert.equal(yard.inventory, 0);
   assert.deepEqual(yard.employees, [founder.id]);
   assert.equal(town.contracts.filter((contract) => contract.buyerId === yard.id).length, 2);
-  assert.equal(town.contracts.filter((contract) => contract.supplierId === yard.id && contract.buyer === "HomeWorks").length, 1);
+  assert.equal(town.contracts.filter((contract) => contract.supplierId === yard.id).length, 0);
   assert.equal(town.totalMoney(), totalBefore);
   town.assertInvariants();
 });
@@ -66,41 +66,21 @@ test("missing Makers Guild supply blocks materials-yard formation", () => {
   assert.equal(town.firms.some((firm) => firm.archetypeId === "materials-yard"), false);
 });
 
-test("procurement converts exact guild inputs into materials delivered to HomeWorks", () => {
+test("procurement converts exact guild inputs into stocked construction materials", () => {
   const { town, yard } = foundMaterialsYard();
   const makers = town.firms.find((firm) => firm.name === "Makers Guild");
-  const housing = town.firms.find((firm) => firm.name === "HomeWorks");
   makers.inventory = 20;
   yard.cash = 100;
-  housing.cash = 100;
   town.initialMoney = town.totalMoney();
   const totalBefore = town.totalMoney();
 
   town.procurementPhase();
 
-  assert.equal(yard.inventory, 0);
+  assert.equal(yard.inventory, 1);
   assert.equal(yard.operatingSupplies, 1);
-  assert.equal(housing.constructionSupplies, 1);
   assert.ok(yard.ledger.some((entry) => /kit from Makers Guild/.test(entry.text)));
-  assert.ok(yard.ledger.some((entry) => /bundle to HomeWorks/.test(entry.text)));
   assert.equal(town.totalMoney(), totalBefore);
   town.assertInvariants();
-});
-
-test("HomeWorks consumes construction material and creates recurring yard demand", () => {
-  const { town, yard } = foundMaterialsYard();
-  const makers = town.firms.find((firm) => firm.name === "Makers Guild");
-  const housing = town.firms.find((firm) => firm.name === "HomeWorks");
-  makers.inventory = 20;
-  yard.cash = 100;
-  housing.cash = 100;
-  town.procurementPhase();
-  assert.equal(housing.constructionSupplies, 1);
-
-  town.productionPhase();
-  assert.equal(housing.constructionSupplies, 0);
-  town.procurementPhase();
-  assert.equal(housing.constructionSupplies, 1);
 });
 
 test("realized income can approve another materials job while raw transaction counts cannot", () => {
