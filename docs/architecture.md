@@ -76,6 +76,10 @@ Converts product, pipeline, and supply-contract state into display strings. It c
 
 Formats domain-owned formation evidence and blockers for the firm panel. It does not calculate demand, choose a founder, create a firm, or move cash.
 
+### `src/town-stage.js`
+
+Projects current people, firms, policy, day, and essential cost into a deterministic descriptive stage and its evidence. It is read by `snapshot()` for presentation only and is intentionally absent from opportunity and consequence code.
+
 ### `src/map-presentation.js`
 
 Owns deterministic canvas presentation geometry: full-name firm landmark bounds, employee orbit targets that clear workplace plaques, the deceased cross-and-base marker, and browser-safe light/dark canvas color resolution. These helpers keep display-only layout testable without moving economic decisions out of the simulation.

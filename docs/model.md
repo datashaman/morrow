@@ -74,6 +74,21 @@ A replacement cannot reuse any prior owner of that archetype. It receives no cas
 
 This private replacement path is distinct from essential-sector recovery. Essential housing, agricultural, and everyday-food operations reuse their configured instance through treasury-funded receivership or public re-entry; those events do not create an entrepreneur decision or a new private instance.
 
+#### Descriptive town stage
+
+The interface summarizes current conditions as Collapsed, Subsistence, Stability, Convenience, Affluence, or Complexity. This is a pure, reversible projection calculated for display and snapshots; no production, opportunity, formation, pricing, staffing, or citizen decision reads it.
+
+The projection exposes the current evidence rather than treating stage as stored progress:
+
+- essential reliability averages the active operational readiness of agriculture, everyday food, housing, and maintenance;
+- employment is the employed share of living citizens;
+- household reserves are the share of living citizens holding at least ten current essential-cost days;
+- discretionary demand is the current policy setting;
+- sector persistence counts optional firms operating for at least seven days and reports the oldest optional age;
+- active archetypes count distinct currently operating sectors.
+
+Fewer than half of essential services operating reliably, or extinction, is Collapsed. Otherwise the town remains at Subsistence until essential reliability reaches 90%, employment 45%, and reserves 35%. A persistent optional sector plus at least 40% discretionary demand describes Convenience. Two optional sectors plus 65% employment and reserves describes Affluence. Six active archetypes, both optional sectors persistent, and an optional age of 30 days describes Complexity. Any lost condition moves the description backward immediately. These thresholds are gameplay summaries, not economic-development research or an unlock tree.
+
 The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 4.85 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.82 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 
 ### Transaction capacity

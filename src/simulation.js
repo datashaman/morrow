@@ -48,6 +48,7 @@ import {
 } from "./citizen-policy.ts";
 import { createDefaultCitizenPolicy } from "./neural-runtime.ts";
 import { createRandom } from "./random.js";
+import { inferTownStage } from "./town-stage.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
@@ -1928,6 +1929,7 @@ export class TownSimulation {
   snapshot() {
     const alive = this.people.filter((person) => person.alive).length;
     const dead = this.people.length - alive;
+    const townStage = inferTownStage({ day: this.day, people: this.people, firms: this.firms, policy: this.policy, essentialCost: this.essentialCost() });
     return {
       day: this.day,
       phase: this.phase,
@@ -1945,6 +1947,7 @@ export class TownSimulation {
       unhoused: this.people.filter((person) => person.alive && !person.housed).length,
       citizenPolicy: this.policyMetadata(),
       controlHistory: this.controlHistory.map((entry) => ({ ...entry })),
+      townStage,
     };
   }
 }

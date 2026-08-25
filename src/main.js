@@ -76,6 +76,7 @@ app.innerHTML = `
         </div>
         <p>Select a firm to inspect its complete economic history.</p>
       </div>
+      <div class="town-stage" id="town-stage" aria-live="polite"></div>
       <div class="firm-grid" id="firm-grid"></div>
       <div class="activity-heading">
         <h2 id="firm-decision-title">Owner decisions</h2>
@@ -131,7 +132,7 @@ const commonPark = { x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 };
 
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
-  "population", "population-detail", "neural-control", "policy-status",
+  "population", "population-detail", "neural-control", "policy-status", "town-stage",
   "person-select", "focus", "person-summary", "needs", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
@@ -329,6 +330,7 @@ function updateInterface() {
   elements["hardship-detail"].textContent = `${state.hungry} living without food · ${state.unhoused} living without housing`;
   elements.population.textContent = `${state.alive}/${state.totalCitizens}`;
   elements["population-detail"].textContent = `${state.alive} alive · ${state.dead} dead · ${state.totalCitizens} total`;
+  elements["town-stage"].innerHTML = `<span><small>Current town stage</small><strong>${state.townStage.label}</strong></span><p>${state.townStage.description} Essential reliability ${percent(state.townStage.evidence.essentialReliability)} · employment ${percent(state.townStage.evidence.employmentRate)} · ten-day reserves ${percent(state.townStage.evidence.reserveShare)} · discretionary demand ${percent(state.townStage.evidence.discretionaryDemand)} · persistent optional sectors ${state.townStage.evidence.persistentOptionalSectors}/${state.townStage.evidence.activeOptionalSectors}.</p>`;
   elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
   elements["person-summary"].textContent = person.alive
     ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
