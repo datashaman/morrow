@@ -28,8 +28,11 @@ import {
   HOUSING_RECEIVERSHIP_GRACE_DAYS,
   HOUSING_REPLACEMENT_STAFF,
   HOUSING_RESTART_COST,
+  GROCERY_KNOWLEDGE_CAPACITY_BONUS,
   INITIAL_FRIENDSHIP_STRENGTH,
   INITIAL_DWELLING_CAPACITY,
+  INVENTORY_WORK_LEARNING_RATE,
+  KNOWLEDGE_SCHEMA_VERSION,
   MAINTENANCE_INTERVAL_DAYS,
   MIN_FOOD_QUALITY,
   MISSED_MAINTENANCE_CAPACITY,
@@ -48,6 +51,7 @@ import {
   PRICE_REVIEW_DAYS,
   PRODUCTS,
   RENT_INTERVAL_DAYS,
+  RETAIL_WORK_LEARNING_RATE,
   STAFFING_REVENUE_BUFFER,
   SUPPORT_RUNWAY_TARGET_DAYS,
   SUPPLY_CONTRACTS,
@@ -70,7 +74,7 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -78,6 +82,7 @@ export class TownSimulation {
     this.formationArchetypeIds = [...formationArchetypeIds];
     this.housingCapacityEnabled = housingCapacityEnabled;
     this.transportEnabled = transportEnabled;
+    this.knowledgeEnabled = knowledgeEnabled;
     this.reset();
   }
 
@@ -195,6 +200,8 @@ export class TownSimulation {
     this.people = NAMES.map((name, id) => {
       const homeX = 0.68 + this.random() * 0.22;
       const homeY = 0.43 + this.random() * 0.18;
+      const cash = roundMoney(18 + this.random() * 62);
+      const skill = 0.25 + this.random() * 0.65;
       return {
         kind: "person",
         id,
@@ -203,8 +210,15 @@ export class TownSimulation {
         deathDay: null,
         estateTransferred: 0,
         criticalHealthDays: 0,
-        cash: roundMoney(18 + this.random() * 62),
-        skill: 0.25 + this.random() * 0.65,
+        cash,
+        skill,
+        knowledgeProfile: {
+          version: KNOWLEDGE_SCHEMA_VERSION,
+          general: skill,
+          retail: 0,
+          inventory: 0,
+        },
+        learningHistory: [],
         reliability: 0.55 + this.random() * 0.43,
         employer: -1,
         jobApplicationFirm: -1,
@@ -984,8 +998,57 @@ export class TownSimulation {
   }
 
   transactionCapacity(firm) {
-    const attending = firm.employees.reduce((total, id) => total + (this.people[id].attended ? 1 : 0), 0);
-    return Math.floor(attending * firm.transactionsPerWorker * firm.operationalReadiness);
+    const capacity = firm.employees.reduce((total, id) => {
+      const person = this.people[id];
+      if (!person.attended) return total;
+      if (!this.knowledgeEnabled || firm.archetypeId !== "everyday-grocer") return total + firm.transactionsPerWorker;
+      const vocationalKnowledge = (person.knowledgeProfile.retail + person.knowledgeProfile.inventory) / 2;
+      return total + firm.transactionsPerWorker * (1 + vocationalKnowledge * GROCERY_KNOWLEDGE_CAPACITY_BONUS);
+    }, 0);
+    return Math.floor(capacity * firm.operationalReadiness);
+  }
+
+  applyKnowledgeLearning(person, { source, sourceId, sourceName, domain, rate, rule }) {
+    if (!this.knowledgeEnabled || !person.alive || !["general", "retail", "inventory"].includes(domain)) return null;
+    const before = person.knowledgeProfile[domain];
+    const after = Math.round(clamp(before + rate * (1 - before)) * 1_000_000) / 1_000_000;
+    if (after <= before) return null;
+    person.knowledgeProfile[domain] = after;
+    const record = {
+      day: this.day,
+      phase: PHASES[this.phase] ?? "Production",
+      source,
+      sourceId,
+      sourceName,
+      domain,
+      before,
+      after,
+      rule,
+    };
+    person.learningHistory.unshift(record);
+    return record;
+  }
+
+  applyWorkplaceLearning(person, firm) {
+    if (!person.attended || firm.archetypeId !== "everyday-grocer") return [];
+    return [
+      this.applyKnowledgeLearning(person, {
+        source: "workplace",
+        sourceId: firm.id,
+        sourceName: firm.name,
+        domain: "retail",
+        rate: RETAIL_WORK_LEARNING_RATE,
+        rule: "attended-grocery-shift-retail-v1",
+      }),
+      this.applyKnowledgeLearning(person, {
+        source: "workplace",
+        sourceId: firm.id,
+        sourceName: firm.name,
+        domain: "inventory",
+        rate: INVENTORY_WORK_LEARNING_RATE,
+        rule: "attended-grocery-shift-inventory-v1",
+      }),
+    ].filter(Boolean);
   }
 
   maintainFirm(firm) {
@@ -1079,7 +1142,9 @@ export class TownSimulation {
       }
       person.scarcityError = this.random() < person.stress ** 2 * 0.24;
       if (person.employer < 0) return void (person.attended = false);
-      this.considerAttendance(person, this.firms[person.employer]);
+      const firm = this.firms[person.employer];
+      this.considerAttendance(person, firm);
+      this.applyWorkplaceLearning(person, firm);
     });
     this.firms.forEach((firm) => {
       if (!firm.active || firm.production !== "direct") return;

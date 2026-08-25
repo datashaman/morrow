@@ -47,14 +47,15 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 ## Labour simplifications
 
 - Each person can have at most one employer and either attends the whole shift or misses it.
-- Each attending worker contributes a fixed sector-specific number of transactions regardless of skill, health, transaction complexity, or coworker coordination.
+- Each attending worker contributes a fixed sector-specific number of transactions regardless of health, transaction complexity, or coworker coordination. The everyday grocer alone has a bounded retail/inventory knowledge bonus as an explicit tracer; other sectors still ignore domain knowledge.
 - There are no occupations, schedules, hours, contracts, tenure, credentials, discrimination, commuting cost, care work, informal work, or self-employment.
 - Candidate ranking uses skill and reliability. The richer social referral effect from an earlier version is not present.
 - Attendance is routed through the motivation policy using health, hunger, stress, runway, reliability, a baseline absence chance, and a seeded daily draw. It remains an all-or-nothing daily shift with no schedules, partial capacity, paid leave, illness categories, transport, care obligations, or employer attendance policy.
 - Job seeking is a once-per-settlement choice among mature approved vacancies, and each firm makes at most one offer to its highest-ranked applicant. Offered wage, reservation wage, reliability, safety, runway, stress, firm trouble, seeded acceptance evidence, and stable motivation weights affect the two decisions, but there are no applications in progress, interviews, credentials, occupations, schedules, benefits, commuting costs, discrimination, negotiation, competing offers, referrals, search costs, employer preferences beyond skill and reliability, or memory of earlier rejection.
 - Housing employees constrain rent transactions but do not directly produce or repair dwellings; those physical changes are abstract builder projects.
 - Missed shifts create events but no distinct wage-ledger entry because no money moves.
-- Education is a repeated paid lesson that adds a fixed 0.01 skill up to 0.95. There are no subjects, credentials, prerequisites, course length, teaching quality, assessment, dropout, scholarships, public education, or proof that the skill scalar predicts real employability. Teachers produce abstract lesson capacity directly, and education never guarantees work.
+- Citizens now carry general, retail, and inventory knowledge, but only grocery workplace experience updates the vocational fields and only grocery transaction capacity reads them. Generic skill still drives unrelated production, hiring, reservation wages, esteem, and education eligibility. Agriculture, construction, health, teaching, transport, forgetting, task errors, and knowledge-based job matching remain unmodeled.
+- Education is a repeated paid lesson that still adds a fixed 0.01 generic skill up to 0.95 pending the retail-course slice. There are not yet subjects, credentials, prerequisites, course length, teaching quality, assessment, dropout, scholarships, public education, or proof that the skill scalar predicts real employability. Teachers produce abstract lesson capacity directly, and education never guarantees work.
 
 ## Social and demographic simplifications
 

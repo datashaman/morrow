@@ -25,7 +25,7 @@ Policy sliders commit on release, and neural personal-time control changes immed
 There are 40 named people. Each person carries:
 
 - Economic state: cash, employer, current job application, seller references, food reserve, housing status, rent arrears, and transaction ledger
-- Capacity and mortality: skill, reliability, attendance, missed work, health, living status, critical-health duration, and death day
+- Capacity and mortality: skill, versioned general/retail/inventory knowledge, complete learning history, reliability, attendance, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Motivation: seven stable, seed-derived weights for comfort, connection, mastery, security, food quality, planning, and avoidance plus a complete in-memory policy-decision history
 - Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
@@ -34,6 +34,17 @@ There are 40 named people. Each person carries:
 - Display state: home and current map positions
 
 Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.58 to 0.94; stress ranges from 0.12 to 0.37. These are design values, not calibrated distributions.
+
+#### Knowledge tracer
+
+Every citizen has a `knowledge-v1` profile bounded to `[0,1]`. `general` begins equal to the existing scalar skill and remains an incremental migration mirror; `retail` and `inventory` begin at zero. Generic skill and all of its existing cross-sector effects remain in place for now.
+
+An attended shift at the everyday grocer applies deterministic diminishing-return learning:
+
+- retail: `before + 0.004 × (1 − before)`;
+- inventory: `before + 0.002 × (1 − before)`.
+
+Values are rounded to six decimal places after each update. Missing the shift or working in another current sector creates no vocational gain. Each applied update records the day, phase, workplace source and identity, domain, before/after values, and versioned rule. Learning moves no cash and consumes no goods. These domains and rates are tracer hypotheses, not measurements of competence or workplace learning.
 
 ### Firms
 
@@ -109,9 +120,11 @@ The current prices target internal cash-flow plausibility rather than a real cur
 
 ### Transaction capacity
 
-An active firm can complete a limited number of transactions each day:
+An active firm can complete a limited number of transactions each day. The general rule is:
 
 `attending workers × configured transactions per worker`
+
+The knowledge tracer changes only the everyday grocer. Each attending grocery worker contributes their configured base multiplied by `1 + 0.15 × mean(retail, inventory)`, after which the firm's total is reduced by maintenance readiness and rounded down. Zero vocational knowledge exactly preserves base capacity; fully bounded knowledge can add at most 15%. No other current firm's transaction capacity reads knowledge.
 
 Only a customer who can cover the exact price and reaches an active firm with the required inventory, where applicable, creates an attempted transaction. A transaction beyond the firm's daily capacity is recorded as turned away, moves no cash or inventory, and creates a life event for that customer. Transaction counts measure workload and congestion only. Completed transactions consume inventory and produce realized income; turned-away transactions do neither. Daily transaction counters reset during settlement.
 
