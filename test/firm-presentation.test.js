@@ -24,6 +24,15 @@ test("contract descriptions expose requested and delivered quantities", () => {
   assert.match(describeContract(contract, PRODUCTS), /22\/22 crates delivered today at 1.10 each/);
 });
 
+test("transported contracts expose paid freight load", () => {
+  const town = new TownSimulation({ seed: 42, transportEnabled: true });
+  town.productionPhase();
+  town.procurementPhase();
+  const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
+
+  assert.match(describeContract(contract, PRODUCTS), /44 haulage load for 5.50/);
+});
+
 test("Makers Guild exposes its maintenance customers", () => {
   const town = new TownSimulation({ seed: 42 });
   const guild = town.firms.find((firm) => firm.name === "Makers Guild");

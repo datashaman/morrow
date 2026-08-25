@@ -51,6 +51,8 @@ import {
   STAFFING_REVENUE_BUFFER,
   SUPPORT_RUNWAY_TARGET_DAYS,
   SUPPLY_CONTRACTS,
+  TRANSPORT_CAPACITY_PER_WORKER,
+  TRANSPORT_LOAD_BY_PRODUCT,
   VITAL_RESCUE_CAP,
   VITAL_RESCUE_RUNWAY_DAYS,
 } from "./config.js";
@@ -68,13 +70,14 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
     this.latentFirmNames = [...latentFirmNames];
     this.formationArchetypeIds = [...formationArchetypeIds];
     this.housingCapacityEnabled = housingCapacityEnabled;
+    this.transportEnabled = transportEnabled;
     this.reset();
   }
 
@@ -101,6 +104,8 @@ export class TownSimulation {
       lastHousingProjectDay: archetype.sector === "housing" ? 1 : null,
       completedHousingProjects: 0,
       lastCapacityLossDay: null,
+      transportCapacityToday: 0,
+      transportLoadToday: 0,
       operationalReadiness: 1,
       lastMaintenanceDay: 0,
       receivershipDay: null,
@@ -166,7 +171,7 @@ export class TownSimulation {
     this.opportunityWindows = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, []]));
     this.firmInstanceCounts = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, 0]));
     this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
-    this.firms = FIRMS.filter((archetype) => !archetype.defaultLatent && !this.latentFirmNames.includes(archetype.name)).map((archetype, id) => {
+    this.firms = FIRMS.filter((archetype) => (!archetype.defaultLatent || (this.transportEnabled && archetype.archetypeId === "haulage")) && !this.latentFirmNames.includes(archetype.name)).map((archetype, id) => {
       this.firmInstanceCounts[archetype.archetypeId] = 1;
       return this.createFirmInstance(archetype, id);
     });
@@ -179,6 +184,8 @@ export class TownSimulation {
       requestedToday: 0,
       deliveredToday: 0,
       shortfallToday: 0,
+      transportLoadToday: 0,
+      transportFeeToday: 0,
     })).filter((contract) => contract.supplierId >= 0 && contract.buyerId >= 0).map((contract, id) => ({ ...contract, id }));
     this.contracts.filter((contract) => contract.use === "operations").forEach((contract) => {
       this.firms[contract.buyerId].operatingSupplies = contract.targetStock;
@@ -458,12 +465,20 @@ export class TownSimulation {
     const variableDemandInputs = demandScaledInputs
       ? expectedOutputUnits * (produceTemplate?.unitPrice ?? 0)
       : null;
+    const carrier = this.transportEnabled ? this.firms.find((firm) => firm.active && firm.archetypeId === "haulage") : null;
     const expectedDailyCost = roundMoney(
       Math.max(this.policy.minimumWage, archetype.wage) * requiredWorkers
       + templates.filter((contract) => contract.buyer === archetype.name).reduce(
-        (sum, contract) => sum + (contract.use === "operations"
-          ? contract.dailyQuantity * contract.unitPrice / MAINTENANCE_INTERVAL_DAYS
-          : (variableDemandInputs ?? contract.dailyQuantity * contract.unitPrice)),
+        (sum, contract) => {
+          const inputCost = contract.use === "operations"
+            ? contract.dailyQuantity * contract.unitPrice / MAINTENANCE_INTERVAL_DAYS
+            : (variableDemandInputs ?? contract.dailyQuantity * contract.unitPrice);
+          const units = variableDemandInputs === null ? contract.dailyQuantity : expectedOutputUnits;
+          const freightDelta = carrier && contract.use !== "operations" && contract.use !== "construction-project"
+            ? units * (carrier.price - carrier.basePrice)
+            : 0;
+          return sum + inputCost + freightDelta;
+        },
         0,
       ),
     );
@@ -529,6 +544,8 @@ export class TownSimulation {
         requestedToday: 0,
         deliveredToday: 0,
         shortfallToday: 0,
+        transportLoadToday: 0,
+        transportFeeToday: 0,
       });
     });
   }
@@ -1068,11 +1085,38 @@ export class TownSimulation {
     });
   }
 
+  requiresHaulage(contract) {
+    return this.transportEnabled && contract.use !== "operations" && contract.use !== "construction-project";
+  }
+
+  haulageUnitLoad(contract) {
+    const supplier = this.firms[contract.supplierId];
+    const buyer = this.firms[contract.buyerId];
+    const distance = Math.hypot(supplier.x - buyer.x, supplier.y - buyer.y);
+    const productLoad = TRANSPORT_LOAD_BY_PRODUCT[contract.product] ?? 1;
+    return Math.max(1, Math.ceil(productLoad * (1 + distance * 2)));
+  }
+
+  haulageCapacity(carrier = this.firms.find((firm) => firm.active && firm.archetypeId === "haulage")) {
+    if (!carrier?.active) return 0;
+    const attendingWorkers = carrier.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+    return Math.floor(attendingWorkers * TRANSPORT_CAPACITY_PER_WORKER * carrier.operationalReadiness);
+  }
+
   procurementPhase() {
+    const carrier = this.transportEnabled ? this.firms.find((firm) => firm.active && firm.archetypeId === "haulage") : null;
+    let remainingTransportCapacity = this.haulageCapacity(carrier);
+    if (carrier) {
+      carrier.transportCapacityToday = remainingTransportCapacity;
+      carrier.transportLoadToday = 0;
+    }
     this.contracts.forEach((contract) => {
       contract.deliveredToday = 0;
       contract.shortfallToday = 0;
       contract.requestedToday = 0;
+      contract.transportLoadToday = 0;
+      contract.transportFeeToday = 0;
+      contract.supplierUnitPriceToday = contract.unitPrice;
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
       if (!contract.active || !supplier.active || !buyer.active) return;
@@ -1085,15 +1129,27 @@ export class TownSimulation {
         ? Number(Boolean(housingProject))
         : Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(targetStock - buyerStock)));
       const available = Math.floor(supplier.inventory);
-      const affordable = Math.floor((buyer.cash + 1e-9) / contract.unitPrice);
-      const units = Math.min(contract.requestedToday, available, affordable);
+      const hauled = this.requiresHaulage(contract);
+      const transportUnitLoad = hauled ? this.haulageUnitLoad(contract) : 0;
+      const transportUnitFee = hauled && carrier ? carrier.price : 0;
+      const supplierUnitPrice = hauled && carrier ? roundMoney(Math.max(0.01, contract.unitPrice - carrier.basePrice)) : contract.unitPrice;
+      contract.supplierUnitPriceToday = supplierUnitPrice;
+      const affordable = hauled && !carrier
+        ? 0
+        : Math.floor((buyer.cash + 1e-9) / (supplierUnitPrice + transportUnitFee));
+      const transportable = hauled ? Math.floor(remainingTransportCapacity / transportUnitLoad) : contract.requestedToday;
+      const units = Math.min(contract.requestedToday, available, affordable, transportable);
       supplier.priceRejectionsToday += Math.max(0, Math.min(contract.requestedToday, available) - affordable);
-      const cost = roundMoney(units * contract.unitPrice);
+      const cost = roundMoney(units * supplierUnitPrice);
+      const transportFee = roundMoney(units * transportUnitFee);
       if (units > 0) {
         const buyerBefore = buyer.cash;
         const supplierBefore = supplier.cash;
-        const paid = this.transfer(buyer, supplier, cost, { exact: true });
-        if (paid === cost) {
+        const carrierBefore = carrier?.cash ?? 0;
+        const canSettleExactly = buyer.cash + 1e-9 >= cost + transportFee;
+        const paid = canSettleExactly ? this.transfer(buyer, supplier, cost, { exact: true }) : 0;
+        const freightPaid = paid === cost && transportFee > 0 ? this.transfer(buyer, carrier, transportFee, { exact: true }) : 0;
+        if (paid === cost && freightPaid === transportFee) {
           supplier.inventory -= units;
           if (contract.use === "operations") buyer.operatingSupplies += units;
           else if (contract.use === "construction-project") {
@@ -1107,17 +1163,34 @@ export class TownSimulation {
           else buyer.inventory += units;
           supplier.sales += paid;
           supplier.unitsSold += units;
-          buyer.inputCosts += paid;
+          buyer.inputCosts += paid + freightPaid;
           contract.deliveredToday = units;
+          if (hauled) {
+            const transportLoad = units * transportUnitLoad;
+            remainingTransportCapacity -= transportLoad;
+            carrier.transportLoadToday += transportLoad;
+            carrier.sales += freightPaid;
+            carrier.unitsSold += units;
+            carrier.transactionsToday += 1;
+            contract.transportLoadToday = transportLoad;
+            contract.transportFeeToday = freightPaid;
+          }
           const unit = PRODUCTS[contract.product].unit;
           const quantity = `${units} ${unit}${units === 1 ? "" : "s"}`;
           this.ledger(buyer, { direction: "out", amount: paid, text: `${quantity} from ${supplier.name}`, before: buyerBefore });
           this.ledger(supplier, { direction: "in", amount: paid, text: `${quantity} to ${buyer.name}`, before: supplierBefore });
+          if (freightPaid > 0) {
+            this.ledger(buyer, { direction: "out", amount: freightPaid, text: `haulage by ${carrier.name} for ${quantity} from ${supplier.name}`, before: buyerBefore - paid });
+            this.ledger(carrier, { direction: "in", amount: freightPaid, text: `delivery for ${buyer.name}: ${quantity} from ${supplier.name}`, before: carrierBefore });
+          }
         }
       }
       contract.shortfallToday = contract.requestedToday - contract.deliveredToday;
       if (contract.shortfallToday > 0) {
-        this.note(buyer, `${supplier.name} delivered ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s`, "bad");
+        const transportCause = hauled && (!carrier || transportable < Math.min(contract.requestedToday, available, affordable));
+        this.note(buyer, transportCause
+          ? `${carrier?.name ?? "No carrier"} could transport only ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s from ${supplier.name}`
+          : `${supplier.name} delivered ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s`, "bad");
       }
     });
   }
@@ -1666,7 +1739,12 @@ export class TownSimulation {
       .filter((contract) => contract.active && contract.buyerId === firm.id)
       .reduce((total, contract) => {
         if (contract.use === "construction-project" && !this.housingProjectDemand(firm)) return total;
-        return total + contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1);
+        const carrier = this.transportEnabled && this.requiresHaulage(contract)
+          ? this.firms.find((candidate) => candidate.active && candidate.archetypeId === "haulage")
+          : null;
+        const dailyInput = contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1);
+        const freightDelta = carrier ? contract.dailyQuantity * (carrier.price - carrier.basePrice) : 0;
+        return total + dailyInput + freightDelta;
       }, 0);
     return roundMoney(payroll + inputs);
   }
@@ -2194,6 +2272,17 @@ export class TownSimulation {
         .reduce((total, firm) => total + Math.max(0, firm.targetStaff - firm.employees.length), 0),
       hungry: this.people.filter((person) => person.alive && person.hungryDays > 0).length,
       unhoused: this.people.filter((person) => person.alive && !person.housed).length,
+      dwellingCapacity: this.firms.find((firm) => firm.sector === "housing")?.dwellingCapacity ?? 0,
+      housingOccupancy: this.housingOccupancy(),
+      transport: (() => {
+        const carrier = this.firms.find((firm) => firm.archetypeId === "haulage");
+        return {
+          enabled: this.transportEnabled,
+          status: carrier?.status ?? "absent",
+          capacity: carrier?.transportCapacityToday ?? 0,
+          load: carrier?.transportLoadToday ?? 0,
+        };
+      })(),
       citizenPolicy: this.policyMetadata(),
       controlHistory: this.controlHistory.map((entry) => ({ ...entry })),
       townStage,

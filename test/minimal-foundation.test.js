@@ -4,7 +4,7 @@ import { DEFAULT_LATENT_FIRM_NAMES, PHASES } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
 function minimalTown(options = {}) {
-  return new TownSimulation({ ...options, latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true });
+  return new TownSimulation({ ...options, latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true, transportEnabled: true });
 }
 
 function runDays(town, days) {
@@ -14,16 +14,17 @@ function runDays(town, days) {
   return town;
 }
 
-test("Morrow starts with an essential four-firm foundation and seven visible opportunities", () => {
+test("Morrow starts with an essential five-firm foundation and seven visible opportunities", () => {
   const town = minimalTown({ seed: 42 });
 
-  assert.deepEqual(town.firms.map((firm) => firm.name), ["Harvest Foods", "HomeWorks", "Makers Guild", "Morrow Fields"]);
+  assert.deepEqual(town.firms.map((firm) => firm.name), ["Harvest Foods", "HomeWorks", "Makers Guild", "Morrow Haulage", "Morrow Fields"]);
   assert.deepEqual(town.firmOpportunities().map((opportunity) => opportunity.name), ["Common Café", "Green Basket", "Morrow Apothecary", "Morrow School", "Morrow Materials", "Morrow Clinic", "Morrow Builders"]);
   assert.ok(town.firmOpportunities().every((opportunity) => opportunity.observedDays === 0 && !opportunity.ready));
   assert.deepEqual(town.contracts.map((contract) => `${contract.supplier} → ${contract.buyer}`), [
     "Morrow Fields → Harvest Foods",
     "Makers Guild → Harvest Foods",
     "Makers Guild → HomeWorks",
+    "Makers Guild → Morrow Haulage",
     "Makers Guild → Morrow Fields",
   ]);
   town.firms.forEach((firm) => {
