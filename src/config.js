@@ -50,6 +50,7 @@ export const OPPORTUNITY_STARTUP_CAPITAL = 40;
 export const OPPORTUNITY_PROTECTED_RUNWAY_DAYS = 10;
 export const OPPORTUNITY_DEMAND_CAPTURE_RATE = 0.5;
 export const OPPORTUNITY_MARGIN_BUFFER = 1.08;
+export const PRIVATE_REENTRY_COOLDOWN_DAYS = 21;
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { OPPORTUNITY_OBSERVATION_DAYS, OPPORTUNITY_STARTUP_CAPITAL } from "../src/config.js";
+import { OPPORTUNITY_OBSERVATION_DAYS, OPPORTUNITY_STARTUP_CAPITAL, PRIVATE_REENTRY_COOLDOWN_DAYS } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
 function latentCafeTown(seed = 42) {
@@ -118,9 +118,10 @@ test("founder and opening day reproduce for the same seed and state", () => {
   );
 });
 
-test("a closed café instance remains historical and blocks private replacement", () => {
+test("a closed café instance remains historical and enters a confidence cooldown", () => {
   const town = new TownSimulation({ seed: 42 });
   const cafe = town.firms.find((firm) => firm.name === "Common Café");
+  town.day = 10;
   town.closeFirm(cafe);
 
   const result = town.observeFirmOpportunities();
@@ -129,7 +130,47 @@ test("a closed café instance remains historical and blocks private replacement"
   assert.equal(cafe.active, false);
   assert.equal(town.firms.filter((firm) => firm.archetypeId === "cafe").length, 1);
   assert.equal(result.ready, false);
-  assert.match(result.reasons.join(" "), /previous Common Café instance failed/);
+  assert.equal(result.cooldownRemaining, PRIVATE_REENTRY_COOLDOWN_DAYS);
+  assert.match(result.reasons.join(" "), /post-failure confidence cooldown/);
+});
+
+test("material recovery after cooldown creates a separately funded replacement instance", () => {
+  const town = new TownSimulation({ seed: 42, policy: { discretionaryDemand: 100, shockRisk: 0 } });
+  town.people.forEach((person) => {
+    person.cash = 100;
+    person.focus = "belonging";
+  });
+  town.initialMoney = town.totalMoney();
+  const first = town.firms.find((firm) => firm.archetypeId === "cafe");
+  const firstOwner = first.owner;
+  town.day = 10;
+  town.closeFirm(first, "the first café failed its market");
+  const firstHistory = structuredClone({ ledger: first.ledger, events: first.events, decisions: first.decisions });
+  const totalBefore = town.totalMoney();
+
+  town.observeFirmOpportunities();
+  assert.equal(town.firms.filter((firm) => firm.archetypeId === "cafe").length, 1);
+  for (let day = 25; day <= 30; day += 1) {
+    town.day = day;
+    const result = town.observeFirmOpportunities();
+    assert.equal(result.ready, false);
+  }
+  town.day = 31;
+  const replacement = town.observeFirmOpportunities();
+
+  assert.equal(replacement.instanceId, "cafe:2");
+  assert.notEqual(replacement.owner, firstOwner);
+  assert.equal(replacement.foundingDay, 31);
+  assert.equal(replacement.founderCapital, OPPORTUNITY_STARTUP_CAPITAL);
+  assert.equal(replacement.cash, OPPORTUNITY_STARTUP_CAPITAL);
+  assert.equal(replacement.inventory, 0);
+  assert.equal(town.firms.filter((firm) => firm.archetypeId === "cafe").length, 2);
+  assert.equal(town.firms[replacement.id], replacement);
+  assert.deepEqual({ ledger: first.ledger, events: first.events, decisions: first.decisions }, firstHistory);
+  assert.equal(town.contracts.filter((contract) => contract.buyerId === first.id && contract.active).length, 0);
+  assert.equal(town.contracts.filter((contract) => contract.buyerId === replacement.id && contract.active).length, 2);
+  assert.equal(town.totalMoney(), totalBefore);
+  town.assertInvariants();
 });
 
 test("premium food remains latent when households lack cash above near-term essentials", () => {

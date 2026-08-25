@@ -27,6 +27,7 @@ import {
   OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
   OPPORTUNITY_STARTUP_CAPITAL,
   PHASES,
+  PRIVATE_REENTRY_COOLDOWN_DAYS,
   PRICE_ADJUSTMENT_RATE,
   PRICE_CEILING_MULTIPLIER,
   PRICE_FLOOR_MULTIPLIER,
@@ -334,11 +335,13 @@ export class TownSimulation {
     return 0;
   }
 
-  founderCandidates() {
+  founderCandidates(excludedOwnerIds = []) {
     const protectedCash = roundMoney(this.essentialCost() * OPPORTUNITY_PROTECTED_RUNWAY_DAYS);
+    const excludedOwners = new Set(excludedOwnerIds);
     return this.people
       .filter((person) => person.alive
         && person.employer < 0
+        && !excludedOwners.has(person.id)
         && !this.firms.some((firm) => firm.active && firm.owner === person.id)
         && person.cash + 1e-9 >= OPPORTUNITY_STARTUP_CAPITAL + protectedCash)
       .sort((a, b) => (
@@ -351,8 +354,11 @@ export class TownSimulation {
   opportunityEvidence(archetype, observations = this.opportunityWindows[archetype.archetypeId] ?? []) {
     const instances = this.firms.filter((firm) => firm.archetypeId === archetype.archetypeId);
     const activeInstance = instances.find((firm) => firm.active);
+    const previousInstances = instances.filter((firm) => !firm.active);
+    const latestFailure = [...previousInstances].sort((a, b) => b.closedDay - a.closedDay)[0] ?? null;
+    const cooldownRemaining = latestFailure ? Math.max(0, latestFailure.closedDay + PRIVATE_REENTRY_COOLDOWN_DAYS - this.day) : 0;
     const requiredWorkers = archetype.formationStaff ?? archetype.initialStaff;
-    const founder = this.founderCandidates()[0] ?? null;
+    const founder = this.founderCandidates(previousInstances.map((firm) => firm.owner))[0] ?? null;
     const unemployedWorkers = this.replacementWorkers(this.people.length);
     const availableWorkers = founder
       ? [founder, ...unemployedWorkers.filter((person) => person.id !== founder.id)].slice(0, requiredWorkers)
@@ -386,7 +392,7 @@ export class TownSimulation {
     );
     const reasons = [];
     if (activeInstance) reasons.push(`${activeInstance.name} is already operating`);
-    else if (instances.length) reasons.push(`a previous ${archetype.name} instance failed; private replacement is deferred`);
+    if (cooldownRemaining) reasons.push(`${cooldownRemaining} day${cooldownRemaining === 1 ? "" : "s"} remain in the post-failure confidence cooldown`);
     if (observations.length < OPPORTUNITY_OBSERVATION_DAYS) reasons.push(`${OPPORTUNITY_OBSERVATION_DAYS - observations.length} observation day${OPPORTUNITY_OBSERVATION_DAYS - observations.length === 1 ? "" : "s"} still required`);
     if (expectedDailyRevenue + 1e-9 < expectedDailyCost * OPPORTUNITY_MARGIN_BUFFER) reasons.push("observed demand does not cover expected wages and inputs with a margin buffer");
     const missingSuppliers = supplierStates.filter((supplier) => !supplier.available).map((supplier) => supplier.name);
@@ -408,6 +414,10 @@ export class TownSimulation {
       marginBuffer: OPPORTUNITY_MARGIN_BUFFER,
       startupCapital: OPPORTUNITY_STARTUP_CAPITAL,
       protectedRunwayDays: OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
+      previousInstanceIds: previousInstances.map((firm) => firm.instanceId),
+      latestFailureDay: latestFailure?.closedDay ?? null,
+      cooldownDays: PRIVATE_REENTRY_COOLDOWN_DAYS,
+      cooldownRemaining,
       requiredWorkers,
       availableWorkerIds: availableWorkers.map((person) => person.id),
       founderId: founder?.id ?? null,
@@ -1426,6 +1436,7 @@ export class TownSimulation {
     this.contracts.filter((contract) => contract.supplierId === firm.id || contract.buyerId === firm.id).forEach((contract) => {
       contract.active = false;
     });
+    if (["cafe", "premium-grocer"].includes(firm.archetypeId)) this.opportunityWindows[firm.archetypeId] = [];
     this.note(firm, entersReceivership ? `${reason}; housing operations entered receivership` : reason, "bad");
     return true;
   }
@@ -1897,6 +1908,7 @@ export class TownSimulation {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
     if (this.firms.some((firm, id) => firm.id !== id)) throw new Error("Firm entity IDs must remain stable array references");
+    if (new Set(this.firms.map((firm) => firm.instanceId)).size !== this.firms.length) throw new Error("Firm instance identities must remain unique");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
     if (this.people.some((person) => person.employer >= 0 && person.jobApplicationFirm >= 0)) throw new Error("An employed person cannot remain a job applicant");
     if (this.people.some((person) => person.employer >= 0 && (!this.firms[person.employer]?.active || !this.firms[person.employer].employees.includes(person.id)))) throw new Error("Employment references must be reciprocal and active");

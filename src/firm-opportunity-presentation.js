@@ -7,3 +7,8 @@ export function describeFirmOpportunity(opportunity) {
     : opportunity.reasons.join(" · ");
   return { evidence, resources, explanation };
 }
+
+export function firmInstanceLabel(firm, firms) {
+  const instances = firms.filter((candidate) => candidate.archetypeId === firm.archetypeId);
+  return instances.length > 1 ? `${firm.name} · instance ${firm.instanceNumber}` : firm.name;
+}

@@ -2,7 +2,7 @@ import "./styles.css";
 import { PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
 import { describeContract, describePipeline } from "./firm-presentation.js";
-import { describeFirmOpportunity } from "./firm-opportunity-presentation.js";
+import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-presentation.js";
 import {
   applicantFirmId,
   applicantOrbitTarget,
@@ -354,7 +354,7 @@ function updateInterface() {
     card.dataset.firmId = firm.id;
     card.setAttribute("aria-pressed", String(firm.id === selectedFirm));
     card.innerHTML = `
-      <span class="firm-card-heading"><b>${firm.name}</b><i class="status ${firm.status}">${firm.status}</i></span>
+      <span class="firm-card-heading"><b>${firmInstanceLabel(firm, simulation.firms)}</b><i class="status ${firm.status}">${firm.status}</i></span>
       <span class="pipeline">${describePipeline(firm, PRODUCTS)}</span>
       <span class="firm-stats">${firm.vital ? "Vital · " : ""}${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.employees.length}/${firm.targetStaff} staff · ${firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""} · ${money(firm.revenueEMA)} smoothed net income${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}</span>
       <span class="owner-choice">Owner choice · price ${firm.ownerDecision.priceDecision}${firm.ownerDecision.priceDay ? ` on D${firm.ownerDecision.priceDay}` : ""} at ${price(firm.ownerDecision.price)}: ${firm.ownerDecision.priceReason} · wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason} · capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason} · ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason} · ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}</span>
@@ -377,9 +377,9 @@ function updateInterface() {
   });
   elements["firm-grid"].replaceChildren(...firmCards, ...opportunityCards);
   const firm = simulation.firms[selectedFirm];
-  elements["firm-decision-title"].textContent = `${firm.name} owner decisions`;
+  elements["firm-decision-title"].textContent = `${firmInstanceLabel(firm, simulation.firms)} owner decisions`;
   renderDecisions(firm, elements["firm-decision-stream"]);
-  elements["firm-activity-title"].textContent = `${firm.name} activity`;
+  elements["firm-activity-title"].textContent = `${firmInstanceLabel(firm, simulation.firms)} activity`;
   renderActivity(firm, elements["firm-activity-filter"].value, elements["firm-activity-stream"]);
 }
 
@@ -417,7 +417,8 @@ function drawTown() {
 
   const landmarkMeta = (firm) => `${money(firm.cash)} cash · ${firm.employees.length} staff`;
   context.font = "700 14px system-ui";
-  const landmarks = new Map(simulation.firms.map((firm) => {
+  const mapFirms = simulation.firms.filter((firm) => firm.active || !simulation.firms.some((candidate) => candidate.active && candidate.archetypeId === firm.archetypeId));
+  const landmarks = new Map(mapFirms.map((firm) => {
     const nameWidth = context.measureText(firm.name).width;
     context.font = "500 11px system-ui";
     const metaWidth = context.measureText(landmarkMeta(firm)).width;
@@ -537,7 +538,7 @@ function drawTown() {
     }
   });
 
-  simulation.firms.forEach((firm) => {
+  mapFirms.forEach((firm) => {
     const landmark = landmarks.get(firm.id);
     context.fillStyle = firm.active ? colors.text : colors.muted;
     context.fillRect(landmark.centerX - landmark.width / 2, landmark.centerY - landmark.height / 2, landmark.width, landmark.height);

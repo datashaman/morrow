@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { describeFirmOpportunity } from "../src/firm-opportunity-presentation.js";
+import { describeFirmOpportunity, firmInstanceLabel } from "../src/firm-opportunity-presentation.js";
 import { TownSimulation } from "../src/simulation.js";
 
 test("opportunity presentation explains an absent firm's evidence and blockers", () => {
@@ -12,4 +12,14 @@ test("opportunity presentation explains an absent firm's evidence and blockers",
     resources: "2/2 workers available · founder Luca · Morrow Fields available · Makers Guild available",
     explanation: "7 observation days still required · observed demand does not cover expected wages and inputs with a margin buffer",
   });
+});
+
+test("historical and replacement firms receive distinct inspectable labels", () => {
+  const firms = [
+    { name: "Common Café", archetypeId: "cafe", instanceNumber: 1 },
+    { name: "Common Café", archetypeId: "cafe", instanceNumber: 2 },
+  ];
+
+  assert.equal(firmInstanceLabel(firms[0], firms), "Common Café · instance 1");
+  assert.equal(firmInstanceLabel(firms[1], firms), "Common Café · instance 2");
 });
