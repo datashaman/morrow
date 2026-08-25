@@ -1,5 +1,8 @@
 import {
   DEFAULT_POLICY,
+  EDUCATION_RESERVE_DAYS,
+  EDUCATION_SKILL_GAIN,
+  EDUCATION_SKILL_THRESHOLD,
   ESSENTIAL_REENTRY_COOLDOWN_DAYS,
   ESSENTIAL_REENTRY_COST,
   ESSENTIAL_REENTRY_STAFF,
@@ -58,11 +61,12 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [] } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
     this.latentFirmNames = [...latentFirmNames];
+    this.formationArchetypeIds = [...formationArchetypeIds];
     this.reset();
   }
 
@@ -208,6 +212,8 @@ export class TownSimulation {
         personalSeller: -1,
         healthSeller: -1,
         lastTreatmentDay: null,
+        educationSeller: -1,
+        lastEducationDay: null,
         socialVenueToday: null,
         rentSeller: -1,
         homeX,
@@ -343,10 +349,18 @@ export class TownSimulation {
       && person.cash + 1e-9 >= archetype.price + reserve).length;
   }
 
+  educationDemandCount(archetype) {
+    const reserve = this.essentialCost() * EDUCATION_RESERVE_DAYS;
+    return this.people.filter((person) => person.alive
+      && person.skill < EDUCATION_SKILL_THRESHOLD
+      && person.cash + 1e-9 >= archetype.price + reserve).length;
+  }
+
   opportunityDemandCount(archetype) {
     if (archetype.archetypeId === "cafe") return this.cafeDemandCount(archetype);
     if (archetype.archetypeId === "premium-grocer") return this.premiumFoodDemandCount(archetype);
     if (archetype.archetypeId === "apothecary") return this.apothecaryDemandCount(archetype);
+    if (archetype.archetypeId === "school") return this.educationDemandCount(archetype);
     return 0;
   }
 
@@ -389,9 +403,10 @@ export class TownSimulation {
       ? observations.reduce((sum, observation) => sum + observation.potentialCustomers, 0) / observations.length
       : 0;
     const produceTemplate = templates.find((contract) => contract.buyer === archetype.name && contract.use !== "operations");
-    const demandScaledInputs = ["premium-grocer", "apothecary"].includes(archetype.archetypeId);
+    const demandScaledInputs = ["premium-grocer", "apothecary", "school"].includes(archetype.archetypeId);
+    const outputCapacity = produceTemplate?.dailyQuantity ?? archetype.transactionsPerWorker * requiredWorkers;
     const expectedOutputUnits = demandScaledInputs
-      ? Math.min(expectedDailyDemand * OPPORTUNITY_DEMAND_CAPTURE_RATE, produceTemplate?.dailyQuantity ?? Infinity)
+      ? Math.min(expectedDailyDemand * OPPORTUNITY_DEMAND_CAPTURE_RATE, outputCapacity)
       : expectedDailyDemand * (this.policy.discretionaryDemand / 100) * OPPORTUNITY_DEMAND_CAPTURE_RATE;
     const expectedDailyRevenue = roundMoney(expectedOutputUnits * archetype.price);
     const variableDemandInputs = demandScaledInputs
@@ -423,7 +438,7 @@ export class TownSimulation {
       observedDays: observations.length,
       requiredObservationDays: OPPORTUNITY_OBSERVATION_DAYS,
       latestPotentialCustomers: observations.at(-1)?.potentialCustomers ?? 0,
-      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : "potential customers",
+      demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : archetype.archetypeId === "school" ? "eligible students" : "potential customers",
       expectedDailyDemand,
       expectedDailyRevenue,
       expectedDailyCost,
@@ -444,7 +459,7 @@ export class TownSimulation {
   }
 
   firmOpportunities() {
-    return PRIVATE_FORMATION_ARCHETYPE_IDS.map((archetypeId) => this.firmArchetype(archetypeId))
+    return this.formationArchetypeIds.map((archetypeId) => this.firmArchetype(archetypeId))
       .filter((archetype) => archetype && !this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId))
       .map((archetype) => this.opportunityEvidence(archetype));
   }
@@ -520,7 +535,7 @@ export class TownSimulation {
 
   observeFirmOpportunities() {
     const results = [];
-    PRIVATE_FORMATION_ARCHETYPE_IDS.map((archetypeId) => this.firmArchetype(archetypeId)).filter(Boolean).forEach((archetype) => {
+    this.formationArchetypeIds.map((archetypeId) => this.firmArchetype(archetypeId)).filter(Boolean).forEach((archetype) => {
       if (this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId)) return;
       const window = this.opportunityWindows[archetype.archetypeId];
       window.push(Object.freeze({ day: this.day, potentialCustomers: this.opportunityDemandCount(archetype) }));
@@ -961,6 +976,8 @@ export class TownSimulation {
       ? `bought ${units} food portion${units === 1 ? "" : "s"} from ${firm.name}`
       : purpose === "medicine"
         ? `bought ${units} medicine dose${units === 1 ? "" : "s"} from ${firm.name}`
+        : purpose === "education"
+          ? `bought ${units} lesson${units === 1 ? "" : "s"} from ${firm.name}`
         : `${purpose} to ${firm.name}`;
     this.ledger(person, { direction: "out", amount: paid, text: description, before });
     return paid;
@@ -1282,9 +1299,11 @@ export class TownSimulation {
     const café = this.firms.find((firm) => firm.active && firm.sector === "service" && firm.inventory >= 1);
     const makers = this.firms.find((firm) => firm.active && firm.sector === "goods" && firm.inventory >= 1);
     const apothecary = this.firms.find((firm) => firm.active && firm.archetypeId === "apothecary" && firm.inventory >= 1);
+    const school = this.firms.find((firm) => firm.active && firm.archetypeId === "school" && firm.inventory >= 1);
     this.people.forEach((person) => {
       if (!person.alive) return;
       this.considerHealthCare(person, apothecary);
+      this.considerEducation(person, school);
       this.considerPersonalTime(person, café, makers);
     });
     ["café", "park"].forEach((venue) => this.pairSocialVisitors(
@@ -1329,6 +1348,47 @@ export class TownSimulation {
     person.lastTreatmentDay = this.day;
     person.health = clamp(person.health + HEALTH_TREATMENT_RECOVERY, 0.08, 0.92);
     this.note(person, `self-care medicine raised health from ${Math.round(beforeHealth * 100)}% to ${Math.round(person.health * 100)}%`, "good");
+    return true;
+  }
+
+  considerEducation(person, school) {
+    if (!person.alive || person.skill >= EDUCATION_SKILL_THRESHOLD) return false;
+    this.assessNeeds(person);
+    const reserve = this.essentialCost() * EDUCATION_RESERVE_DAYS;
+    const affordable = school && person.cash + 1e-9 >= school.price + reserve;
+    if (school && !affordable) school.priceRejectionsToday += 1;
+    const option = affordable ? {
+      action: `buy-education:${school.id}`,
+      firmId: school.id,
+      firmName: school.name,
+      totalPrice: school.price,
+      skillGain: EDUCATION_SKILL_GAIN,
+      capacityAvailable: school.transactionsToday < this.transactionCapacity(school),
+    } : null;
+    const legalActions = Object.freeze(["defer-education", ...(option ? [option.action] : [])]);
+    const observation = Object.freeze({
+      kind: "education",
+      citizenId: person.id,
+      citizenName: person.name,
+      skill: person.skill,
+      stress: person.stress,
+      runwayDays: this.runwayDays(person),
+      safetyNeed: person.needs.safety,
+      profile: { ...person.motivationProfile },
+      options: option ? [{ ...option }] : [],
+    });
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) {
+      throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal education action`);
+    }
+    this.recordDecision(person, observation, legalActions, decision, "Personal time");
+    if (!option || decision.action !== option.action || !this.buy(person, school, 1, "education")) return false;
+    const beforeSkill = person.skill;
+    person.educationSeller = school.id;
+    person.lastEducationDay = this.day;
+    person.skill = clamp(person.skill + EDUCATION_SKILL_GAIN, 0, 0.95);
+    person.growth = clamp(person.growth + 0.015);
+    this.note(person, `a lesson raised skill from ${Math.round(beforeSkill * 100)}% to ${Math.round(person.skill * 100)}%`, "good");
     return true;
   }
 

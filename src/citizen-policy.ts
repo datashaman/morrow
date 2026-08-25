@@ -12,8 +12,9 @@ export type PersonalTimeAction = (typeof PERSONAL_TIME_ACTIONS)[number];
 export type FoodAction = "skip-food" | `eat-stored-food:${number}` | `buy-food:${number}:${number}`;
 export type HousingAction = "defer-housing" | "remain-unhoused" | `pay-housing:${number}` | `secure-housing:${number}`;
 export type HealthAction = "defer-treatment" | `buy-medicine:${number}`;
+export type EducationAction = "defer-education" | `buy-education:${number}`;
 export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
-export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | FoodAction | HousingAction | HealthAction | OwnerAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | FoodAction | HousingAction | HealthAction | EducationAction | OwnerAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -166,6 +167,27 @@ export type HealthObservation = Readonly<{
   options: readonly HealthOption[];
 }>;
 
+export type EducationOption = Readonly<{
+  action: `buy-education:${number}`;
+  firmId: number;
+  firmName: string;
+  totalPrice: number;
+  skillGain: number;
+  capacityAvailable: boolean;
+}>;
+
+export type EducationObservation = Readonly<{
+  kind: "education";
+  citizenId: number;
+  citizenName: string;
+  skill: number;
+  stress: number;
+  runwayDays: number;
+  safetyNeed: number;
+  profile: MotivationProfile;
+  options: readonly EducationOption[];
+}>;
+
 export type OwnerOption = Readonly<{
   action: OwnerAction;
   label: string;
@@ -195,7 +217,7 @@ export type OwnerObservation = Readonly<{
   options: readonly OwnerOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | FoodObservation | HousingObservation | HealthObservation | OwnerObservation;
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | OwnerObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -300,6 +322,8 @@ export class RuleCitizenPolicy implements CitizenPolicy {
       action = observation.options[0]?.action ?? (observation.housed ? "defer-housing" : "remain-unhoused");
     } else if (observation.kind === "health") {
       action = observation.options[0]?.action ?? "defer-treatment";
+    } else if (observation.kind === "education") {
+      action = observation.options[0]?.action ?? "defer-education";
     } else if (observation.kind === "personal-time") {
       action = legalActions.includes("do-nothing") ? "do-nothing" : legalActions[0];
     } else if (observation.kind === "owner") {
@@ -335,6 +359,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     if (input.observation.kind === "food") return this.decideFood(input.observation, input.legalActions);
     if (input.observation.kind === "housing") return this.decideHousing(input.observation, input.legalActions);
     if (input.observation.kind === "health") return this.decideHealth(input.observation, input.legalActions);
+    if (input.observation.kind === "education") return this.decideEducation(input.observation, input.legalActions);
     if (input.observation.kind === "owner") return this.decideOwner(input.observation, input.legalActions);
 
     const { observation, legalActions } = input;
@@ -533,6 +558,21 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
       scores[option.action] = securityBenefit + observation.profile.planning * 0.25 - costPressure - (option.capacityAvailable ? 0 : 1.4);
     });
     return this.highestScoringDecision(legalActions, scores, "health-care");
+  }
+
+  decideEducation(observation: EducationObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const skillGap = 1 - observation.skill;
+    const scarcity = clamp(1 - observation.runwayDays / 12);
+    const scores: Record<string, number> = {
+      "defer-education": 0.14 + observation.profile.security * scarcity * 0.35 + observation.profile.avoidance * observation.stress * 0.35,
+    };
+    observation.options.forEach((option) => {
+      const masteryBenefit = observation.profile.mastery * (0.45 + skillGap * 0.8 + option.skillGain * 4);
+      const planningBenefit = observation.profile.planning * (0.2 + skillGap * 0.25);
+      const costPressure = observation.profile.security * scarcity * option.totalPrice / Math.max(1, observation.runwayDays + option.totalPrice);
+      scores[option.action] = masteryBenefit + planningBenefit - costPressure - (option.capacityAvailable ? 0 : 1.4);
+    });
+    return this.highestScoringDecision(legalActions, scores, "education");
   }
 
   highestScoringDecision(legalActions: readonly CitizenAction[], scores: Record<string, number>, domain: string): CitizenPolicyDecision {

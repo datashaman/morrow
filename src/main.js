@@ -304,6 +304,9 @@ function updateInterface() {
   const healthCare = person.healthSeller >= 0
     ? `last self-care from ${simulation.firms[person.healthSeller].name} on day ${person.lastTreatmentDay}`
     : "no self-care purchase yet";
+  const education = person.educationSeller >= 0
+    ? `last lesson from ${simulation.firms[person.educationSeller].name} on day ${person.lastEducationDay}`
+    : "no paid lesson yet";
   const foodAge = person.lastFoodAge === 0 ? "fresh" : `${person.lastFoodAge} day${person.lastFoodAge === 1 ? "" : "s"} stored`;
   const foodQuality = person.lastFoodQuality === null ? "no meal yet" : `last meal ${percent(person.lastFoodQuality)} quality; ${foodAge}`;
   const pantry = `${person.foodStock.length} meal${person.foodStock.length === 1 ? "" : "s"} stored`;
@@ -336,7 +339,7 @@ function updateInterface() {
   elements["town-stage"].innerHTML = `<span><small>Current town stage</small><strong>${state.townStage.label}</strong></span><p>${state.townStage.description} Essential reliability ${percent(state.townStage.evidence.essentialReliability)} · employment ${percent(state.townStage.evidence.employmentRate)} · ten-day reserves ${percent(state.townStage.evidence.reserveShare)} · discretionary demand ${percent(state.townStage.evidence.discretionaryDemand)} · persistent optional sectors ${state.townStage.evidence.persistentOptionalSectors}/${state.townStage.evidence.activeOptionalSectors}.</p>`;
   elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
   elements["person-summary"].textContent = person.alive
-    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)}; ${healthCare} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
+    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)}; ${healthCare} · skill ${percent(person.skill)}; ${education} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
     : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · estate ${money(person.estateTransferred)} transferred to treasury · remaining cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
   elements.needs.hidden = !person.alive;
 

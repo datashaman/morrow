@@ -109,7 +109,7 @@ function summarizeFirm(name: string, days: any[]) {
 }
 
 export function evaluateOptionalFirmRun({ seed, days, firms = DEFAULT_OPTIONAL_FIRMS }: { seed: number; days: number; firms?: readonly string[] }) {
-  const town: any = new TownSimulation({ seed });
+  const town: any = new TownSimulation({ seed, formationArchetypeIds: ["cafe", "premium-grocer"] } as any);
   const targets = firms.map((name) => {
     const firm = town.firms.find((candidate: any) => candidate.name === name);
     if (!firm) throw new Error(`Unknown firm: ${name}`);
