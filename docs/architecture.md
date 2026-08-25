@@ -98,6 +98,10 @@ The UI should not decide economic outcomes. It may format or animate state but s
 
 Provides responsive light/dark presentation. At narrow widths metrics stack, needs and policy controls reduce columns, and the canvas legend is hidden.
 
+### `src/knowledge-evaluation.ts`
+
+Runs paired seeded towns with knowledge disabled and enabled, then reports auditable learning, gross and floored everyday-grocer capacity, completed transactions, town outcomes, and cash conservation. `scripts/evaluate-knowledge.ts` is the command-line adapter. This evaluator observes the domain model and does not introduce alternative simulation rules.
+
 ### `test/simulation.test.js`
 
 Uses Node’s built-in test runner. Tests directly exercise the simulation without Vite or a browser.

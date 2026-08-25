@@ -11,6 +11,7 @@
     "evaluate:development": "tsx scripts/evaluate-development.ts",
     "evaluate:sectors": "tsx scripts/evaluate-sector-balance.ts",
     "evaluate:activation": "tsx scripts/evaluate-neural-activation.ts",
+    "evaluate:knowledge": "tsx scripts/evaluate-knowledge.ts",
     "evaluate:personalization": "tsx scripts/evaluate-personalization.ts",
     "export:trajectories": "tsx scripts/export-trajectories.ts",
     "preview": "vite preview",
