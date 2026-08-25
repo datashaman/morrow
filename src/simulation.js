@@ -1,5 +1,8 @@
 import {
   DEFAULT_POLICY,
+  ESSENTIAL_REENTRY_COOLDOWN_DAYS,
+  ESSENTIAL_REENTRY_COST,
+  ESSENTIAL_REENTRY_STAFF,
   FIRMS,
   FIRM_DISTRESS_DAYS,
   FIRM_INSOLVENCY_DAYS,
@@ -75,6 +78,8 @@ export class TownSimulation {
       lastMaintenanceDay: 0,
       receivershipDay: null,
       receivershipCount: 0,
+      reentryCount: 0,
+      closedDay: null,
       lastDisplacementDay: null,
       publiclyOperated: false,
       unitsSold: 0,
@@ -1066,6 +1071,7 @@ export class TownSimulation {
 
   settlementPhase() {
     this.resolveHousingReceivership();
+    this.resolveEssentialSectorReentry();
     const budget = this.government.cash * (this.policy.supportRate / 100) * 0.18;
     let spent = 0;
     const vulnerable = this.people.filter((person) => person.alive).sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
@@ -1117,6 +1123,7 @@ export class TownSimulation {
     if (!firm.active) return false;
     [...firm.employees].forEach((id) => this.fire(firm, this.people[id], "business insolvency ended employment"));
     firm.active = false;
+    firm.closedDay = this.day;
     const entersReceivership = firm.sector === "housing";
     firm.status = entersReceivership ? "receivership" : "insolvent";
     firm.targetStaff = 0;
@@ -1135,17 +1142,22 @@ export class TownSimulation {
     const housing = this.firms.find((firm) => firm.sector === "housing" && firm.status === "receivership");
     if (!housing) return false;
     const elapsed = this.day - housing.receivershipDay;
-    if (elapsed < HOUSING_RECEIVERSHIP_GRACE_DAYS) return false;
+    const restartDelay = housing.receivershipCount === 0 ? HOUSING_RECEIVERSHIP_GRACE_DAYS : ESSENTIAL_REENTRY_COOLDOWN_DAYS;
+    if (elapsed < restartDelay) return false;
 
-    if (housing.receivershipCount === 0 && this.government.cash + 1e-9 >= HOUSING_RESTART_COST) {
+    if (this.government.cash + 1e-9 >= HOUSING_RESTART_COST) {
+      const workers = this.replacementWorkers(HOUSING_REPLACEMENT_STAFF);
       const treasuryBefore = this.government.cash;
       const housingBefore = housing.cash;
-      const paid = this.transfer(this.government, housing, HOUSING_RESTART_COST, { exact: true });
+      const paid = workers.length === HOUSING_REPLACEMENT_STAFF
+        ? this.transfer(this.government, housing, HOUSING_RESTART_COST, { exact: true })
+        : 0;
       if (paid === HOUSING_RESTART_COST) {
         housing.active = true;
         housing.status = "operating";
         housing.receivershipDay = null;
         housing.receivershipCount += 1;
+        housing.closedDay = null;
         housing.distressDays = 0;
         housing.trouble = 0;
         housing.targetStaff = HOUSING_REPLACEMENT_STAFF;
@@ -1154,11 +1166,7 @@ export class TownSimulation {
           const counterpartyId = contract.supplierId === housing.id ? contract.buyerId : contract.supplierId;
           contract.active = this.firms[counterpartyId].active;
         });
-        this.people
-          .filter((person) => person.alive && person.employer < 0)
-          .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))
-          .slice(0, HOUSING_REPLACEMENT_STAFF)
-          .forEach((person) => this.hire(housing, person));
+        workers.forEach((person) => this.hire(housing, person));
         housing.targetStaff = Math.max(housing.employees.length, HOUSING_REPLACEMENT_STAFF);
         this.ledger(this.government, { direction: "out", amount: paid, text: `housing receivership restart to ${housing.name}`, before: treasuryBefore });
         this.ledger(housing, { direction: "in", amount: paid, text: "housing receivership restart from treasury", before: housingBefore });
@@ -1178,6 +1186,51 @@ export class TownSimulation {
     housing.lastDisplacementDay = this.day;
     if (displaced.length) this.note(housing, `${displaced.length} unmanaged tenancies failed during receivership`, "bad");
     return displaced.length > 0;
+  }
+
+  replacementWorkers(count) {
+    return this.people
+      .filter((person) => person.alive && person.employer < 0)
+      .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25) || a.id - b.id)
+      .slice(0, count);
+  }
+
+  restartEssentialFirm(firm) {
+    const workers = this.replacementWorkers(ESSENTIAL_REENTRY_STAFF);
+    if (firm.active || workers.length < ESSENTIAL_REENTRY_STAFF || this.government.cash + 1e-9 < ESSENTIAL_REENTRY_COST) return false;
+    const treasuryBefore = this.government.cash;
+    const firmBefore = firm.cash;
+    const paid = this.transfer(this.government, firm, ESSENTIAL_REENTRY_COST, { exact: true });
+    if (paid !== ESSENTIAL_REENTRY_COST) return false;
+    firm.active = true;
+    firm.status = "operating";
+    firm.closedDay = null;
+    firm.reentryCount += 1;
+    firm.publiclyOperated = true;
+    firm.distressDays = 0;
+    firm.trouble = 0;
+    firm.targetStaff = ESSENTIAL_REENTRY_STAFF;
+    this.contracts.filter((contract) => contract.supplierId === firm.id || contract.buyerId === firm.id).forEach((contract) => {
+      const counterpartyId = contract.supplierId === firm.id ? contract.buyerId : contract.supplierId;
+      contract.active = this.firms[counterpartyId].active;
+    });
+    workers.forEach((person) => this.hire(firm, person));
+    this.ledger(this.government, { direction: "out", amount: paid, text: `essential-sector re-entry to ${firm.name}`, before: treasuryBefore });
+    this.ledger(firm, { direction: "in", amount: paid, text: "essential-sector re-entry from treasury", before: firmBefore });
+    this.note(firm, "treasury funded and staffed a public essential-sector operator", "good");
+    return true;
+  }
+
+  resolveEssentialSectorReentry() {
+    let restarted = false;
+    ["agriculture", "food"].forEach((sector) => {
+      if (this.firms.some((firm) => firm.active && firm.sector === sector)) return;
+      if (sector === "food" && !this.firms.some((firm) => firm.active && firm.sector === "agriculture")) return;
+      const firm = this.firms.find((candidate) => candidate.vital && candidate.sector === sector && candidate.status === "insolvent");
+      if (!firm || firm.closedDay === null || this.day - firm.closedDay < ESSENTIAL_REENTRY_COOLDOWN_DAYS) return;
+      restarted = this.restartEssentialFirm(firm) || restarted;
+    });
+    return restarted;
   }
 
   assessFirmSolvency(firm) {

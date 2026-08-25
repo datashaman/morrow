@@ -622,6 +622,62 @@ test("the treasury can fund and staff a replacement housing operator", () => {
   assert.equal(tenant.ledger[0].text, "rent to HomeWorks");
 });
 
+test("a funded and staffed housing receivership can restart again after a longer cooldown", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const housing = town.firms.find((firm) => firm.name === "HomeWorks");
+  town.closeFirm(housing);
+  housing.receivershipCount = 1;
+  town.day = housing.receivershipDay + 14;
+  const totalBefore = town.totalMoney();
+
+  town.resolveHousingReceivership();
+
+  assert.equal(housing.active, true);
+  assert.equal(housing.receivershipCount, 2);
+  assert.equal(housing.employees.length, 2);
+  assert.equal(town.totalMoney(), totalBefore);
+});
+
+test("a missing essential production sector can gain a funded public operator", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  town.closeFirm(farm);
+  town.day = farm.closedDay + 14;
+  const treasuryBefore = town.government.cash;
+  const farmBefore = farm.cash;
+  const totalBefore = town.totalMoney();
+
+  town.resolveEssentialSectorReentry();
+
+  assert.equal(farm.active, true);
+  assert.equal(farm.status, "operating");
+  assert.equal(farm.publiclyOperated, true);
+  assert.equal(farm.reentryCount, 1);
+  assert.equal(farm.employees.length, 2);
+  assert.equal(town.government.cash, treasuryBefore - 90);
+  assert.equal(farm.cash, farmBefore + 90);
+  assert.equal(town.totalMoney(), totalBefore);
+  assert.ok(town.contracts.filter((contract) => contract.supplierId === farm.id).every((contract) => contract.active));
+  assert.match(farm.ledger[0].text, /essential-sector re-entry from treasury/);
+});
+
+test("essential-sector re-entry waits for capital, workers, cooldown, and upstream supply", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  const food = town.firms.find((firm) => firm.name === "Harvest Foods");
+  town.firms.filter((firm) => firm.sector === "food").forEach((firm) => town.closeFirm(firm));
+  town.closeFirm(farm);
+  town.day += 14;
+
+  assert.equal(town.resolveEssentialSectorReentry(), true);
+  assert.equal(farm.active, true);
+  assert.equal(food.active, false);
+
+  town.government.cash = 89.99;
+  assert.equal(town.resolveEssentialSectorReentry(), false);
+  assert.equal(food.active, false);
+});
+
 test("an unfunded receivership progressively displaces living tenants", () => {
   const town = new TownSimulation({ seed: 42 });
   const housing = town.firms.find((firm) => firm.name === "HomeWorks");
