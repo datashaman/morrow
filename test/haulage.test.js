@@ -31,11 +31,11 @@ test("physical supply settles supplier goods and paid haulage only on delivery",
 
   assert.equal(contract.deliveredToday, 22);
   assert.equal(contract.transportLoadToday, 44);
-  assert.equal(contract.transportFeeToday, 5.5);
+  assert.equal(contract.transportFeeToday, 22 * carrier.price);
   assert.equal(grocer.inventory, 22);
   assert.equal(grocer.cash, grocerBefore - 22 * contract.unitPrice);
   assert.equal(farm.cash, farmBefore + 22 * (contract.unitPrice - carrier.basePrice));
-  assert.equal(carrier.cash, carrierBefore + 5.5);
+  assert.equal(carrier.cash, carrierBefore + 22 * carrier.price);
   assert.ok(grocer.ledger.some((entry) => /haulage by Morrow Haulage/.test(entry.text)));
   assert.ok(carrier.ledger.some((entry) => /delivery for Harvest Foods/.test(entry.text)));
   assert.equal(town.totalMoney(), totalBefore);
@@ -62,6 +62,25 @@ test("distance-weighted finite capacity creates deterministic contention", () =>
   assert.equal(premiumContract.deliveredToday, 0);
   assert.equal(premium.inventory, 0);
   assert.match(premium.events[0].text, /Morrow Haulage could transport only 0 of 14/);
+});
+
+test("the staffed carrier can deliver a living population's essential food order", () => {
+  const { town, carrier } = transportTown();
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const contract = town.contracts.find((candidate) => candidate.supplierId === farm.id && candidate.buyerId === harvest.id);
+  town.contracts.filter((candidate) => candidate !== contract).forEach((candidate) => { candidate.active = false; });
+  carrier.employees.forEach((id) => { town.people[id].attended = true; });
+  farm.inventory = 100;
+  harvest.inventory = 40;
+  harvest.cash = 100;
+
+  town.procurementPhase();
+
+  assert.equal(contract.requestedToday, 40);
+  assert.equal(contract.deliveredToday, 40);
+  assert.equal(carrier.transportCapacityToday, 90);
+  assert.equal(carrier.transportLoadToday, 80);
 });
 
 test("a missing carrier leaves title, goods, and cash with the supplier", () => {
@@ -115,7 +134,7 @@ test("legacy scenarios without transport retain local self-delivery", () => {
 
   town.procurementPhase();
 
-  assert.equal(grocer.inventory, 22);
+  assert.equal(grocer.inventory, 40);
   assert.equal(town.firms.some((firm) => firm.archetypeId === "haulage"), false);
   assert.equal(grocer.ledger.some((entry) => /haulage/.test(entry.text)), false);
   town.assertInvariants();

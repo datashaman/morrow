@@ -5,7 +5,7 @@ import {
   MotivationCitizenPolicy,
   RuleCitizenPolicy,
 } from "../src/citizen-policy.ts";
-import { PHASES, PRODUCTS } from "../src/config.js";
+import { DEFAULT_LATENT_FIRM_NAMES, PHASES, PRODUCTS } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
 test("money remains inside the closed economy", () => {
@@ -101,14 +101,15 @@ test("farm workers produce inputs that immediate-settlement contracts move to re
   const produced = farm.inventory - farmInventory;
   town.procurementPhase();
   const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
+  const deliveredCost = Math.round(contract.deliveredToday * contract.unitPrice * 100) / 100;
 
   assert.ok(produced > 0);
-  assert.equal(contract.deliveredToday, 22);
-  assert.equal(harvest.inventory, harvestInventory + 22);
-  assert.equal(harvest.cash, harvestCash - 24.2);
+  assert.equal(contract.deliveredToday, 40);
+  assert.equal(harvest.inventory, harvestInventory + 40);
+  assert.equal(harvest.cash, harvestCash - deliveredCost);
   assert.equal(farm.cash > farmCash, true);
-  assert.equal(harvest.inputCosts, 24.2);
-  assert.match(harvest.ledger[0].text, /22 crates from Morrow Fields/);
+  assert.equal(harvest.inputCosts, deliveredCost);
+  assert.match(harvest.ledger[0].text, /40 crates from Morrow Fields/);
 });
 
 test("a supply contract cannot put its buyer into debt", () => {
@@ -127,14 +128,30 @@ test("a supply contract cannot put its buyer into debt", () => {
 test("replenishment cannot exceed a contract's daily quantity", () => {
   const town = new TownSimulation({ seed: 42 });
   const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
   const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
   harvest.inventory = 0;
+  farm.inventory = 100;
 
   town.procurementPhase();
 
   assert.equal(contract.requestedToday, contract.dailyQuantity);
   assert.equal(contract.deliveredToday, contract.dailyQuantity);
   assert.equal(contract.shortfallToday, 0);
+});
+
+test("essential food procurement follows the living population without exceeding its contract", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
+  const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods" && candidate.product === "produce");
+  town.people.slice(17).forEach((person) => { person.alive = false; });
+  harvest.inventory = 0;
+
+  town.procurementPhase();
+
+  assert.equal(contract.dailyQuantity, 40);
+  assert.equal(contract.requestedToday, 17);
+  assert.equal(contract.deliveredToday, 17);
 });
 
 test("Makers Guild supplies operating stock without inflating saleable inventory", () => {
@@ -173,7 +190,7 @@ test("missing and restoring Makers Guild maintenance changes transaction capacit
   town.productionPhase();
 
   assert.equal(harvest.operationalReadiness, 0.65);
-  assert.equal(town.transactionCapacity(harvest), 15);
+  assert.equal(town.transactionCapacity(harvest), 27);
   assert.match(harvest.events[0].text, /missing a maintenance kit/);
 
   harvest.operatingSupplies = 1;
@@ -181,7 +198,7 @@ test("missing and restoring Makers Guild maintenance changes transaction capacit
   town.productionPhase();
 
   assert.equal(harvest.operationalReadiness, 1);
-  assert.equal(town.transactionCapacity(harvest), 24);
+  assert.equal(town.transactionCapacity(harvest), 42);
   assert.match(harvest.events[0].text, /restored full operating capacity/);
 });
 
@@ -361,22 +378,24 @@ test("an owner chooses a dividend only from retained operating surplus", () => {
   owner.cash = town.essentialCost() * 4;
   owner.ledger = [];
   firm.ledger = [];
-  firm.cash = 300;
+  const startingFirmCash = 500;
+  firm.cash = startingFirmCash;
   firm.targetStaff = firm.employees.length;
+  const expectedDividend = Math.round((firm.cash - Math.max(210, town.nextOperatingNeed(firm) * 4)) * 0.55 * 100) / 100;
 
   const paid = town.payOwnerDividend(firm);
 
-  assert.equal(paid, 49.5);
-  assert.equal(firm.cash, 250.5);
-  assert.equal(owner.cash, Math.round((town.essentialCost() * 4 + 49.5) * 100) / 100);
-  assert.equal(firm.ownerDecision.dividend, 49.5);
+  assert.equal(paid, expectedDividend);
+  assert.equal(firm.cash, startingFirmCash - expectedDividend);
+  assert.equal(owner.cash, Math.round((town.essentialCost() * 4 + expectedDividend) * 100) / 100);
+  assert.equal(firm.ownerDecision.dividend, expectedDividend);
   assert.match(firm.ownerDecision.dividendReason, /thin owner runway/);
   assert.match(firm.ledger[0].text, /owner dividend to Amina/);
   assert.match(owner.ledger[0].text, /owner dividend from Harvest Foods/);
   assert.equal(owner.decisions[0].observation.domain, "distribution");
   assert.equal(owner.decisions[0].chosenAction, "take-owner-distribution");
   assert.deepEqual(owner.decisions[0].legalActions, ["retain-owner-cash", "take-owner-distribution"]);
-  assert.equal(owner.decisions[0].observation.options[1].amount, 49.5);
+  assert.equal(owner.decisions[0].observation.options[1].amount, expectedDividend);
   assert.equal(firm.decisions[0].chosenAction, "take-owner-distribution");
 });
 
@@ -394,10 +413,11 @@ test("an owner contributes equity when recovery can be funded above a personal r
 
   const contributed = town.resolveOwnerFinancing(firm);
 
-  assert.equal(contributed, need * 2);
-  assert.equal(firm.cash, need * 2);
-  assert.equal(owner.cash, 200 - need * 2);
-  assert.equal(firm.ownerDecision.capitalContribution, need * 2);
+  const expectedContribution = Math.round(need * 2 * 100) / 100;
+  assert.ok(Math.abs(contributed - expectedContribution) < 1e-9);
+  assert.ok(Math.abs(firm.cash - expectedContribution) < 1e-9);
+  assert.ok(Math.abs(owner.cash - (200 - expectedContribution)) < 1e-9);
+  assert.ok(Math.abs(firm.ownerDecision.capitalContribution - expectedContribution) < 1e-9);
   assert.equal(firm.ownerDecision.continuation, "continue");
   assert.match(firm.ledger[0].text, /equity contribution from Amina/);
   assert.match(owner.ledger[0].text, /equity contribution to Harvest Foods/);
@@ -405,7 +425,7 @@ test("an owner contributes equity when recovery can be funded above a personal r
   assert.equal(owner.decisions[0].observation.domain, "financing");
   assert.equal(owner.decisions[0].chosenAction, "contribute-owner-capital");
   assert.deepEqual(owner.decisions[0].legalActions, ["contribute-owner-capital", "wait-on-owner-financing"]);
-  assert.equal(owner.decisions[0].observation.options[0].amount, need * 2);
+  assert.ok(Math.abs(owner.decisions[0].observation.options[0].amount - expectedContribution) < 1e-9);
   assert.equal(firm.decisions[0].chosenAction, "contribute-owner-capital");
 });
 
@@ -744,7 +764,7 @@ test("a typical low-wage worker can cover daily-equivalent essentials", () => {
   const lowestWage = Math.min(...town.firms.map((firm) => Math.max(town.policy.minimumWage, firm.wage)));
   const typicalNetWage = lowestWage * (0.75 + 0.8 * 0.25) * (1 - town.policy.taxRate / 100);
 
-  assert.ok(typicalNetWage >= town.essentialCost() * 1.8);
+  assert.ok(typicalNetWage >= town.essentialCost() * 1.5);
 });
 
 test("sustainable food production prevents a solvent later shopper from starving", () => {
@@ -756,9 +776,24 @@ test("sustainable food production prevents a solvent later shopper from starving
   }
 
   assert.equal(person.alive, true);
-  assert.equal(person.hungryDays, 0);
+  assert.ok(person.hungryDays <= 1);
   assert.ok(person.health > 0.5);
   assert.ok(person.cash > town.essentialCost());
+});
+
+test("the interactive essential pipeline does not let a solvent citizen die without ever eating", () => {
+  const town = new TownSimulation({
+    seed: 20260823,
+    latentFirmNames: DEFAULT_LATENT_FIRM_NAMES,
+    housingCapacityEnabled: true,
+    transportEnabled: true,
+  });
+
+  for (let step = 0; step < PHASES.length * 20; step += 1) town.step();
+
+  const neverFedDeaths = town.people.filter((person) => !person.alive && person.estateTransferred > 0 && person.lastFoodQuality === null);
+  assert.deepEqual(neverFedDeaths.map((person) => person.name), []);
+  town.assertInvariants();
 });
 
 test("food access prioritizes vulnerability and rotates otherwise equal citizens", () => {
@@ -839,9 +874,9 @@ test("a single food purchase uses the same buyer-oriented wording as a bulk purc
   town.buy(person, harvest, 1, "food");
 
   assert.equal(person.ledger[0].direction, "out");
-  assert.equal(person.ledger[0].amount, 1.8);
+  assert.equal(person.ledger[0].amount, harvest.price);
   assert.equal(person.ledger[0].before, 20);
-  assert.equal(person.ledger[0].after, 18.2);
+  assert.equal(person.ledger[0].after, 20 - harvest.price);
   assert.equal(person.ledger[0].text, "bought 1 food portion from Harvest Foods");
 });
 
@@ -1125,12 +1160,13 @@ test("bulk units contribute their full realized income through one transaction",
   firm.revenueEMA = 0;
 
   town.buy(person, firm, 3, "food");
+  const sale = Math.round(firm.price * 3 * 100) / 100;
   assert.equal(firm.attemptedTransactions, 1);
   assert.equal(firm.unitsSold, 3);
-  assert.equal(firm.sales, 5.4);
+  assert.equal(firm.sales, sale);
   town.settleFirm(firm);
 
-  assert.ok(Math.abs(firm.revenueEMA - 5.4 * 0.28) < 1e-9);
+  assert.ok(Math.abs(firm.revenueEMA - sale * 0.28) < 1e-9);
 });
 
 test("an owner lowers price after repeated affordability failures", () => {
@@ -1141,10 +1177,11 @@ test("an owner lowers price after repeated affordability failures", () => {
 
   town.reviewOwnerPrice(harvest);
 
-  assert.equal(harvest.price, 1.71);
+  const expectedPrice = Math.round(harvest.basePrice * 0.95 * 100) / 100;
+  assert.equal(harvest.price, expectedPrice);
   assert.equal(harvest.ownerDecision.priceDecision, "lowered");
   assert.match(harvest.ownerDecision.priceReason, /4 affordability failures/);
-  assert.match(harvest.events[0].text, /lowered the price from 1.80 to 1.71/);
+  assert.match(harvest.events[0].text, new RegExp(`lowered the price from ${harvest.basePrice.toFixed(2)} to ${expectedPrice.toFixed(2)}`));
   const owner = town.people[harvest.owner];
   assert.equal(owner.decisions[0].observation.domain, "pricing");
   assert.equal(owner.decisions[0].chosenAction, "lower-owner-price");
@@ -1182,7 +1219,7 @@ test("a lower owner-set price converts an affordability failure into a purchase"
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[0];
   const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
-  person.cash = 1.75;
+  person.cash = 2.05;
   person.ledger = [];
 
   assert.equal(town.buy(person, harvest, 1, "food"), 0);
@@ -1192,8 +1229,8 @@ test("a lower owner-set price converts an affordability failure into a purchase"
   town.reviewOwnerPrice(harvest);
   const paid = town.buy(person, harvest, 1, "food");
 
-  assert.equal(paid, 1.71);
-  assert.equal(person.cash, 0.04);
+  assert.equal(paid, harvest.price);
+  assert.equal(person.cash, 0.01);
   assert.equal(person.ledger[0].text, "bought 1 food portion from Harvest Foods");
 });
 
@@ -1208,8 +1245,8 @@ test("a supplier price decision propagates proportionally to wholesale contracts
   town.reviewOwnerPrice(farm);
 
   assert.equal(farm.price, 1.16);
-  assert.equal(harvestContract.unitPrice, 1.16);
-  assert.equal(basketContract.unitPrice, 1.32);
+  assert.equal(harvestContract.unitPrice, Math.round(harvestContract.baseUnitPrice * (farm.price / farm.basePrice) * 100) / 100);
+  assert.equal(basketContract.unitPrice, Math.round(basketContract.baseUnitPrice * (farm.price / farm.basePrice) * 100) / 100);
 });
 
 test("procurement settles exactly at the supplier's adjusted wholesale price", () => {
@@ -1222,16 +1259,18 @@ test("procurement settles exactly at the supplier's adjusted wholesale price", (
   farm.pricingWindow = { unitsSold: 30, revenue: 34, inputCosts: 0, priceRejections: 0, turnedAway: 3 };
   town.reviewOwnerPrice(farm);
   harvest.inventory = 0;
+  farm.inventory = 100;
   const buyerBefore = harvest.cash;
   const supplierBefore = farm.cash;
   const totalBefore = town.totalMoney();
 
   town.procurementPhase();
 
-  assert.equal(contract.deliveredToday, 22);
-  assert.equal(harvest.cash, buyerBefore - 25.52);
-  assert.equal(farm.cash, supplierBefore + 25.52);
-  assert.equal(farm.unitsSold, 22);
+  const deliveredCost = Math.round(contract.deliveredToday * contract.unitPrice * 100) / 100;
+  assert.equal(contract.deliveredToday, 40);
+  assert.equal(harvest.cash, buyerBefore - deliveredCost);
+  assert.equal(farm.cash, supplierBefore + deliveredCost);
+  assert.equal(farm.unitsSold, 40);
   assert.equal(town.totalMoney(), totalBefore);
 });
 

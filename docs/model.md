@@ -45,8 +45,8 @@ The product catalog gives every traded thing a stable identifier, label, and uni
 
 | Firm | Sells | Made or supplied by | Starting retail/contract price | Base wage | Starting staff |
 |---|---|---|---:|---:|---:|
-| Harvest Foods | Everyday food | Morrow Fields produce, handled by retail staff | 1.8 | 6.2 | 3 |
-| Green Basket | High-quality food | Higher-grade Morrow Fields produce, selected by retail staff | 2.0 | 6.5 | 2 |
+| Harvest Foods | Everyday food | Morrow Fields produce, handled by retail staff | 2.15 | 6.2 | 3 |
+| Green Basket | High-quality food | Higher-grade Morrow Fields produce, selected by retail staff | 2.55 | 6.5 | 2 |
 | HomeWorks | Weekly housing service | Existing dwelling service operated by its staff | 6.0 weekly | 7.2 | 4 |
 | Makers Guild | Tools and repair kits | Made directly by guild workers | 6.0 | 7.8 | 3 |
 | Common Café | Prepared café service | Morrow Fields produce, prepared by café staff | 2.2 | 6.4 | 2 |
@@ -55,8 +55,8 @@ The product catalog gives every traded thing a stable identifier, label, and uni
 | Morrow Materials | Construction bundles | Makers Guild kits, assembled by yard workers | 16.0 | 7.4 | 2 |
 | Morrow Clinic | Clinical treatment | Morrow Apothecary medicine, used by clinical staff | 7.5 | 8.0 | 2 |
 | Morrow Builders | Building projects | Morrow Materials bundles, used by construction workers | 28.0 | 8.0 | 2 |
-| Morrow Haulage | Freight delivery | Physical goods carried by transport workers | 0.25 per unit | 5.0 | 1 |
-| Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.25 wholesale | 5.8 | 7 |
+| Morrow Haulage | Freight delivery | Physical goods carried by transport workers | 0.45 per unit | 5.0 | 2 |
+| Morrow Fields | Farm produce | Grown directly by farm workers | 1.10–1.65 wholesale | 5.8 | 7 |
 
 Each operating starting instance begins with 150 cash. Firms track employees, inventory, consumer and contract sales, input costs, smoothed net income, vacancies, staffing targets, trouble, distress duration, rescue history, and lifecycle status. The first five people are assigned as owners in the interactive minimal start, one per starting firm; ownership and employment are separate concepts. Harvest Foods, HomeWorks, Morrow Haulage, and Morrow Fields are marked vital because they provide the lowest-priced food, the only housing service, freight needed by physical supply, and the sole agricultural input respectively. Five active contracts connect agriculture to essential food and Makers Guild maintenance to the food shop, housing provider, carrier, and farm from day one.
 
@@ -105,7 +105,7 @@ The projection exposes the current evidence rather than treating stage as stored
 
 Fewer than half of essential services operating reliably, or extinction, is Collapsed. Otherwise the town remains at Subsistence until essential reliability reaches 90%, employment 45%, and reserves 35%. A persistent optional sector plus at least 40% discretionary demand describes Convenience. Two optional sectors plus 65% employment and reserves describes Affluence. Six active archetypes, both optional sectors persistent, and an optional age of 30 days describes Complexity. Any lost condition moves the description backward immediately. These thresholds are gameplay summaries, not economic-development research or an unlock tree.
 
-The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 4.85 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 2.66 per day, so that representative worker earns roughly 1.82 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
+The current prices target internal cash-flow plausibility rather than a real currency. At default tax and a representative reliability of 0.8, the lowest configured wage produces about 4.85 net per attended day. Cheapest food plus one-seventh of weekly rent costs about 3.01 per day, so that representative worker earns roughly 1.61 times daily-equivalent essentials before optional purchases. Missed work, unemployment, payroll trouble, and seller capacity can still break that balance.
 
 ### Transaction capacity
 
@@ -176,7 +176,7 @@ A transport worker supplies 45 load-capacity points per attended day, reduced by
 
 Title, goods payment, and the carrier fee move only when delivery succeeds. The old delivered contract price is split at migration: the supplier share is the current contract price less the carrier's configured starting rate, while Morrow Haulage charges its current rate. Initial buyer cost is therefore unchanged; later carrier price decisions can raise or lower delivered cost and affordability independently. Before mutation, the buyer must afford both complete shares. The exact supplier and carrier transfers then settle in the same operation, the supplier loses stock, and the buyer gains the configured output. Separate buyer, supplier, and carrier ledgers expose both payments. No carrier, no attending capacity, insufficient cash, or carrier insolvency leaves goods and cash with their current owners and records the shortfall. Haulage income supports staffing through the ordinary realized-income rule. Morrow Haulage is vital and may receive the existing bounded one-time rescue, but an unfunded failure stalls hauled pipelines and has no special public re-entry path yet.
 
-Morrow Fields has immediate-settlement supply contracts with Harvest Foods, Green Basket, and Common Café. Each buyer requests enough produce to restore two configured days of target stock, up to its daily contract quantity. Delivery is limited to whole units by the farm's inventory and the buyer's available cash.
+Morrow Fields has immediate-settlement supply contracts with Harvest Foods, Green Basket, and Common Café. Harvest Foods targets two meals per living citizen and requests at most one meal per living citizen each day, bounded by its 40-unit contract maximum. Its initial 40-meal stock and three workers' combined 42-transaction capacity cover the initial population once when everyone attends; they do not guarantee delivery or service. The essential contract costs Harvest Foods 1.45 per meal delivered: at the configured starting freight price Morrow Fields receives 1.00 and Morrow Haulage receives 0.45. The 2.15 retail price leaves the grocer 0.70 before payroll and maintenance. At full 40-unit flow those three margins can support roughly six farm jobs, two haulage jobs, and four retail jobs under the ordinary realized-income staffing rule. Other buyers restore two configured days of target stock up to their daily contract quantity. Every delivery remains limited to whole units by farm inventory, buyer cash, and staffed haulage. Morrow Haulage starts with two workers and 90 possible load points when both attend, enough for the essential grocer's 80-point maximum order with ten points left for later contracts. Absence, maintenance, insolvency, weak farm output, cash pressure, and configured contract contention can still create shortages. These prices, population targets, and starting capacities are balance hypotheses, not nutrition or logistics calibration.
 
 Makers Guild has immediate-settlement maintenance contracts with every other starting firm. Each buyer holds one operating kit separately from saleable inventory. Every three days it consumes a kit; procurement then replenishes toward one kit when stock and buyer cash permit. Missing a maintenance cycle reduces direct production and transaction capacity to 65% until a later kit is consumed. This makes locally produced tools an input to agriculture, retail, housing, and café operations while citizen learning-tool purchases remain a secondary market. The three-day interval, one-kit target, price of 5, and 65% constrained capacity are balance hypotheses.
 
@@ -212,7 +212,7 @@ The simulation validates the choice, then performs the purchase through the exis
 
 Stored food loses 0.12 quality per day between purchase and consumption, to a minimum quality of 0.20. Health recovery is based on effective quality at consumption, not quality at purchase. The citizen profile reports the most recent meal's effective quality and age plus the number of stored meals.
 
-Consuming a meal reduces `hungryDays` by one and restores health by its effective quality multiplied by 0.006. Harvest Foods is cheaper and has fresh quality 0.55; Green Basket is dearer and has fresh quality 0.85. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy or consume food adds one hungry day and reduces health by 0.045. Every food choice retains its observation, legal options, scores, reason, and selected action in the citizen decision history.
+Consuming a meal reduces `hungryDays` by one and restores health by its effective quality multiplied by 0.006. Harvest Foods costs 2.15 and has fresh quality 0.55; Green Basket costs 2.55 and has fresh quality 0.85. Their owners can later set different bounded prices. These values are gameplay hypotheses, not calibrated nutritional measures. Failure to buy or consume food adds one hungry day and reduces health by 0.045. Every food choice retains its observation, legal options, scores, reason, and selected action in the citizen decision history.
 
 ### 5. Housing and bills
 

@@ -29,8 +29,8 @@ The summary labels a closed firm `unsupported-demand` only when realized revenue
 
 ## Baseline
 
-The committed 90-day baseline uses seeds 101, 202, 303, 404, and 505. Common Café closed on days 32–52 in every seed. Its completed customers equaled its legal potential customers and it recorded no capacity failures. In four seeds, supply fulfillment was 98–100%, revenue remained 118.04–143.31 below observed costs, and the primary signature was `unsupported-demand`: sales covered produce but the remaining margin did not cover actual payroll. Seed 404 combined the same negative margin with only 79.6% supply fulfillment, so the diagnostic correctly retains `operational-constraint` as its primary signature rather than erasing that material upstream problem.
+The committed 90-day baseline uses seeds 101, 202, 303, 404, and 505. Common Café closed on days 30–35 in every seed. It completed 70–98 customers, recorded no capacity failures, fulfilled 97.2–100% of requested supply, and ended 118.53–148.64 below observed costs. Every seed therefore retained `unsupported-demand`: sales covered produce but the remaining margin did not cover actual payroll.
 
-Green Basket remained active through day 90 in every seed, with positive observed operating margins of 305.00–986.82. It had recurring legal demand, 81–192 transaction-capacity failures, and 129–442 affordability failures. Its current baseline therefore does not support treating premium food and café failure as the same mechanism.
+Green Basket remained active through day 90 in every seed, with positive observed operating margins of 99.06–490.46. It completed 242–748 purchases, fulfilled 99.9–100% of requested supply, and recorded 220–509 transaction-capacity failures plus 141–360 affordability failures. Its current baseline therefore does not support treating premium food and café failure as the same mechanism.
 
 These results describe five deterministic stories under current hypotheses. They do not establish suitable prices, wages, preferences, or business conditions outside the simulation.

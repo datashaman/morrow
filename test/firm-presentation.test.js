@@ -21,16 +21,18 @@ test("contract descriptions expose requested and delivered quantities", () => {
   const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
 
   assert.match(describeContract(contract, PRODUCTS), /Morrow Fields → Harvest Foods contract active/);
-  assert.match(describeContract(contract, PRODUCTS), /22\/22 crates delivered today at 1.10 each/);
+  assert.match(describeContract(contract, PRODUCTS), /40\/40 crates delivered today at 1.45 each/);
 });
 
 test("transported contracts expose paid freight load", () => {
   const town = new TownSimulation({ seed: 42, transportEnabled: true });
   town.productionPhase();
+  const carrier = town.firms.find((firm) => firm.archetypeId === "haulage");
+  carrier.employees.forEach((id) => { town.people[id].attended = true; });
   town.procurementPhase();
   const contract = town.contracts.find((candidate) => candidate.buyer === "Harvest Foods");
 
-  assert.match(describeContract(contract, PRODUCTS), /44 haulage load for 5.50/);
+  assert.match(describeContract(contract, PRODUCTS), /80 haulage load for 18.00/);
 });
 
 test("Makers Guild exposes its maintenance customers", () => {

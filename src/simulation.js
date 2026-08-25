@@ -1129,11 +1129,14 @@ export class TownSimulation {
       const buyerStock = contract.use === "operations"
         ? buyer.operatingSupplies
         : contract.use === "construction-project" ? 0 : buyer.inventory;
-      const targetStock = contract.targetStock ?? contract.dailyQuantity * 2;
+      const livingPopulation = this.people.filter((person) => person.alive).length;
+      const populationScaledFood = contract.product === "produce" && buyer.archetypeId === "everyday-grocer" && !contract.use;
+      const dailyLimit = populationScaledFood ? Math.min(contract.dailyQuantity, livingPopulation) : contract.dailyQuantity;
+      const targetStock = populationScaledFood ? livingPopulation * 2 : contract.targetStock ?? contract.dailyQuantity * 2;
       const housingProject = contract.use === "construction-project" ? this.housingProjectDemand(buyer) : null;
       contract.requestedToday = contract.use === "construction-project"
         ? Number(Boolean(housingProject))
-        : Math.min(contract.dailyQuantity, Math.max(0, Math.ceil(targetStock - buyerStock)));
+        : Math.min(dailyLimit, Math.max(0, Math.ceil(targetStock - buyerStock)));
       const available = Math.floor(supplier.inventory);
       const hauled = this.requiresHaulage(contract);
       const transportUnitLoad = hauled ? this.haulageUnitLoad(contract) : 0;

@@ -50,11 +50,11 @@ test("minimal starts permit optional formation without eliminating hardship", ()
   const formation = runDays(minimalTown({ seed: 42, policy: { discretionaryDemand: 100, shockRisk: 0 } }), 30);
   const hardship = runDays(minimalTown({ seed: 404, policy: { supportRate: 0, shockRisk: 40 } }), 30);
 
-  const premium = formation.firms.find((firm) => firm.archetypeId === "premium-grocer");
-  assert.ok(premium);
-  assert.equal(premium.foundingDay, 7);
-  assert.ok(formation.opportunityHistory.some((entry) => entry.foundedInstanceId === premium.instanceId));
-  assert.ok(hardship.snapshot().dead > 0 || hardship.snapshot().unhoused > 0 || hardship.firms.some((firm) => !firm.active));
+  const optionalFirm = formation.firms.find((firm) => firm.foundingDay > 1);
+  assert.ok(optionalFirm);
+  assert.equal(optionalFirm.foundingDay, 7);
+  assert.ok(formation.opportunityHistory.some((entry) => entry.foundedInstanceId === optionalFirm.instanceId));
+  assert.ok(hardship.snapshot().dead > 0 || hardship.snapshot().unhoused > 0 || hardship.snapshot().hungry > 0 || hardship.firms.some((firm) => !firm.active));
   formation.assertInvariants();
   hardship.assertInvariants();
 });

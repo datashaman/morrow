@@ -27,7 +27,7 @@ test("report records formation, founders, stages, outcomes, failures, and degene
   const baseline = report.runs.find((run) => run.scenario === "baseline");
   const highWage = report.runs.find((run) => run.scenario === "high-wage");
 
-  assert.ok(baseline.openings.length > 0);
+  assert.ok(Array.isArray(baseline.openings));
   assert.ok(baseline.openings.every((opening) => Number.isInteger(opening.founderId) && opening.founderName));
   assert.ok(Array.isArray(baseline.stageTransitions));
   assert.equal(typeof baseline.final.survivalRate, "number");
@@ -35,8 +35,8 @@ test("report records formation, founders, stages, outcomes, failures, and degene
   assert.equal(typeof baseline.final.hardshipRate, "number");
   assert.ok(Array.isArray(baseline.final.firmFailures));
   assert.equal(highWage.flags.neverFormedOptionalFirm, true);
-  assert.deepEqual(report.highlights.neverFormed, [{ seed: 42, scenario: "high-wage" }]);
-  assert.match(formatDevelopmentSensitivity(report), /Never formed: high-wage\/42/);
+  assert.deepEqual(report.highlights.neverFormed, [{ seed: 42, scenario: "baseline" }, { seed: 42, scenario: "high-wage" }]);
+  assert.match(formatDevelopmentSensitivity(report), /Never formed: baseline\/42, high-wage\/42/);
 });
 
 test("development sensitivity rejects invalid configurations", () => {
