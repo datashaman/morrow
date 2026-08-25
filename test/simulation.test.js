@@ -202,6 +202,51 @@ test("a vital firm receives at most one finite treasury rescue", () => {
   assert.match(farm.ledger[0].text, /one-time vital-business rescue/);
 });
 
+test("treasury support fills an essential-runway shortfall without rewarding homelessness alone", () => {
+  const town = new TownSimulation({ seed: 42, policy: { supportRate: 100, shockRisk: 0 } });
+  const [cashRich, cashPoor] = town.people.filter((person) => person.employer < 0 && person.id >= town.firms.length);
+  town.people.forEach((person) => {
+    person.cash = 100;
+    person.housed = true;
+    person.hungryDays = 0;
+    person.ledger = [];
+  });
+  cashRich.housed = false;
+  cashRich.cash = 76;
+  cashPoor.cash = 1;
+  const targetCash = Math.round(town.essentialCost() * 4 * 100) / 100;
+  const treasuryBefore = town.government.cash;
+
+  town.settlementPhase();
+
+  assert.equal(cashRich.cash, 76);
+  assert.equal(cashRich.ledger.some((entry) => entry.text === "support from treasury"), false);
+  assert.equal(cashPoor.cash, 6);
+  assert.deepEqual(
+    (({ amount, text, before, after }) => ({ amount, text, before, after }))(cashPoor.ledger.find((entry) => entry.text === "support from treasury")),
+    { amount: 5, text: "support from treasury", before: 1, after: 6 },
+  );
+  assert.ok(targetCash > cashPoor.cash);
+  assert.equal(town.government.cash, treasuryBefore - 5);
+});
+
+test("treasury support never pays beyond the essential-runway shortfall", () => {
+  const town = new TownSimulation({ seed: 42, policy: { supportRate: 100, shockRisk: 0 } });
+  const person = town.people.find((candidate) => candidate.employer < 0 && candidate.id >= town.firms.length);
+  town.people.forEach((candidate) => {
+    candidate.cash = 100;
+    candidate.housed = true;
+    candidate.hungryDays = 0;
+  });
+  const targetCash = Math.round(town.essentialCost() * 4 * 100) / 100;
+  person.cash = targetCash - 0.75;
+
+  town.settlementPhase();
+
+  assert.equal(person.cash, targetCash);
+  assert.equal(person.ledger.find((entry) => entry.text === "support from treasury").amount, 0.75);
+});
+
 test("a previously rescued vital firm can become insolvent without a second rescue", () => {
   const town = new TownSimulation({ seed: 42 });
   const farm = town.firms.find((firm) => firm.name === "Morrow Fields");

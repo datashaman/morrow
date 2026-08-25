@@ -199,7 +199,7 @@ The daily support budget is:
 
 `treasury cash × supportRate × 0.18`
 
-People are sorted by hunger, housing status, and then cash. A person qualifies when cash is below 12, they are hungry, or they are unhoused. Payments are capped at 5 per person and stop when the budget or treasury is exhausted.
+People are sorted by hunger, housing status, and then cash. Hunger and housing affect priority, but payment eligibility and size are means-tested against four days of the town's current essential food-and-housing cost. Payments fill only that cash shortfall, are capped at 5 per person, and stop when the budget or treasury is exhausted. Four days is a gameplay hypothesis chosen to preserve emergency liquidity without making unemployment or homelessness a permanent unconditional income source; it is not a calibrated welfare threshold.
 
 #### Firm settlement
 

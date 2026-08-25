@@ -26,6 +26,7 @@ import {
   PRODUCTS,
   RENT_INTERVAL_DAYS,
   STAFFING_REVENUE_BUFFER,
+  SUPPORT_RUNWAY_TARGET_DAYS,
   SUPPLY_CONTRACTS,
   VITAL_RESCUE_CAP,
   VITAL_RESCUE_RUNWAY_DAYS,
@@ -297,6 +298,11 @@ export class TownSimulation {
 
   runwayDays(person) {
     return person.cash / this.essentialCost();
+  }
+
+  supportShortfall(person) {
+    if (!person.alive) return 0;
+    return roundMoney(Math.max(0, this.essentialCost() * SUPPORT_RUNWAY_TARGET_DAYS - person.cash));
   }
 
   friendIds(person) {
@@ -1064,10 +1070,11 @@ export class TownSimulation {
     let spent = 0;
     const vulnerable = this.people.filter((person) => person.alive).sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
     vulnerable.forEach((person) => {
-      if (spent >= budget || this.government.cash <= 0 || (person.cash >= 12 && !person.hungryDays && person.housed)) return;
+      const shortfall = this.supportShortfall(person);
+      if (spent >= budget || this.government.cash <= 0 || shortfall <= 0) return;
       const before = person.cash;
-      const paid = this.transfer(this.government, person, Math.min(5, budget - spent));
-      spent += paid;
+      const paid = this.transfer(this.government, person, Math.min(5, shortfall, budget - spent));
+      spent = roundMoney(spent + paid);
       if (paid) this.ledger(person, { direction: "in", amount: paid, text: "support from treasury", before });
     });
 

@@ -41,6 +41,7 @@ export const PRICE_REVIEW_DAYS = 7;
 export const PRICE_FLOOR_MULTIPLIER = 0.7;
 export const PRICE_CEILING_MULTIPLIER = 1.4;
 export const PRICE_ADJUSTMENT_RATE = 0.05;
+export const SUPPORT_RUNWAY_TARGET_DAYS = 4;
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",
