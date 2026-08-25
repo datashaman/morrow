@@ -4,9 +4,11 @@ import { FIRMS } from "../src/config.js";
 import {
   applicantFirmId,
   applicantOrbitTarget,
+  COMMON_PARK,
   deceasedMarkerSegments,
   employeeOrbitTarget,
   firmLandmarkLayout,
+  landmarkClearsPark,
   parkVisitorTarget,
   personMapTarget,
   resolveCanvasColor,
@@ -112,4 +114,17 @@ test("firm landmarks do not overlap at the narrow map width", () => {
     const separatedVertically = Math.abs(layout.centerY - other.centerY) >= (layout.height + other.height) / 2 + 4;
     assert.ok(separatedHorizontally || separatedVertically, `${layout.label} overlaps ${other.label}`);
   }));
+});
+
+test("firm landmarks remain outside the Common Park at supported map sizes", () => {
+  [{ width: 550, height: 390 }, { width: 1200, height: 520 }].forEach((viewport) => {
+    FIRMS.forEach((firm) => {
+      const landmark = firmLandmarkLayout(firm, {
+        ...viewport,
+        nameWidth: firm.name.length * 8,
+        metaWidth: 122,
+      });
+      assert.equal(landmarkClearsPark(landmark, viewport, COMMON_PARK), true, `${firm.name} overlaps the Common Park at ${viewport.width}×${viewport.height}`);
+    });
+  });
 });

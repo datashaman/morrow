@@ -1,5 +1,7 @@
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
+export const COMMON_PARK = Object.freeze({ x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 });
+
 export function firmLandmarkLayout(firm, { width, height = 1, nameWidth = 0, metaWidth = 0 }) {
   const landmarkWidth = Math.max(120, Math.ceil(nameWidth + 24), Math.ceil(metaWidth + 24));
   const landmarkHeight = 52;
@@ -11,6 +13,15 @@ export function firmLandmarkLayout(firm, { width, height = 1, nameWidth = 0, met
     centerX: clamp(firm.x * width, landmarkWidth / 2 + margin, width - landmarkWidth / 2 - margin),
     centerY: firm.y * height,
   };
+}
+
+export function landmarkClearsPark(landmark, viewport, park = COMMON_PARK, clearance = 8) {
+  const parkX = park.x * viewport.width;
+  const parkY = park.y * viewport.height;
+  const xDistance = Math.max(0, Math.abs(landmark.centerX - parkX) - landmark.width / 2 - clearance);
+  const yDistance = Math.max(0, Math.abs(landmark.centerY - parkY) - landmark.height / 2 - clearance);
+  return (xDistance / (park.radiusX * viewport.width)) ** 2
+    + (yDistance / (park.radiusY * viewport.height)) ** 2 > 1;
 }
 
 export function employeeOrbitTarget(index, count, landmark, viewport) {

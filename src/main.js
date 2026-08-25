@@ -6,6 +6,7 @@ import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-p
 import {
   applicantFirmId,
   applicantOrbitTarget,
+  COMMON_PARK,
   deceasedMarkerSegments,
   employeeOrbitTarget,
   firmLandmarkLayout,
@@ -128,7 +129,7 @@ let lastStep = performance.now();
 const canvas = document.querySelector("#town");
 const context = canvas.getContext("2d");
 const cemetery = { x: 0.88, y: 0.82, columns: 5 };
-const commonPark = { x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 };
+const commonPark = COMMON_PARK;
 
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
