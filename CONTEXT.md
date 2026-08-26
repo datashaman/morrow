@@ -58,6 +58,26 @@ _Avoid_: Employment target, guaranteed job
 A transferable area of vocational capability that can be learned at more than one relevant workplace and may contribute to a bounded operational effect. It is not a credential, occupation, employer affiliation, or firm-specific badge.
 _Avoid_: Firm skill, job title, profession
 
+**Civil-time block**:
+One of the town's named morning, workday, evening, or overnight periods. It represents when scheduled activity is legal, not a claim that a simulation processing phase lasts a particular number of hours.
+_Avoid_: Hour, simulation phase
+
+**Processing phase**:
+A deterministic causal stage that applies simulation rules in a stable order. Multiple processing phases may occur within one civil-time block.
+_Avoid_: Clock hour, time block
+
+**Primary activity**:
+A substantial commitment that occupies a citizen's available activity capacity within a civil-time block, such as a scheduled shift, lesson, clinical appointment, or leisure activity. A citizen can perform at most one primary activity in the same block.
+_Avoid_: Transaction, processing phase
+
+**Brief transaction**:
+A short exchange, such as buying food or paying rent, that may coexist with one primary activity when its counterparty is available. It moves resources but does not consume the block's primary-activity capacity.
+_Avoid_: Primary activity, free action
+
+**Recurrence basis**:
+The declared clock that advances a timer: calendar day, firm open day, employee scheduled shift, or a named weekly recurrence. A closed day is not an operating failure unless the rule explicitly uses calendar days.
+_Avoid_: Raw day counter, implicit interval
+
 ### Example dialogue
 
 > **Developer:** Should the early economy hold employment above a fixed percentage?
@@ -67,6 +87,18 @@ _Avoid_: Firm skill, job title, profession
 > **Developer:** Does knowledge learned at one grocer belong only to that firm?
 >
 > **Domain expert:** No. Retail operations is a trade knowledge domain and may transfer to another relevant workplace.
+>
+> **Developer:** Is Payroll an hour of the day?
+>
+> **Domain expert:** No. Payroll is a processing phase; it occurs within a civil-time block but exists to preserve causal ordering.
+>
+> **Developer:** Does paying rent prevent someone from resting that evening?
+>
+> **Domain expert:** No. Rent is a brief transaction; rest is the evening's primary activity.
+>
+> **Developer:** Does a Sunday closure advance a firm's maintenance counter?
+>
+> **Domain expert:** No. Maintenance uses an open-day recurrence basis; food ageing still uses calendar days.
 
 ## Where to continue
 
