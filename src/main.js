@@ -142,7 +142,7 @@ app.innerHTML = `
   </section>
 `;
 
-const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true, transportEnabled: true, schedulesEnabled: true });
+const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true, transportEnabled: true, schedulesEnabled: true, sleepEnabled: true });
 let selected = simulation.people.findIndex((person) => person.name === "Sizwe");
 let selectedFirm = 0;
 let paused = false;

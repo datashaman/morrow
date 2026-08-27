@@ -89,7 +89,7 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -100,6 +100,7 @@ export class TownSimulation {
     this.knowledgeEnabled = knowledgeEnabled;
     this.employmentInterventionEnabled = employmentInterventionEnabled;
     this.schedulesEnabled = schedulesEnabled;
+    this.sleepEnabled = sleepEnabled;
     this.reset();
   }
 
@@ -287,6 +288,10 @@ export class TownSimulation {
         scheduledShiftsElapsed: 0,
         dailyPlan: null,
         currentPrimaryActivity: null,
+        sleepDebt: 0,
+        lastSleepQuality: null,
+        sleepSequence: 0,
+        sleepHistory: [],
         jobApplicationFirm: -1,
         relationships: {},
         socialCapacity: 3 + Math.floor(this.random() * 4),
@@ -1013,7 +1018,8 @@ export class TownSimulation {
       + firmRisk * 0.16
       + (person.hungryDays ? 0.18 : 0)
       + (!person.housed ? 0.17 : 0)
-      + isolation * 0.07,
+      + isolation * 0.07
+      + (this.sleepEnabled ? person.sleepDebt * 0.14 : 0),
     );
   }
 
@@ -1025,7 +1031,7 @@ export class TownSimulation {
   assessNeeds(person) {
     const ownsFirm = this.firms.some((firm) => firm.active && firm.owner === person.id);
     const fed = clamp(1 - person.hungryDays / 3);
-    const physiological = clamp(person.health * 0.52 + fed * 0.48);
+    const physiological = clamp(person.health * 0.52 + fed * 0.48 - (this.sleepEnabled ? person.sleepDebt * 0.3 : 0));
     const jobSecurity = person.employer >= 0 ? 1 - clamp((this.firms[person.employer].trouble || 0) / 4) : 0;
     const safety = clamp((person.housed ? 0.23 : 0) + (person.employer >= 0 ? 0.18 : 0) + jobSecurity * 0.15 + clamp(this.runwayDays(person) / 12) * 0.44);
     const relationships = this.relationshipStats(person);
@@ -1266,6 +1272,7 @@ export class TownSimulation {
       missedWork: person.missedWork,
       baselineMissChance,
       attendanceDraw: this.random(),
+      sleepDebt: this.sleepEnabled ? person.sleepDebt : 0,
       profile: person.motivationProfile,
     });
     const legalActions = Object.freeze([...ATTENDANCE_ACTIONS]);
@@ -1322,6 +1329,7 @@ export class TownSimulation {
       hungryDays: person.hungryDays,
       skill: person.skill,
       reliability: person.reliability,
+      sleepDebt: this.sleepEnabled ? person.sleepDebt : 0,
       runwayDays: this.runwayDays(person),
       profile: { ...person.motivationProfile },
       options: options.map((option) => ({ ...option })),
@@ -2711,6 +2719,78 @@ export class TownSimulation {
     return false;
   }
 
+  sleepQuality(person) {
+    return clamp(
+      1
+      - (person.housed ? 0 : 0.35)
+      - (person.hungryDays > 0 ? 0.15 : 0)
+      - 0.25 * person.stress,
+      0.2,
+      1,
+    );
+  }
+
+  resolveSleep(person) {
+    if (!this.sleepEnabled || !person.alive) return null;
+    const debtBefore = person.sleepDebt;
+    const debtAfterAccrual = clamp(debtBefore + 0.25);
+    const quality = this.sleepQuality(person);
+    const lateStudyLegal = person.hungryDays === 0
+      && person.health >= 0.4
+      && debtBefore < 0.6
+      && ["esteem", "growth"].includes(person.focus);
+    const legalActions = Object.freeze(["sleep", ...(lateStudyLegal ? ["late-self-study"] : [])]);
+    const observation = Object.freeze({
+      kind: "sleep",
+      citizenId: person.id,
+      citizenName: person.name,
+      sleepDebt: debtBefore,
+      sleepQuality: quality,
+      housed: person.housed,
+      hungry: person.hungryDays > 0,
+      health: person.health,
+      stress: person.stress,
+      focus: person.focus,
+      profile: { ...person.motivationProfile },
+    });
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal sleep action`);
+    this.recordDecision(person, observation, legalActions, decision, "Settlement");
+    person.sleepDebt = decision.action === "sleep"
+      ? clamp(debtAfterAccrual - 0.3 * quality)
+      : debtAfterAccrual;
+    if (decision.action === "late-self-study") this.applyFreePersonalActivity(person, "self-study", "Settlement");
+    person.lastSleepQuality = decision.action === "sleep" ? quality : null;
+    person.sleepSequence += 1;
+    const record = Object.freeze({
+      day: this.day,
+      ...temporalMetadata(this.day, "Settlement"),
+      sequence: person.sleepSequence,
+      action: decision.action,
+      sleepQuality: decision.action === "sleep" ? quality : null,
+      housed: person.housed,
+      hungry: person.hungryDays > 0,
+      stress: person.stress,
+      debtBefore,
+      debtAfterAccrual,
+      debtAfter: person.sleepDebt,
+      rule: "bounded-sleep-debt-v1",
+    });
+    person.sleepHistory.unshift(record);
+    person.currentPrimaryActivity = { day: this.day, block: "Overnight", action: decision.action };
+    if (decision.action === "late-self-study") this.note(person, "chose late self-study instead of sleep", "neutral");
+    else if (person.sleepDebt > debtBefore + 1e-9) this.note(person, "poor sleep increased sleep debt", "bad");
+    return record;
+  }
+
+  applySleepDebtConsequences(person) {
+    if (!this.sleepEnabled || !person.alive || person.sleepDebt <= 0) return 0;
+    const loss = person.sleepDebt * 0.006;
+    const before = person.health;
+    person.health = clamp(person.health - loss, 0.08, 1);
+    return before - person.health;
+  }
+
   settlementPhase() {
     this.resolveHousingReceivership();
     this.resolveEssentialSectorReentry();
@@ -2734,6 +2814,11 @@ export class TownSimulation {
     operatingFirms.forEach((firm) => this.prepareFirmSettlement(firm));
     if (!this.schedulesEnabled) this.runJobMarket();
     operatingFirms.forEach((firm) => this.finishFirmSettlement(firm));
+    if (this.sleepEnabled) this.people.forEach((person) => {
+      if (!person.alive) return;
+      this.resolveSleep(person);
+      this.applySleepDebtConsequences(person);
+    });
     this.decayRelationships();
     this.people.forEach((person) => {
       if (!person.alive) return;
@@ -3342,6 +3427,7 @@ export class TownSimulation {
       || person.rota.weekdayIndices.some((weekday) => !this.firms[person.employer].openWeekdays.includes(weekday))
     ))) throw new Error("An employed citizen must have a valid five-shift rota");
     if (this.people.some((person) => person.employer < 0 && person.rota !== null)) throw new Error("An unemployed citizen cannot retain an active rota");
+    if (this.people.some((person) => !Number.isFinite(person.sleepDebt) || person.sleepDebt < 0 || person.sleepDebt > 1)) throw new Error("Sleep debt must remain bounded");
     this.firms.filter((firm) => this.isPerishable(firm.sells)).forEach((firm) => {
       const batchTotal = firm.inventoryBatches.reduce((total, batch) => total + batch.quantity, 0);
       if (Math.abs(batchTotal - firm.inventory) > 1e-6) throw new Error(`Perishable inventory batches do not reconcile for ${firm.name}`);

@@ -44,6 +44,18 @@ Production first resolves scheduled attendance from those plans. Choosing clinic
 
 Job applications are a brief Morning action and do not consume the Workday primary. Food, medicine, rent, and other essential payments are brief Evening actions; one separate personal-time primary remains available in that block. This is an activity-budget abstraction, not a literal duration model.
 
+### Sleep and overnight activity
+
+The browser enables sleep; headless callers can disable it independently for compatibility comparisons. Each living citizen begins with zero `sleepDebt`, bounded to `[0,1]`. Settlement resolves an Overnight primary before health, stress, critical-health, and mortality consequences. Each night first adds `0.25` debt. Sleep then repays `0.30 × sleepQuality`, where:
+
+`sleepQuality = clamp(1 − (unhoused ? 0.35 : 0) − (hungry ? 0.15 : 0) − 0.25 × stress, 0.2, 1)`
+
+Sleep is always legal. Late self-study is also legal only when the citizen is not hungry, health is at least 40%, pre-accrual sleep debt is below 60%, and current focus is esteem or growth. It applies the existing bounded self-study skill and growth gains but repays no debt. `motivation-v3` chooses when both actions are legal; the neural observation schema and personal-time activation gate do not control sleep.
+
+Current sleep debt subtracts up to `0.30` from physiological need, contributes up to `0.14` to stress pressure, and removes up to `0.006` health per settlement day. It also appears in attendance and Workday-planning observations, but sleep itself never changes reliability; only an actual missed scheduled shift applies that penalty. Evening rest retains its ordinary stress and health effects and does not repay debt.
+
+Every night records action, quality inputs, debt before accrual, debt after accrual, final debt, temporal identity, local sequence, and the versioned rule in newest-first sleep history. Ordinary successful sleep creates no life event. Late study and sleep poor enough to leave debt above the prior night do create concise events. Reset clears debt, quality, and history.
+
 A closed firm retains its cash, inventory, contracts, and obligations but performs no production, procurement, delivery, public transaction, scheduled shift, payroll, workplace learning, or ordinary firm settlement. A blocked contract records the closed limiting firm and next shared opening rather than misclassifying closure as missing stock, staffing, or affordability. Latent-firm observations and formation occur only on that archetype's open days.
 
 Recurrence bases are explicit. Perishable ageing, health, support, relationships, mortality, receivership, essential re-entry, and housing deterioration use calendar days. Demand and staffing evidence, vacancy maturity, recruitment, pricing evidence, distress, financing, distributions, and ordinary solvency advance only on firm open days. Worker evaluation advances by scheduled shifts. Rent remains due Monday evening, and owner price review occurs Sunday night. Maintenance wear advances only on an open day with attended capacity or a completed transaction or delivery.
@@ -58,6 +70,7 @@ There are 40 named people. Each person carries:
 
 - Economic state: cash, employer, current job application, seller references, food reserve, housing status, rent arrears, and transaction ledger
 - Capacity and mortality: skill, versioned general/retail/inventory knowledge, complete learning history, reliability, stable employment-spell rota, scheduled and attended shift counts, missed work, health, living status, critical-health duration, and death day
+- Sleep: bounded debt, most recent sleep quality, complete newest-first sleep history, and current primary activity
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Motivation: seven stable, seed-derived weights for comfort, connection, mastery, security, food quality, planning, and avoidance plus a complete in-memory policy-decision history
 - Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
