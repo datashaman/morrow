@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRODUCTS } from "../src/config.js";
-import { describeContract, describePipeline } from "../src/firm-presentation.js";
+import { describeContract, describePipeline, describeProcessing } from "../src/firm-presentation.js";
 import { TownSimulation } from "../src/simulation.js";
 
 test("firm pipeline descriptions name every output and upstream producer", () => {
@@ -48,4 +48,19 @@ test("Makers Guild exposes its maintenance customers", () => {
     "Morrow Fields",
   ]);
   assert.ok(customerContracts.every((contract) => contract.product === "learningGoods" && contract.use === "operations"));
+});
+
+test("construction processing exposes separate input, output, capacity, and shortfall evidence", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const archetype = town.firmArchetype("materials-yard");
+  const yard = town.createFirmInstance(archetype, town.firms.length, { inventory: 3 });
+  yard.inputInventory = 2;
+  yard.processingCapacityToday = 1;
+  yard.processedToday = 1;
+  yard.processingShortfallToday = 1;
+
+  assert.equal(
+    describeProcessing(yard, PRODUCTS),
+    "Processing · 2 kits awaiting · 3 bundles stocked · 1/1 units processed today · 1 labor-limited input shortfall",
+  );
 });

@@ -30,7 +30,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Hunger, bounded self-care and clinical treatment, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Paid, finite education that gradually changes general skill and explicit vocational knowledge without guaranteeing employment
-- Explicit fabrication, construction-material supply, finite dwellings, and paid building projects
+- Explicit labor-gated fabrication, construction-material supply, finite dwellings, and paid building projects
 - Friendships and social encounters
 - An explicitly staged citizen lifecycle with age, guardianship, family relationships, and endogenous births; these are accepted future scope and must not be presented as implemented until their tracer slices land
 - Maslow-inspired needs and current behavioural focus

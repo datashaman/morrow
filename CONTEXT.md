@@ -39,7 +39,7 @@ The visualization became large enough that it was migrated into this repository.
 
 - A Vite-based browser app runs the simulation.
 - The simulation core is independent of the DOM and can be exercised from tests.
-- One hundred and eighty-four deterministic regression tests pass.
+- Two hundred and twenty-eight deterministic regression tests pass.
 - The production build passes.
 - Simulation changes are tracked as tested vertical-slice commits and GitHub Issues.
 - Historical single-file previews remain in `work/` and are ignored by Git.
@@ -73,6 +73,10 @@ _Avoid_: Transaction, processing phase
 **Brief transaction**:
 A short exchange, such as buying food or paying rent, that may coexist with one primary activity when its counterparty is available. It moves resources but does not consume the block's primary-activity capacity.
 _Avoid_: Primary activity, free action
+
+**Labor-gated construction processing**:
+The one-to-one conversion of a construction firm's explicit input stock into whole units of output, bounded each day by attending workers and operational readiness. Unprocessed inputs remain the firm's property, processing itself moves no cash, and same-day downstream settlement follows the product pipeline rather than contract presentation order.
+_Avoid_: Passive contract relay, transaction capacity, unbacked output
 
 **Mutual-aid gift**:
 A voluntary citizen-to-citizen transfer of one existing resource without payment or debt. It changes ownership rather than creating supply, and may be constrained by the giver's protected reserve and the recipient's capacity.

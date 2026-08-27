@@ -18,3 +18,13 @@ export function describeContract(contract, products) {
     : "";
   return `${contract.supplier} → ${contract.buyer} contract ${state} · ${delivered}/${requested} ${displayedUnit} delivered today at ${contract.unitPrice.toFixed(2)} each${freight}`;
 }
+
+export function describeProcessing(firm, products) {
+  if (!firm.processingPerWorker) return "";
+  const inputUnit = products[firm.input].unit;
+  const outputUnit = products[firm.sells].unit;
+  const inputs = Math.floor(firm.inputInventory);
+  const outputs = Math.floor(firm.inventory);
+  const shortfall = firm.processingShortfallToday;
+  return `Processing · ${inputs} ${inputUnit}${inputs === 1 ? "" : "s"} awaiting · ${outputs} ${outputUnit}${outputs === 1 ? "" : "s"} stocked · ${firm.processedToday}/${firm.processingCapacityToday} units processed today · ${shortfall} labor-limited input shortfall`;
+}

@@ -108,11 +108,12 @@ select { padding: 0.45rem 2rem 0.45rem 0.6rem; }
 .firm-card .status.ready { color: var(--accent); background: var(--accent-soft); }
 .firm-card .status.distressed, .firm-card .status.insolvent, .firm-card .status.receivership { color: var(--danger); }
 .firm-card .pipeline { color: var(--text); font-size: 0.78rem; line-height: 1.4; }
-.firm-card .firm-stats, .firm-card .owner-choice, .firm-card .contract { color: var(--muted); font-size: 0.7rem; line-height: 1.35; }
+.firm-card .firm-stats, .firm-card .owner-choice, .firm-card .processing, .firm-card .contract { color: var(--muted); font-size: 0.7rem; line-height: 1.35; }
 .firm-card .owner-choice { color: var(--cash); }
 .firm-card .opportunity-reason { color: var(--cash); font-size: 0.7rem; line-height: 1.35; }
 .firm-card .contract { padding-top: 0.4rem; border-top: 1px solid var(--border); }
 .firm-card .contract.shortfall { color: var(--danger); }
+.firm-card .processing.shortfall { color: var(--danger); }
 
 .control-panel { border-radius: 0 0 14px 14px; }
 .playback { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
