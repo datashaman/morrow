@@ -295,7 +295,8 @@ test("missed maintenance reduces direct production", () => {
   const maintainedProduction = maintainedFarm.inventory - maintainedBefore;
   const constrainedProduction = constrainedFarm.inventory - constrainedBefore;
   assert.ok(maintainedProduction > constrainedProduction);
-  assert.ok(Math.abs(constrainedProduction / maintainedProduction - 0.65) < 1e-9);
+  // Per-worker knowledge contributions are rounded to six decimals before aggregation.
+  assert.ok(Math.abs(constrainedProduction / maintainedProduction - 0.65) < 1e-7);
 });
 
 test("maintenance demand gives Makers Guild recurring seeded revenue", () => {
@@ -956,11 +957,10 @@ test("higher-quality food replenishes more health", () => {
   const eatFrom = (sellerName) => {
     const town = new TownSimulation({ seed: 42 });
     const person = town.people[0];
-    town.people.slice(1).forEach((other) => { other.alive = false; });
-    town.firms.filter((firm) => firm.sector === "food" && firm.name !== sellerName).forEach((firm) => { firm.active = false; });
+    const seller = town.firms.find((firm) => firm.name === sellerName);
     person.cash = 20;
     person.health = 0.5;
-    town.foodPhase();
+    town.considerFood(person, [seller]);
     return { health: person.health, quality: person.lastFoodQuality };
   };
 
@@ -992,14 +992,12 @@ test("a citizen buys food ahead and consumes the reserve as its quality declines
   const town = new TownSimulation({ seed: 42 });
   const person = town.people[2];
   const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
-  town.people.filter((other) => other !== person).forEach((other) => { other.alive = false; });
-  town.firms.filter((firm) => firm.sector === "food" && firm !== harvest).forEach((firm) => { firm.active = false; });
   person.cash = 20;
   person.health = 0.5;
   person.ledger = [];
   const startingInventory = harvest.inventory;
 
-  town.foodPhase();
+  town.considerFood(person, [harvest]);
   const healthAfterFreshMeal = person.health;
 
   assert.equal(person.foodReserveTarget, 3);
@@ -1010,7 +1008,7 @@ test("a citizen buys food ahead and consumes the reserve as its quality declines
   assert.equal(person.lastFoodAge, 0);
 
   town.day = 2;
-  town.foodPhase();
+  town.considerFood(person, [harvest]);
 
   assert.equal(person.foodStock.length, 1);
   assert.equal(person.ledger.length, 1);
@@ -1024,13 +1022,13 @@ test("discretionary demand controls otherwise eligible optional purchases", () =
   const runPersonalTime = (discretionaryDemand) => {
     const town = new TownSimulation({ seed: 42 });
     const person = town.people[0];
-    town.people.filter((other) => other !== person).forEach((other) => { other.alive = false; });
+    const café = town.firms.find((firm) => firm.name === "Common Café");
     town.setPolicy("discretionaryDemand", discretionaryDemand);
     person.cash = 20;
     person.stress = 0.8;
     person.scarcityError = true;
     person.ledger = [];
-    town.personalPhase();
+    town.considerPersonalTime(person, café, null);
     return person;
   };
 
@@ -1048,7 +1046,6 @@ test("an unemployed and unhoused citizen with cash can choose short-term comfort
   const person = town.people[0];
   const formerEmployer = town.firms[person.employer];
   const café = town.firms.find((firm) => firm.name === "Common Café");
-  town.people.filter((other) => other !== person).forEach((other) => { other.alive = false; });
   formerEmployer.employees = formerEmployer.employees.filter((id) => id !== person.id);
   person.employer = -1;
   person.housed = false;
@@ -1061,7 +1058,7 @@ test("an unemployed and unhoused citizen with cash can choose short-term comfort
   const caféCashBefore = café.cash;
   const totalBefore = town.totalMoney();
 
-  town.personalPhase();
+  town.considerPersonalTime(person, café, null);
 
   assert.equal(person.cash, 17.8);
   assert.equal(café.cash, caféCashBefore + 2.2);

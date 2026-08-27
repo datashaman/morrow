@@ -171,6 +171,13 @@ export class TownSimulation {
       knowledgeCapacityCarry: 0,
       knowledgeCapacitySlotsToday: 0,
       lastKnowledgeCapacityDay: null,
+      knowledgeEffectGrossToday: 0,
+      knowledgeEffectUsedToday: 0,
+      knowledgeEffectScalarToday: 0,
+      knowledgeEffectSequence: 0,
+      knowledgeEffectHistory: [],
+      processingScalarCapacityToday: 0,
+      transportScalarCapacityToday: 0,
       attemptedTransactions: 0,
       turnedAwayTransactions: 0,
       priceRejectionsToday: 0,
@@ -1499,15 +1506,16 @@ export class TownSimulation {
 
   transactionCapacity(firm) {
     if (!this.firmOpenOnDay(firm)) return 0;
-    const capacity = firm.employees.reduce((total, id) => {
-      const person = this.people[id];
-      if (!person.attended) return total;
-      return total + firm.transactionsPerWorker;
-    }, 0);
-    const knowledgeSlots = this.knowledgeEnabled && firm.archetypeId === "everyday-grocer"
+    const capacity = this.scalarTransactionCapacity(firm);
+    const knowledgeSlots = this.knowledgeEnabled && firm.knowledge.effectType === "transaction-capacity"
       ? firm.knowledgeCapacitySlotsToday
       : 0;
-    return Math.floor(capacity * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier()) + knowledgeSlots;
+    return capacity + knowledgeSlots;
+  }
+
+  scalarTransactionCapacity(firm) {
+    const attendingWorkers = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+    return Math.floor(attendingWorkers * firm.transactionsPerWorker * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier());
   }
 
   scheduledShiftCapacityMultiplier() {
@@ -1518,29 +1526,81 @@ export class TownSimulation {
     return this.schedulesEnabled ? SCHEDULED_TRANSPORT_CAPACITY_PER_WORKER : TRANSPORT_CAPACITY_PER_WORKER;
   }
 
+  directScalarOutput(person, firm) {
+    if (!person?.alive || !person.attended) return 0;
+    return (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier();
+  }
+
+  knowledgeScalarForWorker(person, firm) {
+    if (!person?.alive || !person.attended) return 0;
+    if (firm.knowledge.effectType === "transaction-capacity") return firm.transactionsPerWorker * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier();
+    if (firm.knowledge.effectType === "processing-capacity") return firm.processingPerWorker * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier();
+    if (firm.knowledge.effectType === "haulage-capacity") return this.transportCapacityPerWorker() * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier();
+    if (firm.knowledge.effectType === "direct-yield") return this.directScalarOutput(person, firm);
+    return 0;
+  }
+
   knowledgeCapacityContribution(firm) {
-    if (!this.knowledgeEnabled || !firm.active || firm.archetypeId !== "everyday-grocer") return 0;
+    if (!this.knowledgeEnabled || !firm.active) return 0;
     const contribution = firm.employees.reduce((total, id) => {
       const person = this.people[id];
-      if (!person.attended) return total;
+      const scalar = this.knowledgeScalarForWorker(person, firm);
+      if (!scalar) return total;
       const vocationalKnowledge = weightedVocationalKnowledge(person.knowledgeProfile, firm.knowledge);
-      return total + firm.transactionsPerWorker * vocationalKnowledge * firm.knowledge.maxBonus;
+      const workerContribution = Math.round(scalar * vocationalKnowledge * firm.knowledge.maxBonus * 1_000_000) / 1_000_000;
+      return total + workerContribution;
     }, 0);
-    return Math.round(contribution * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier() * 1_000_000) / 1_000_000;
+    return Math.round(contribution * 1_000_000) / 1_000_000;
   }
 
   accrueKnowledgeCapacity(firm) {
     if (firm.lastKnowledgeCapacityDay === this.day) return firm.knowledgeCapacitySlotsToday;
     firm.lastKnowledgeCapacityDay = this.day;
     firm.knowledgeCapacitySlotsToday = 0;
+    firm.knowledgeEffectGrossToday = 0;
+    firm.knowledgeEffectUsedToday = 0;
+    firm.knowledgeEffectScalarToday = firm.employees.reduce((total, id) => total + this.knowledgeScalarForWorker(this.people[id], firm), 0);
     const contribution = this.knowledgeCapacityContribution(firm);
     if (!contribution) return 0;
-    const accumulated = Math.round((firm.knowledgeCapacityCarry + contribution) * 1_000_000) / 1_000_000;
-    const slots = Math.floor(accumulated + 1e-9);
-    firm.knowledgeCapacityCarry = Math.round((accumulated - slots) * 1_000_000) / 1_000_000;
+    firm.knowledgeEffectGrossToday = contribution;
+    const discrete = firm.knowledge.effectType !== "direct-yield";
+    const carryBefore = firm.knowledgeCapacityCarry;
+    const accumulated = discrete ? Math.round((carryBefore + contribution) * 1_000_000) / 1_000_000 : 0;
+    const slots = discrete ? Math.floor(accumulated + 1e-9) : 0;
+    firm.knowledgeCapacityCarry = discrete ? Math.round((accumulated - slots) * 1_000_000) / 1_000_000 : 0;
     firm.knowledgeCapacitySlotsToday = slots;
-    if (slots > 0) this.note(firm, `worker knowledge made ${slots} extra transaction slot${slots === 1 ? "" : "s"} available; ${(firm.knowledgeCapacityCarry * 100).toFixed(1)}% carry remains`, "good");
+    if (!discrete) firm.knowledgeEffectUsedToday = contribution;
+    firm.knowledgeEffectSequence += 1;
+    const record = {
+      day: this.day,
+      phase: "Production",
+      ...temporalMetadata(this.day, "Production"),
+      sequence: firm.knowledgeEffectSequence,
+      effectType: firm.knowledge.effectType,
+      rule: firm.knowledge.effectRule,
+      scalarBaseline: Math.round(firm.knowledgeEffectScalarToday * 1_000_000) / 1_000_000,
+      grossContribution: contribution,
+      releasedUnits: slots,
+      carryBefore,
+      carryAfter: firm.knowledgeCapacityCarry,
+      usedUnits: firm.knowledgeEffectUsedToday,
+    };
+    firm.knowledgeEffectHistory.unshift(record);
+    if (slots > 0 && firm.knowledge.effectType === "transaction-capacity") {
+      this.note(firm, `worker knowledge made ${slots} extra transaction slot${slots === 1 ? "" : "s"} available; ${(firm.knowledgeCapacityCarry * 100).toFixed(1)}% carry remains`, "good");
+    }
     return slots;
+  }
+
+  markKnowledgeEffectUsed(firm, usedUnits) {
+    if (!this.knowledgeEnabled || usedUnits <= firm.knowledgeEffectUsedToday) return firm.knowledgeEffectUsedToday;
+    const availableEffect = firm.knowledge.effectType === "direct-yield"
+      ? firm.knowledgeEffectGrossToday
+      : firm.knowledgeCapacitySlotsToday;
+    firm.knowledgeEffectUsedToday = Math.min(availableEffect, usedUnits);
+    const record = firm.knowledgeEffectHistory.find((entry) => entry.day === this.day);
+    if (record) record.usedUnits = firm.knowledgeEffectUsedToday;
+    return firm.knowledgeEffectUsedToday;
   }
 
   applyKnowledgeLearning(person, { source, sourceId, sourceName, domain, rate = null, target = null, rule, phase = PHASES[this.phase] ?? "Production" }) {
@@ -1642,6 +1702,7 @@ export class TownSimulation {
     }
     this.markFirmUse(firm);
     firm.transactionsToday += 1;
+    this.markKnowledgeEffectUsed(firm, Math.max(0, firm.transactionsToday - this.scalarTransactionCapacity(firm)));
     return true;
   }
 
@@ -1920,10 +1981,8 @@ export class TownSimulation {
     this.firms.forEach((firm) => this.accrueKnowledgeCapacity(firm));
     this.firms.forEach((firm) => {
       if (!this.firmOpenOnDay(firm) || firm.production !== "direct") return;
-      const produced = firm.employees.reduce((sum, id) => {
-        const person = this.people[id];
-        return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier() : 0);
-      }, 0);
+      const scalarProduced = firm.employees.reduce((sum, id) => sum + this.directScalarOutput(this.people[id], firm), 0);
+      const produced = scalarProduced + (this.knowledgeEnabled && firm.knowledge.effectType === "direct-yield" ? firm.knowledgeEffectGrossToday : 0);
       this.addFirmInventory(firm, produced);
       if (this.isPerishable(firm.sells)) firm.perishableProcessedToday += produced;
     });
@@ -1957,7 +2016,11 @@ export class TownSimulation {
   haulageCapacity(carrier = this.firms.find((firm) => firm.active && firm.archetypeId === "haulage")) {
     if (!carrier?.active || !this.firmOpenOnDay(carrier)) return 0;
     const attendingWorkers = carrier.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
-    return Math.floor(attendingWorkers * this.transportCapacityPerWorker() * carrier.operationalReadiness * this.scheduledShiftCapacityMultiplier());
+    const scalarCapacity = Math.floor(attendingWorkers * this.transportCapacityPerWorker() * carrier.operationalReadiness * this.scheduledShiftCapacityMultiplier());
+    const knowledgeCapacity = this.knowledgeEnabled && carrier.knowledge.effectType === "haulage-capacity"
+      ? carrier.knowledgeCapacitySlotsToday
+      : 0;
+    return scalarCapacity + knowledgeCapacity;
   }
 
   processConstructionInputs(firm) {
@@ -1970,6 +2033,7 @@ export class TownSimulation {
       firm.inventory += units;
       firm.processedToday += units;
       this.note(firm, `${attendingWorkers} attending worker${attendingWorkers === 1 ? "" : "s"} processed ${units} ${PRODUCTS[firm.input].unit}${units === 1 ? "" : "s"} into ${units} ${PRODUCTS[firm.sells].unit}${units === 1 ? "" : "s"}`, "good");
+      this.markKnowledgeEffectUsed(firm, Math.max(0, firm.processedToday - firm.processingScalarCapacityToday));
     }
     firm.processingShortfallToday = Math.max(0, Math.floor(firm.inputInventory) - Math.max(0, firm.processingCapacityToday - firm.processedToday));
     return units;
@@ -2005,14 +2069,17 @@ export class TownSimulation {
     let remainingTransportCapacity = this.haulageCapacity(carrier);
     if (carrier) {
       carrier.transportCapacityToday = remainingTransportCapacity;
+      carrier.transportScalarCapacityToday = Math.max(0, remainingTransportCapacity - carrier.knowledgeCapacitySlotsToday);
       carrier.transportLoadToday = 0;
     }
     this.firms.forEach((firm) => {
       if (!firm.processingPerWorker) return;
       const attendingWorkers = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
-      firm.processingCapacityToday = firm.active
+      firm.processingScalarCapacityToday = firm.active
         ? Math.floor(attendingWorkers * firm.processingPerWorker * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier())
         : 0;
+      firm.processingCapacityToday = firm.processingScalarCapacityToday
+        + (this.knowledgeEnabled && firm.knowledge.effectType === "processing-capacity" ? firm.knowledgeCapacitySlotsToday : 0);
       firm.processedToday = 0;
       firm.processingShortfallToday = 0;
       this.processConstructionInputs(firm);
@@ -2113,6 +2180,7 @@ export class TownSimulation {
             const transportLoad = units * transportUnitLoad;
             remainingTransportCapacity -= transportLoad;
             carrier.transportLoadToday += transportLoad;
+            this.markKnowledgeEffectUsed(carrier, Math.max(0, carrier.transportLoadToday - carrier.transportScalarCapacityToday));
             carrier.sales += freightPaid;
             carrier.unitsSold += units;
             carrier.transactionsToday += 1;
@@ -3495,6 +3563,23 @@ export class TownSimulation {
       || firm.knowledgeCapacityCarry >= 1
       || !Number.isInteger(firm.knowledgeCapacitySlotsToday)
       || firm.knowledgeCapacitySlotsToday < 0)) throw new Error("Invalid knowledge capacity accumulator");
+    if (this.firms.some((firm) => [
+      firm.knowledgeEffectGrossToday,
+      firm.knowledgeEffectUsedToday,
+      firm.knowledgeEffectScalarToday,
+    ].some((value) => !Number.isFinite(value) || value < 0)
+      || !Number.isInteger(firm.knowledgeEffectSequence)
+      || firm.knowledgeEffectSequence < 0
+      || firm.knowledgeEffectHistory.some((entry) => !Number.isInteger(entry.day)
+        || !Number.isInteger(entry.sequence)
+        || entry.sequence <= 0
+        || entry.effectType !== firm.knowledge.effectType
+        || entry.rule !== firm.knowledge.effectRule
+        || [entry.scalarBaseline, entry.grossContribution, entry.releasedUnits, entry.carryBefore, entry.carryAfter, entry.usedUnits]
+          .some((value) => !Number.isFinite(value) || value < 0)
+        || entry.usedUnits > (entry.effectType === "direct-yield" ? entry.grossContribution : entry.releasedUnits) + 1e-9))) {
+      throw new Error("Invalid knowledge effect evidence");
+    }
     if (this.firms.some((firm) => firm.processingPerWorker && (
       !Number.isInteger(firm.inputInventory)
       || firm.inputInventory < 0
