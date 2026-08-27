@@ -2,6 +2,7 @@ import "./styles.css";
 import { DEFAULT_LATENT_FIRM_NAMES, PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
 import { describeContract, describePipeline, describeProcessing } from "./firm-presentation.js";
+import { firmSelectorOptions, resolveSelectedFirmId, staffingEvidence } from "./firm-detail-presentation.js";
 import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-presentation.js";
 import {
   applicantFirmId,
@@ -85,7 +86,18 @@ app.innerHTML = `
         <p>Select a firm to inspect its complete economic history.</p>
       </div>
       <div class="town-stage" id="town-stage" aria-live="polite"></div>
-      <div class="firm-grid" id="firm-grid"></div>
+      <div class="firm-selector-row">
+        <label>Inspect firm
+          <select id="firm-select" aria-label="Inspect firm"></select>
+        </label>
+        <span id="firm-selection-state"></span>
+      </div>
+      <p class="firm-empty" id="firm-empty" hidden>No firms have been founded.</p>
+      <article class="firm-detail" id="firm-detail" aria-live="polite"></article>
+      <details class="firm-opportunities">
+        <summary>Potential firms</summary>
+        <div id="firm-opportunities"></div>
+      </details>
       <div class="activity-heading">
         <h2 id="firm-decision-title">Owner decisions</h2>
       </div>
@@ -137,11 +149,12 @@ const canvas = document.querySelector("#town");
 const context = canvas.getContext("2d");
 const cemetery = { x: 0.88, y: 0.82, columns: 5 };
 const commonPark = COMMON_PARK;
+let firmLandmarks = new Map();
 
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail", "neural-control", "policy-status", "town-stage",
-  "person-select", "focus", "person-summary", "needs", "knowledge-profile", "learning-stream", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-grid", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
+  "person-select", "focus", "person-summary", "needs", "knowledge-profile", "learning-stream", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-select", "firm-selection-state", "firm-empty", "firm-detail", "firm-opportunities", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -388,47 +401,67 @@ function updateInterface() {
   renderMotivations(person);
   renderActivity(person, elements["activity-filter"].value, elements["activity-stream"]);
 
-  const firmCards = simulation.firms.map((firm) => {
-    const contracts = simulation.contracts.filter((contract) => contract.buyerId === firm.id || contract.supplierId === firm.id);
-    const hasOperatingSupply = simulation.contracts.some((contract) => contract.use === "operations" && contract.buyerId === firm.id);
-    const product = PRODUCTS[firm.sells];
-    const knowledgeCapacity = firm.archetypeId === "everyday-grocer"
-      ? ` · knowledge +${firm.knowledgeCapacitySlotsToday} slot${firm.knowledgeCapacitySlotsToday === 1 ? "" : "s"} today, ${percent(firm.knowledgeCapacityCarry)} carry`
-      : "";
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = `firm-card${firm.id === selectedFirm ? " selected" : ""}`;
-    card.dataset.firmId = firm.id;
-    card.setAttribute("aria-pressed", String(firm.id === selectedFirm));
-    card.innerHTML = `
-      <span class="firm-card-heading"><b>${firmInstanceLabel(firm, simulation.firms)}</b><i class="status ${firm.status}">${firm.status}</i></span>
-      <span class="pipeline">${describePipeline(firm, PRODUCTS)}</span>
-      ${firm.processingPerWorker ? `<span class="processing${firm.processingShortfallToday ? " shortfall" : ""}">${describeProcessing(firm, PRODUCTS)}</span>` : ""}
-      <span class="firm-stats">${firm.vital ? "Vital · " : ""}${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.employees.length}/${firm.targetStaff} staff · ${firm.sector === "housing" ? `${simulation.housingOccupancy()}/${firm.dwellingCapacity} dwellings occupied` : firm.sector === "transport" ? `${firm.transportLoadToday}/${firm.transportCapacityToday} freight load used today` : firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""}${knowledgeCapacity} · ${money(firm.revenueEMA)} smoothed net income${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}</span>
-      <span class="owner-choice">Owner choice · price ${firm.ownerDecision.priceDecision}${firm.ownerDecision.priceDay ? ` on D${firm.ownerDecision.priceDay}` : ""} at ${price(firm.ownerDecision.price)}: ${firm.ownerDecision.priceReason} · wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason} · capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason} · ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason} · ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}</span>
-      ${contracts.map((contract) => `<span class="contract${contract.shortfallToday ? " shortfall" : ""}">${describeContract(contract, PRODUCTS)}</span>`).join("")}
-    `;
-    return card;
+  selectedFirm = resolveSelectedFirmId(simulation.firms, selectedFirm);
+  const selectorOptions = firmSelectorOptions(simulation.firms).map((item) => {
+    const option = document.createElement("option");
+    option.value = item.value;
+    option.textContent = item.label;
+    option.disabled = item.disabled;
+    return option;
   });
-  const opportunityCards = simulation.firmOpportunities().map((opportunity) => {
+  elements["firm-select"].replaceChildren(...selectorOptions);
+  elements["firm-select"].disabled = selectedFirm === null;
+  elements["firm-empty"].hidden = selectedFirm !== null;
+  elements["firm-detail"].hidden = selectedFirm === null;
+
+  const opportunityRows = simulation.firmOpportunities().map((opportunity) => {
     const description = describeFirmOpportunity(opportunity);
     const archetype = simulation.firmArchetype(opportunity.archetypeId);
     const inputDescription = archetype.input && archetype.source
       ? `; would use ${PRODUCTS[archetype.input].name} from ${archetype.source}`
       : "";
-    const card = document.createElement("article");
-    card.className = `firm-card opportunity-card ${opportunity.status}`;
-    card.innerHTML = `
-      <span class="firm-card-heading"><b>Potential ${opportunity.name}</b><i class="status ${opportunity.ready ? "ready" : "potential"}">${opportunity.ready ? "ready" : "not ready"}</i></span>
-      <span class="pipeline">Could sell ${PRODUCTS[archetype.sells].name}${inputDescription}.</span>
-      <span class="firm-stats">${description.evidence}</span>
-      <span class="firm-stats">${description.resources}</span>
-      <span class="opportunity-reason">${description.explanation}</span>
+    const row = document.createElement("article");
+    row.className = `opportunity-row ${opportunity.status}`;
+    row.innerHTML = `
+      <span><b>${opportunity.name}</b><i class="status ${opportunity.ready ? "ready" : "potential"}">${opportunity.ready ? "ready" : "not ready"}</i></span>
+      <p>Could sell ${PRODUCTS[archetype.sells].name}${inputDescription}. ${description.evidence}. ${description.resources}.</p>
+      <small>${description.explanation}</small>
     `;
-    return card;
+    return row;
   });
-  elements["firm-grid"].replaceChildren(...firmCards, ...opportunityCards);
-  const firm = simulation.firms[selectedFirm];
+  elements["firm-opportunities"].replaceChildren(...opportunityRows);
+  if (selectedFirm === null) {
+    elements["firm-selection-state"].textContent = "No firm selected";
+    elements["firm-detail"].replaceChildren();
+    elements["firm-decision-title"].textContent = "Owner decisions";
+    elements["firm-decision-stream"].replaceChildren();
+    elements["firm-activity-title"].textContent = "Firm activity";
+    elements["firm-activity-stream"].replaceChildren();
+    return;
+  }
+
+  elements["firm-select"].value = String(selectedFirm);
+  const firm = simulation.firms.find((candidate) => candidate.id === selectedFirm);
+  const contracts = simulation.contracts.filter((contract) => contract.buyerId === firm.id || contract.supplierId === firm.id);
+  const hasOperatingSupply = simulation.contracts.some((contract) => contract.use === "operations" && contract.buyerId === firm.id);
+  const product = PRODUCTS[firm.sells];
+  const staffing = staffingEvidence(firm);
+  const knowledgeCapacity = firm.archetypeId === "everyday-grocer"
+    ? ` · knowledge +${firm.knowledgeCapacitySlotsToday} slot${firm.knowledgeCapacitySlotsToday === 1 ? "" : "s"} today, ${percent(firm.knowledgeCapacityCarry)} carry`
+    : "";
+  const lifecycle = `${firm.vital ? "Vital · " : ""}${firm.active ? `Founded D${firm.foundingDay}` : `Closed D${firm.closedDay}`}${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}`;
+  const operatingState = `${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.sector === "housing" ? `${simulation.housingOccupancy()}/${firm.dwellingCapacity} dwellings occupied` : firm.sector === "transport" ? `${firm.transportLoadToday}/${firm.transportCapacityToday} freight load used today` : firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""}${knowledgeCapacity} · ${money(firm.revenueEMA)} smoothed net income`;
+  const ownerChoice = `Price ${firm.ownerDecision.priceDecision}${firm.ownerDecision.priceDay ? ` on D${firm.ownerDecision.priceDay}` : ""} at ${price(firm.ownerDecision.price)}: ${firm.ownerDecision.priceReason}. Wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason}. Capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason}. ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason}. ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}.`;
+  elements["firm-selection-state"].innerHTML = `<i class="status ${firm.status}">${firm.status}</i>`;
+  elements["firm-detail"].innerHTML = `
+    <header class="firm-detail-heading"><div><p class="eyebrow">Selected economic actor</p><h3>${firmInstanceLabel(firm, simulation.firms)}</h3></div><span>${lifecycle}</span></header>
+    <div class="firm-detail-grid">
+      <section><h4>Identity and lifecycle</h4><p>${operatingState}</p></section>
+      <section><h4>Product pipeline and contracts</h4><p>${describePipeline(firm, PRODUCTS)}</p>${firm.processingPerWorker ? `<p class="${firm.processingShortfallToday ? "shortfall" : ""}">${describeProcessing(firm, PRODUCTS)}</p>` : ""}<ul class="contract-list">${contracts.length ? contracts.map((contract) => `<li class="${contract.shortfallToday ? "shortfall" : ""}">${describeContract(contract, PRODUCTS)}</li>`).join("") : "<li>No supply contracts.</li>"}</ul></section>
+      <section><h4>Staffing evidence</h4><dl><div><dt>Headcount</dt><dd>${staffing.headcount}</dd></div><div><dt>Latest 2-of-3 gate</dt><dd>${staffing.demand}</dd></div><div><dt>Funded slot</dt><dd>${staffing.slot}</dd></div><div><dt>Latest reason</dt><dd>${staffing.reason}</dd></div></dl></section>
+      <section><h4>Owner choices</h4><p class="owner-choice">${ownerChoice}</p></section>
+    </div>
+  `;
   elements["firm-decision-title"].textContent = `${firmInstanceLabel(firm, simulation.firms)} owner decisions`;
   renderDecisions(firm, elements["firm-decision-stream"]);
   elements["firm-activity-title"].textContent = `${firmInstanceLabel(firm, simulation.firms)} activity`;
@@ -477,6 +510,7 @@ function drawTown() {
     context.font = "700 14px system-ui";
     return [firm.id, firmLandmarkLayout(firm, { width, height, nameWidth, metaWidth })];
   }));
+  firmLandmarks = landmarks;
 
   const parkX = commonPark.x * width;
   const parkY = commonPark.y * height;
@@ -592,6 +626,10 @@ function drawTown() {
 
   mapFirms.forEach((firm) => {
     const landmark = landmarks.get(firm.id);
+    if (firm.id === selectedFirm) {
+      context.fillStyle = colors.accent;
+      context.fillRect(landmark.centerX - landmark.width / 2 - 3, landmark.centerY - landmark.height / 2 - 3, landmark.width + 6, landmark.height + 6);
+    }
     context.fillStyle = firm.active ? colors.text : colors.muted;
     context.fillRect(landmark.centerX - landmark.width / 2, landmark.centerY - landmark.height / 2, landmark.width, landmark.height);
     context.fillStyle = colors.background;
@@ -618,12 +656,22 @@ elements["person-select"].addEventListener("change", (event) => { selected = Num
 elements["neural-control"].addEventListener("change", (event) => { simulation.setNeuralControl(event.target.checked); updateInterface(); });
 elements["activity-filter"].addEventListener("change", () => { updateInterface(); elements["activity-stream"].scrollTop = 0; });
 elements["firm-activity-filter"].addEventListener("change", () => { updateInterface(); elements["firm-activity-stream"].scrollTop = 0; });
-elements["firm-grid"].addEventListener("click", (event) => {
-  const card = event.target.closest("[data-firm-id]");
-  if (!card) return;
-  selectedFirm = Number(card.dataset.firmId);
+elements["firm-select"].addEventListener("change", (event) => {
+  selectedFirm = Number(event.target.value);
   updateInterface();
   elements["firm-activity-stream"].scrollTop = 0;
+  drawTown();
+});
+canvas.addEventListener("click", (event) => {
+  const selectedLandmark = [...firmLandmarks].reverse().find(([, landmark]) => (
+    Math.abs(event.offsetX - landmark.centerX) <= landmark.width / 2
+    && Math.abs(event.offsetY - landmark.centerY) <= landmark.height / 2
+  ));
+  if (!selectedLandmark) return;
+  selectedFirm = selectedLandmark[0];
+  updateInterface();
+  elements["firm-activity-stream"].scrollTop = 0;
+  drawTown();
 });
 elements.pause.addEventListener("click", () => { paused = !paused; elements.pause.textContent = paused ? "Resume" : "Pause"; });
 elements.step.addEventListener("click", () => { paused = true; elements.pause.textContent = "Resume"; step(); });

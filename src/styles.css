@@ -96,24 +96,38 @@ select { padding: 0.45rem 2rem 0.45rem 0.6rem; }
 .town-stage small, .town-stage p { color: var(--muted); }
 .town-stage strong { font-family: Georgia, "Times New Roman", serif; font-size: 1.15rem; font-weight: 500; }
 .town-stage p { margin: 0; font-size: 0.75rem; line-height: 1.45; }
-.firm-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.65rem; }
-.firm-card { display: grid; gap: 0.45rem; width: 100%; padding: 0.8rem; text-align: left; }
-.opportunity-card { border-style: dashed; background: var(--stage); }
-.opportunity-card.ready { border-color: var(--accent); }
-.firm-card.selected { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.firm-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
-.firm-card-heading b { font-family: Georgia, "Times New Roman", serif; font-size: 1rem; font-weight: 500; }
-.firm-card .status { padding: 0.2rem 0.45rem; border-radius: 99px; color: var(--muted); background: var(--stage); font-size: 0.65rem; font-style: normal; text-transform: uppercase; }
-.firm-card .status.operating, .firm-card .status.rescued { color: var(--accent); background: var(--accent-soft); }
-.firm-card .status.ready { color: var(--accent); background: var(--accent-soft); }
-.firm-card .status.distressed, .firm-card .status.insolvent, .firm-card .status.receivership { color: var(--danger); }
-.firm-card .pipeline { color: var(--text); font-size: 0.78rem; line-height: 1.4; }
-.firm-card .firm-stats, .firm-card .owner-choice, .firm-card .processing, .firm-card .contract { color: var(--muted); font-size: 0.7rem; line-height: 1.35; }
-.firm-card .owner-choice { color: var(--cash); }
-.firm-card .opportunity-reason { color: var(--cash); font-size: 0.7rem; line-height: 1.35; }
-.firm-card .contract { padding-top: 0.4rem; border-top: 1px solid var(--border); }
-.firm-card .contract.shortfall { color: var(--danger); }
-.firm-card .processing.shortfall { color: var(--danger); }
+.firm-selector-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 0.65rem; }
+.firm-selector-row label { display: flex; align-items: center; gap: 0.55rem; color: var(--muted); font-size: 0.82rem; }
+.firm-selector-row select { min-width: min(22rem, 65vw); }
+.status { display: inline-block; padding: 0.2rem 0.45rem; border-radius: 99px; color: var(--muted); background: var(--stage); font-size: 0.65rem; font-style: normal; text-transform: uppercase; }
+.status.operating, .status.rescued, .status.ready { color: var(--accent); background: var(--accent-soft); }
+.status.distressed, .status.insolvent, .status.receivership { color: var(--danger); }
+.firm-empty { margin: 0; padding: 1rem; border: 1px dashed var(--border); color: var(--muted); background: var(--stage); }
+.firm-detail { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; background: var(--stage); }
+.firm-detail-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; padding: 0.9rem 1rem; border-bottom: 1px solid var(--border); background: var(--surface); }
+.firm-detail-heading h3 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.3rem; font-weight: 500; }
+.firm-detail-heading > span { color: var(--muted); font-size: 0.72rem; text-align: right; }
+.firm-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.firm-detail-grid section { min-width: 0; padding: 0.9rem 1rem; }
+.firm-detail-grid section:nth-child(even) { border-left: 1px solid var(--border); }
+.firm-detail-grid section:nth-child(n + 3) { border-top: 1px solid var(--border); }
+.firm-detail-grid h4 { margin: 0 0 0.55rem; color: var(--muted); font-size: 0.68rem; letter-spacing: 0.06em; text-transform: uppercase; }
+.firm-detail-grid p, .firm-detail-grid li, .firm-detail-grid dd { margin: 0; color: var(--muted); font-size: 0.74rem; line-height: 1.45; }
+.firm-detail-grid .owner-choice { color: var(--cash); }
+.firm-detail-grid .shortfall { color: var(--danger); }
+.firm-detail-grid dl { display: grid; gap: 0.55rem; margin: 0; }
+.firm-detail-grid dl div { display: grid; grid-template-columns: 8rem 1fr; gap: 0.65rem; }
+.firm-detail-grid dt { color: var(--text); font-size: 0.72rem; font-weight: 650; }
+.firm-detail-grid dd { overflow-wrap: anywhere; }
+.contract-list { display: grid; gap: 0.4rem; margin: 0.65rem 0 0; padding: 0; list-style: none; }
+.contract-list li { padding-top: 0.4rem; border-top: 1px solid var(--border); }
+.firm-opportunities { margin-top: 0.75rem; padding-top: 0.65rem; }
+.firm-opportunities > div { display: grid; gap: 0; margin-top: 0.6rem; border: 1px solid var(--border); border-radius: 8px; }
+.opportunity-row { display: grid; gap: 0.25rem; padding: 0.65rem 0.75rem; background: var(--stage); }
+.opportunity-row + .opportunity-row { border-top: 1px solid var(--border); }
+.opportunity-row > span { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
+.opportunity-row p, .opportunity-row small { margin: 0; color: var(--muted); font-size: 0.7rem; line-height: 1.4; }
+.opportunity-row small { color: var(--cash); }
 
 .control-panel { border-radius: 0 0 14px 14px; }
 .playback { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
@@ -139,7 +153,9 @@ summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
   .metrics { grid-template-columns: 1fr; }
   .metrics article + article { border-left: 0; border-top: 1px solid var(--border); }
   .needs, .policy-grid { grid-template-columns: repeat(2, 1fr); }
-  .firm-grid { grid-template-columns: 1fr; }
+  .firm-detail-grid { grid-template-columns: 1fr; }
+  .firm-detail-grid section:nth-child(even) { border-left: 0; }
+  .firm-detail-grid section + section { border-top: 1px solid var(--border); }
   .firm-panel-heading { align-items: start; flex-direction: column; }
   .firm-panel-heading > p { text-align: left; }
   .motivation-heading { align-items: start; flex-direction: column; }
@@ -155,4 +171,8 @@ summary { cursor: pointer; color: var(--muted); font-size: 0.85rem; }
   .person-heading { align-items: start; }
   .needs { grid-template-columns: 1fr; }
   .playback label { width: 100%; margin: 0.5rem 0 0; }
+  .firm-selector-row, .firm-detail-heading { align-items: start; flex-direction: column; }
+  .firm-selector-row label, .firm-selector-row select { width: 100%; min-width: 0; }
+  .firm-detail-heading > span { text-align: left; }
+  .firm-detail-grid dl div { grid-template-columns: 1fr; gap: 0.15rem; }
 }
