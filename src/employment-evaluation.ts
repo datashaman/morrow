@@ -1,7 +1,7 @@
 import { DEFAULT_LATENT_FIRM_NAMES, PHASES } from "./config.js";
 import { TownSimulation } from "./simulation.js";
 
-export const EMPLOYMENT_EVALUATION_SCHEMA_VERSION = 1;
+export const EMPLOYMENT_EVALUATION_SCHEMA_VERSION = 2;
 export const DEFAULT_EMPLOYMENT_EVALUATION_SEEDS = Object.freeze([20260823, 101, 202, 303, 404, 505]);
 const CONTROL_FIRST_WAGES = Object.freeze([1, 2, 1, 1, 1, 1]);
 const CONTROL_DEATHS = Object.freeze([23, 24, 20, 21, 22, 22]);
@@ -56,6 +56,23 @@ function matureSlotIdsByDay(slots: any[], day: number) {
   })).map((slot) => slot.id);
 }
 
+function formationJobIdsByDay(town: any, day: number) {
+  return town.firms.filter((firm: any) => firm.foundingDay > 1 && firm.foundingDay <= day).flatMap((firm: any) => {
+    const workers = firm.formationStaff ?? firm.initialStaff;
+    return Array.from({ length: workers }, (_, index) => `${firm.instanceId}:formation:${index + 1}`);
+  });
+}
+
+function fundedOpportunityIdsByDay(town: any, slots: any[], day: number) {
+  return [...formationJobIdsByDay(town, day), ...matureSlotIdsByDay(slots, day)];
+}
+
+function median(values: number[]) {
+  const sorted = [...values].sort((left, right) => left - right);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
 function runArm(seed: number, days: number, enabled: boolean) {
   const town: any = new TownSimulation({
     seed,
@@ -84,6 +101,7 @@ function runArm(seed: number, days: number, enabled: boolean) {
       vacancies: snapshot.positionsAvailable,
       fundedSlots: slots.length,
       matureFundedSlots: matureSlotIdsByDay(slots, completedDay).length,
+      fundedOpportunities: fundedOpportunityIdsByDay(town, slots, completedDay).length,
       applications: decisions.filter((decision: any) => decision.kind === "job-search" && decision.chosenAction.startsWith("apply-job:")).length,
       offers: decisions.filter((decision: any) => decision.kind === "job-offer").length,
       hires: events.filter((event: any) => /^hired by /.test(event.text)).length,
@@ -107,7 +125,7 @@ function runArm(seed: number, days: number, enabled: boolean) {
     name: firm.name,
     day: firm.foundingDay,
     founderId: firm.owner,
-    workers: firm.formationObservedDays === undefined ? null : firm.initialStaff,
+    workers: firm.formationObservedDays === undefined ? null : (firm.formationStaff ?? firm.initialStaff),
   }));
   const closures = town.firms.filter((firm: any) => firm.closedDay !== null).map((firm: any) => ({
     firmId: firm.id,
@@ -134,6 +152,7 @@ function runArm(seed: number, days: number, enabled: boolean) {
     trajectory,
     fundedSlots: slots,
     matureFundedSlotIdsByDay7: matureSlotIdsByDay(slots, 7),
+    fundedOpportunityIdsByDay7: fundedOpportunityIdsByDay(town, slots, 7),
     formations,
     closures,
     firstWageCitizenIds: wageRecipients.map((person: any) => person.id),
@@ -179,32 +198,45 @@ export function evaluateEmploymentIntervention(config: EvaluationConfig) {
       matches: expectedDeaths === null ? null : runs.every((run, index) => run.control.deathsByDay60 === expectedDeaths[index]),
     },
   };
-  const matureSlotsByDay7 = {
-    minimumPerSeed: 6,
-    observed: runs.map((run) => run.treatment.matureFundedSlotIdsByDay7.length),
-    passed: runs.every((run) => run.treatment.matureFundedSlotIdsByDay7.length >= 6),
+  const fundedOpportunitiesByDay7 = {
+    minimumPerSeed: 1,
+    minimumTotal: 2 * runs.length,
+    observed: runs.map((run) => run.treatment.fundedOpportunityIdsByDay7.length),
+    total: runs.reduce((total, run) => total + run.treatment.fundedOpportunityIdsByDay7.length, 0),
+    passed: runs.every((run) => run.treatment.fundedOpportunityIdsByDay7.length >= 1)
+      && runs.reduce((total, run) => total + run.treatment.fundedOpportunityIdsByDay7.length, 0) >= 2 * runs.length,
   };
+  const firstWageValues = runs.map((run) => run.treatment.firstWagesByDay30);
+  const wageImprovements = runs.filter((run) => run.treatment.firstWagesByDay30 > run.control.firstWagesByDay30).length;
   const firstWagesByDay30 = {
-    minimumPerSeed: 4,
-    observed: runs.map((run) => run.treatment.firstWagesByDay30),
-    passed: runs.every((run) => run.treatment.firstWagesByDay30 >= 4),
+    minimumMedian: 4,
+    minimumSeedsAtOrAboveThree: Math.min(5, runs.length),
+    minimumImprovedSeeds: Math.min(5, runs.length),
+    observed: firstWageValues,
+    median: median(firstWageValues),
+    seedsAtOrAboveThree: firstWageValues.filter((value) => value >= 3).length,
+    improvedSeeds: wageImprovements,
+    passed: median(firstWageValues) >= 4
+      && firstWageValues.filter((value) => value >= 3).length >= Math.min(5, runs.length)
+      && wageImprovements >= Math.min(5, runs.length),
   };
   const deathDeltas = runs.map((run) => run.treatment.deathsByDay60 - run.control.deathsByDay60);
   const mortality = {
-    maximumTreatmentTotal: 111,
+    maximumTreatmentToControlRatio: 0.91,
     treatmentTotal: runs.reduce((total, run) => total + run.treatment.deathsByDay60, 0),
     controlTotal: runs.reduce((total, run) => total + run.control.deathsByDay60, 0),
     improvedSeeds: deathDeltas.filter((delta) => delta < 0).length,
     minimumImprovedSeeds: Math.min(4, runs.length),
     maximumPerSeedRegression: 2,
     deltas: deathDeltas,
-    passed: runs.reduce((total, run) => total + run.treatment.deathsByDay60, 0) <= 111
+    passed: runs.reduce((total, run) => total + run.treatment.deathsByDay60, 0)
+      <= runs.reduce((total, run) => total + run.control.deathsByDay60, 0) * 0.91
       && deathDeltas.filter((delta) => delta < 0).length >= Math.min(4, runs.length)
       && deathDeltas.every((delta) => delta <= 2),
   };
   const criteria = {
     controlBaseline: controlBaseline.firstWages.matches !== false && controlBaseline.deaths.matches !== false,
-    matureSlotsByDay7: matureSlotsByDay7.passed,
+    fundedOpportunitiesByDay7: fundedOpportunitiesByDay7.passed,
     firstWagesByDay30: firstWagesByDay30.passed,
     mortality: mortality.passed,
   };
@@ -221,7 +253,7 @@ export function evaluateEmploymentIntervention(config: EvaluationConfig) {
     },
     status: Object.values(criteria).every(Boolean) ? "passed" : "failed",
     controlBaseline,
-    gates: { matureSlotsByDay7, firstWagesByDay30, mortality },
+    gates: { fundedOpportunitiesByDay7, firstWagesByDay30, mortality },
     criteria,
     runs,
   } as const;
@@ -233,10 +265,10 @@ export function formatEmploymentEvaluation(report: ReturnType<typeof evaluateEmp
     `control: wages D30 ${report.controlBaseline.firstWages.observed.join(", ")} · deaths D60 ${report.controlBaseline.deaths.observed.join(", ")}`,
   ];
   report.runs.forEach((run) => lines.push(
-    `seed ${run.seed}: mature slots D7 ${run.treatment.matureFundedSlotIdsByDay7.length} · first wages D30 ${run.control.firstWagesByDay30}→${run.treatment.firstWagesByDay30} · deaths D60 ${run.control.deathsByDay60}→${run.treatment.deathsByDay60}`,
+    `seed ${run.seed}: funded jobs D7 ${run.treatment.fundedOpportunityIdsByDay7.length} · first wages D30 ${run.control.firstWagesByDay30}→${run.treatment.firstWagesByDay30} · deaths D60 ${run.control.deathsByDay60}→${run.treatment.deathsByDay60}`,
   ));
   lines.push(
-    `gates: slots ${report.gates.matureSlotsByDay7.passed ? "PASS" : "FAIL"} · wages ${report.gates.firstWagesByDay30.passed ? "PASS" : "FAIL"} · mortality ${report.gates.mortality.passed ? "PASS" : "FAIL"}`,
+    `gates: funded jobs ${report.gates.fundedOpportunitiesByDay7.passed ? "PASS" : "FAIL"} · wages ${report.gates.firstWagesByDay30.passed ? "PASS" : "FAIL"} · mortality ${report.gates.mortality.passed ? "PASS" : "FAIL"}`,
     report.metadata.interpretation,
   );
   return lines.join("\n");

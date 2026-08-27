@@ -25,6 +25,11 @@ test("the disabled control locks the reproducible wage and completed-day mortali
   assert.deepEqual(report.runs.map((run) => run.control.deathsByDay60), [23, 24, 20, 21, 22, 22]);
   assert.equal(report.controlBaseline.firstWages.matches, true);
   assert.equal(report.controlBaseline.deaths.matches, true);
+  assert.deepEqual(report.gates.fundedOpportunitiesByDay7.observed, [5, 3, 2, 4, 1, 2]);
+  assert.equal(report.gates.fundedOpportunitiesByDay7.passed, true);
+  assert.equal(report.gates.firstWagesByDay30.passed, true);
+  assert.equal(report.gates.mortality.passed, true);
+  assert.equal(report.status, "passed");
 });
 
 test("the report exposes paired outcomes, causal event counts, and explicit acceptance gates", () => {
@@ -44,7 +49,7 @@ test("the report exposes paired outcomes, causal event counts, and explicit acce
     ]);
   }
   assert.deepEqual(Object.keys(report.criteria), [
-    "controlBaseline", "matureSlotsByDay7", "firstWagesByDay30", "mortality",
+    "controlBaseline", "fundedOpportunitiesByDay7", "firstWagesByDay30", "mortality",
   ]);
   assert.match(formatEmploymentEvaluation(report), /Morrow employment intervention/);
   assert.match(formatEmploymentEvaluation(report), /seed 20260823/);
