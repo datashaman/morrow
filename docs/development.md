@@ -38,7 +38,7 @@ npm test
 npm run build
 ```
 
-The current baseline is 286 passing tests and a successful typed Vite build.
+The current baseline is 290 passing tests and a successful typed Vite build.
 
 For a custom headless comparison:
 

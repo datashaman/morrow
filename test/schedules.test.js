@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { FIRM_OPEN_WEEKDAYS } from "../src/config.js";
+import { DEFAULT_LATENT_FIRM_NAMES, FIRM_OPEN_WEEKDAYS, PHASES } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
 const attendPolicy = {
@@ -59,6 +59,62 @@ test("five scheduled shifts preserve seven compatibility days of staffed capacit
   assert.equal(carrier.targetStaff, 3);
   const coverage = Object.values(scheduled.rotaCoverage(carrier));
   assert.ok(Math.min(...coverage) >= 2);
+});
+
+test("scheduled maintenance pricing and one-worker freight capacity preserve the compatibility mode", () => {
+  const scheduled = new TownSimulation({ seed: 42, schedulesEnabled: true, transportEnabled: true });
+  const compatibility = new TownSimulation({ seed: 42, transportEnabled: true });
+  assert.ok(scheduled.contracts.filter((contract) => contract.use === "operations")
+    .every((contract) => contract.unitPrice === 8 && contract.baseUnitPrice === 8));
+  assert.ok(compatibility.contracts.filter((contract) => contract.use === "operations")
+    .every((contract) => contract.unitPrice === 5 && contract.baseUnitPrice === 5));
+
+  const scheduledGrocer = scheduled.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const contractCount = scheduled.contracts.length;
+  scheduled.addContractsForFirm(scheduledGrocer);
+  assert.ok(scheduled.contracts.slice(contractCount).filter((contract) => contract.use === "operations")
+    .every((contract) => contract.unitPrice === 8 && contract.baseUnitPrice === 8));
+
+  const scheduledCarrier = scheduled.firms.find((firm) => firm.archetypeId === "haulage");
+  scheduledCarrier.employees.forEach((id) => { scheduled.people[id].attended = false; });
+  scheduled.people[scheduledCarrier.employees[0]].attended = true;
+  assert.equal(scheduled.haulageCapacity(scheduledCarrier), 84);
+
+  const compatibilityCarrier = compatibility.firms.find((firm) => firm.archetypeId === "haulage");
+  compatibilityCarrier.employees.forEach((id) => { compatibility.people[id].attended = false; });
+  compatibility.people[compatibilityCarrier.employees[0]].attended = true;
+  assert.equal(compatibility.haulageCapacity(compatibilityCarrier), 45);
+});
+
+test("the remaining scheduled grocer scales produce procurement to the living population", () => {
+  const town = new TownSimulation({ seed: 42, schedulesEnabled: true });
+  const everydayGrocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const premiumGrocer = town.firms.find((firm) => firm.archetypeId === "premium-grocer");
+  town.closeFirm(everydayGrocer, "test closure");
+  premiumGrocer.inventory = 0;
+  premiumGrocer.inventoryBatches = [];
+  const produceContract = town.contracts.find((contract) => contract.active
+    && contract.buyerId === premiumGrocer.id
+    && contract.product === "produce");
+
+  assert.equal(town.nextProcurementUnits(produceContract), town.people.length * 2);
+});
+
+test("scheduled maintenance customers sustain their supplier and essential readiness for four weeks", () => {
+  const town = new TownSimulation({
+    seed: 404,
+    latentFirmNames: [...DEFAULT_LATENT_FIRM_NAMES],
+    schedulesEnabled: true,
+    transportEnabled: true,
+  });
+  for (let step = 0; step < 28 * PHASES.length; step += 1) town.step();
+
+  const makers = town.firms.find((firm) => firm.archetypeId === "toolmaker");
+  const essential = town.firms.filter((firm) => ["everyday-grocer", "haulage", "farm"].includes(firm.archetypeId));
+  assert.equal(makers.active, true);
+  assert.ok(makers.ledger.some((entry) => /kit to /.test(entry.text)));
+  assert.ok(essential.every((firm) => firm.active && firm.operationalReadiness === 1));
+  assert.ok(essential.every((firm) => Object.values(town.rotaCoverage(firm)).every((workers) => workers >= 1)));
 });
 
 test("an unscheduled day is not an absence and five attended shifts preserve seven daily-equivalent wages", () => {

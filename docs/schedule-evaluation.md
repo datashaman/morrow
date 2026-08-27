@@ -33,13 +33,15 @@ The checked 56-day run on seeds `20260823, 101, 202, 303, 404, 505` completed de
 
 | Seed | Living | Employed | Hungry | Mean final sleep debt | Perishable waste |
 |---:|---:|---:|---:|---:|---:|
-| 20260823 | 19 → 15 → 15 | 8 → 5 → 5 | 1 → 15 → 15 | 0.432 | 527.707 → 302.300 → 284.290 |
-| 101 | 20 → 18 → 18 | 10 → 7 → 8 | 1 → 17 → 17 | 0.404 | 915.445 → 385.532 → 381.263 |
-| 202 | 18 → 16 → 16 | 9 → 5 → 5 | 1 → 16 → 16 | 0.510 | 190.000 → 167.412 → 165.683 |
-| 303 | 20 → 18 → 18 | 10 → 6 → 6 | 1 → 17 → 17 | 0.471 | 404.633 → 451.411 → 449.997 |
-| 404 | 19 → 0 → 0 | 10 → 0 → 0 | 1 → 0 → 0 | 0.000 | 349.215 → 241.598 → 236.482 |
-| 505 | 21 → 16 → 17 | 9 → 6 → 6 | 1 → 15 → 17 | 0.437 | 343.228 → 263.115 → 273.108 |
+| 20260823 | 19 → 19 → 19 | 8 → 9 → 9 | 1 → 4 → 1 | 0.378 | 527.707 → 352.330 → 339.000 |
+| 101 | 20 → 19 → 19 | 10 → 9 → 9 | 1 → 0 → 2 | 0.360 | 915.445 → 362.158 → 343.665 |
+| 202 | 18 → 17 → 17 | 9 → 9 → 9 | 1 → 0 → 0 | 0.315 | 190.000 → 271.132 → 262.040 |
+| 303 | 20 → 19 → 19 | 10 → 10 → 10 | 1 → 0 → 0 | 0.365 | 404.633 → 546.591 → 510.650 |
+| 404 | 19 → 18 → 17 | 10 → 10 → 10 | 1 → 0 → 8 | 0.349 | 349.215 → 253.298 → 238.605 |
+| 505 | 21 → 19 → 19 | 9 → 10 → 10 | 1 → 1 → 5 | 0.385 | 343.228 → 387.005 → 381.230 |
 
-The schedule modes reduced waste in most seeds, but they also produced substantially broader hunger, lower living employment, and one extinct seed. The capacity migration preserves five scheduled shifts as seven compatibility-day worker contributions, and closure-aware Saturday procurement can request stock through Monday, so the remaining result is not simply a missing `7 / 5` multiplier or a Sunday order ceiling. It is evidence that production, staffing income, physical distribution, pantry demand, and closures still need joint calibration. Sleep adds modest debt and only small outcome deltas in this sample; it does not explain the main schedule regression.
+The earlier schedule regression was traced to three coupled boundaries: maintenance revenue could not sustain Makers Guild under scheduled wages, a one-worker carrier could not move the essential 40-crate order, and income staffing could reduce a six-day firm to a rota that left one opening day uncovered. Schedule mode now uses an 8 maintenance price, a 60-point pre-multiplier freight basis, and a five-shift opening-coverage floor. If all food retail disappears while citizens are hungry, the existing exact-cost public re-entry path may act after one day; a remaining Green Basket also orders toward a population-scaled two-day reserve. Compatibility pricing and freight capacity remain unchanged.
+
+All eighteen current runs complete 56 days without extinction or a cash-conservation failure. Final living population is at least 17 in every mode, and final hunger remains at or below 8 of 17 living citizens. That is a regression boundary for these seeds, not a guarantee of stability: hunger, insolvency, business replacement, sleep debt, and death remain visible, and seed 404 still shows a materially worse sleep-enabled result worth further diagnosis.
 
 These are causal comparisons within Morrow's configured rules, not empirical findings, forecasts, or evidence about real work schedules, sleep, hunger, or policy.

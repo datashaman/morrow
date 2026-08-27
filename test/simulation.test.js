@@ -810,6 +810,19 @@ test("a missing essential production sector can gain a funded public operator", 
   assert.match(farm.ledger[0].text, /essential-sector re-entry from treasury/);
 });
 
+test("a town with hungry citizens can restore its missing everyday-food operator after one day", () => {
+  const town = new TownSimulation({ seed: 42, schedulesEnabled: true });
+  const food = town.firms.find((firm) => firm.name === "Harvest Foods");
+  town.people[0].hungryDays = 1;
+  town.firms.filter((firm) => firm.sector === "food").forEach((firm) => town.closeFirm(firm));
+  town.day = food.closedDay + 1;
+
+  assert.equal(town.resolveEssentialSectorReentry(), true);
+  assert.equal(food.active, true);
+  assert.equal(food.publiclyOperated, true);
+  assert.equal(food.employees.length, 2);
+});
+
 test("essential-sector re-entry waits for capital, workers, cooldown, and upstream supply", () => {
   const town = new TownSimulation({ seed: 42 });
   const farm = town.firms.find((firm) => firm.name === "Morrow Fields");
