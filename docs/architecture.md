@@ -9,6 +9,7 @@ src/config.js ─────────┐
 src/random.js ─────────┤
 src/civil-time.js ───────┤──> src/simulation.js ──> state snapshots
 src/citizen-policy.ts ─┘              │
+src/schedule-evaluation.ts <──────────┤
                                       v
                                src/main.js
                                  │     │
@@ -51,7 +52,7 @@ The class currently combines initialization, accounting, decision rules, phase o
 
 ### `src/citizen-policy.ts`
 
-Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among legal actions and explains that choice. `RuleCitizenPolicy` is the complete deterministic `rule-v2` evaluation baseline. `MotivationCitizenPolicy` scores attendance, job search and offers, food, housing, personal time, and owner decisions from stable seed-derived weights plus current needs and constraints. Tests inject alternative policies to protect substitutability.
+Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among legal actions and explains that choice. `RuleCitizenPolicy` is the complete deterministic `rule-v2` evaluation baseline. `MotivationCitizenPolicy` scores Workday plans, sleep, attendance, job search and offers, food, housing, personal time, and owner decisions from stable seed-derived weights plus current needs and constraints. Tests inject alternative policies to protect substitutability.
 
 ### `src/neural-policy.ts`
 
@@ -93,6 +94,14 @@ Resolves stable current or historical firm selection and formats the selected fi
 
 Formats configuration-owned opening weekdays and domain-owned rota, attendance, next-opening, service-window, and scheduled-wage evidence for the selected-firm dossier. Calendar, rota assignment, access, payroll, and recurrence decisions remain in the simulation.
 
+### `src/citizen-schedule-presentation.js`
+
+Formats a selected citizen's current primary activity, today's rota state, next scheduled shift, next rent day, and latest sleep debt and quality. It projects domain-owned evidence without choosing activities or moving time.
+
+### `src/schedule-evaluation.ts`
+
+Runs the same fixed seeds in compatibility-calendar-only, schedules-without-sleep, and schedules-plus-sleep modes. It records daily trajectories plus access failures, work and wages, leisure and learning, sleep, food waste and hunger, population, business lifecycle, and conservation. `scripts/evaluate-schedules.ts` is the concise text or complete JSON adapter. The report deliberately has no directional acceptance gate.
+
 ### `src/employment-evaluation.ts`
 
 Runs paired fixed-seed towns with the shared employment intervention disabled and enabled. It reports completed-day work, hiring, business, assistance, hardship, health, mortality, first-wage, slot, and conservation evidence and applies explicit gameplay acceptance gates. `scripts/evaluate-employment.ts` is the concise text and JSON command-line adapter.
@@ -103,7 +112,7 @@ Projects current people, firms, policy, day, and essential cost into a determini
 
 ### `src/map-presentation.js`
 
-Owns deterministic canvas presentation geometry: full-name firm landmark bounds, employee orbit targets that clear workplace plaques, the deceased cross-and-base marker, and browser-safe light/dark canvas color resolution. These helpers keep display-only layout testable without moving economic decisions out of the simulation.
+Owns deterministic canvas presentation geometry: full-name firm landmark bounds, workplace orbit targets that clear plaques, activity/home/cemetery destination selection, the deceased cross-and-base marker, and browser-safe light/dark canvas color resolution. These helpers keep display-only layout testable without moving economic decisions out of the simulation.
 
 ### `src/main.js`
 
@@ -125,9 +134,9 @@ Uses Node’s built-in test runner. Tests directly exercise the simulation witho
 
 ## State ownership
 
-`TownSimulation` owns people, their versioned knowledge and complete learning histories, configured archetypes, runtime firm instances, each firm's knowledge-capacity carry and daily slots, staffing-demand and investment-slot evidence, opportunity observations, contracts, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, selected-firm identity, playback timing, pause state, speed, and canvas dimensions; it renders the selected citizen's knowledge profile and scrollable learning stream plus the firm's already-derived capacity and staffing state without deriving economic outcomes. Runtime firms and contracts may be appended but are never removed, so their numeric IDs remain valid references and their unique `archetypeId:instanceNumber` identities preserve lifecycle history. Historical instances remain inspectable in the firm selector; the canvas suppresses an inactive historical landmark when an active replacement of the same archetype occupies that location.
+`TownSimulation` owns people, their activity plans and current primary, sleep debt and complete sleep history, versioned knowledge and complete learning histories, configured archetypes, runtime firm instances, rotas and opening evidence, each firm's knowledge-capacity carry and daily slots, staffing-demand and investment-slot evidence, opportunity observations, contracts, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, selected-firm identity, playback timing, pause state, speed, and canvas dimensions; it renders already-derived citizen and firm state without deriving economic outcomes. Runtime firms and contracts may be appended but are never removed, so their numeric IDs remain valid references and their unique `archetypeId:instanceNumber` identities preserve lifecycle history. Historical instances remain inspectable in the firm selector; the canvas suppresses an inactive historical landmark when an active replacement of the same archetype occupies that location.
 
-Person `x` and `y` positions are currently mutated by the renderer even though they live on simulation entities. The renderer derives workplace, job-application, Common Park, and cemetery destinations from domain state, but those positions are display-only and must never influence domain decisions. Moving them into a view model would strengthen the boundary.
+Person `x` and `y` positions are currently mutated by the renderer even though they live on simulation entities. The renderer derives current-primary, home, Common Park, and cemetery destinations from domain state, but those positions are display-only and must never influence domain decisions. Moving them into a view model would strengthen the boundary.
 
 ## Adding a rule
 

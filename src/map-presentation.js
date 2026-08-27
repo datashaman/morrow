@@ -58,10 +58,9 @@ export function parkVisitorTarget(personId, park, elapsedMs = 0) {
   };
 }
 
-export function personMapTarget(person, { parkTarget, applicationTarget, employeeTarget, graveTarget }) {
+export function personMapTarget(person, { primaryTarget, homeTarget, graveTarget }) {
   if (!person.alive) return graveTarget;
-  if (person.employer >= 0) return employeeTarget;
-  return applicationTarget ?? parkTarget;
+  return primaryTarget ?? homeTarget;
 }
 
 export function deceasedMarkerSegments(x, y) {

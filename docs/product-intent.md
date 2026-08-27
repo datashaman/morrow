@@ -14,6 +14,7 @@ The experience should answer questions such as:
 - Why did their stress rise or fall?
 - Why are they pursuing a particular need?
 - Which events and transactions led to their current condition?
+- What are they doing now, when do they next work or pay rent, and how is sleep affecting them?
 
 ## Desired user experience
 
@@ -26,7 +27,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Named individual agents with heterogeneous starting conditions
 - Firms with sectors, workers, cash, inventory, products, input costs, prices, wages, and owners
 - A treasury that receives taxes and redistributes support
-- A deterministic civil calendar, configured business openings, stable five-shift worker rotas, agriculture, paid finite haulage, supply contracts and procurement, production, payroll, food, housing, discretionary activity, and settlement
+- A deterministic civil calendar, configured business openings, stable five-shift worker rotas, one-primary-per-block activity budgets, overnight sleep debt, agriculture, paid finite haulage, supply contracts and procurement, production, payroll, food, housing, discretionary activity, and settlement
 - Dated perishable produce and food with FIFO use, expiry, and attributable waste
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Funded employment opportunities backed by attributable demand and retained firm cash, without an employment floor or guaranteed job

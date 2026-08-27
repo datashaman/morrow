@@ -236,7 +236,13 @@ export class TownSimulation {
     this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
     this.firms = FIRMS.filter((archetype) => (!archetype.defaultLatent || (this.transportEnabled && archetype.archetypeId === "haulage")) && !this.latentFirmNames.includes(archetype.name)).map((archetype, id) => {
       this.firmInstanceCounts[archetype.archetypeId] = 1;
-      return this.createFirmInstance(archetype, id);
+      const targetStaff = this.schedulesEnabled ? archetype.scheduledInitialStaff ?? archetype.initialStaff : archetype.initialStaff;
+      const openDays = FIRM_OPEN_WEEKDAYS[archetype.archetypeId].length;
+      const averageOpenDayWage = this.schedulesEnabled
+        ? Math.max(this.policy.minimumWage, archetype.wage) * 7 / openDays
+        : archetype.wage;
+      const revenueEMA = targetStaff * averageOpenDayWage * STAFFING_REVENUE_BUFFER;
+      return this.createFirmInstance(archetype, id, { targetStaff, revenueEMA });
     });
     this.contracts = SUPPLY_CONTRACTS.map((contract) => ({
       ...contract,
@@ -351,7 +357,7 @@ export class TownSimulation {
       this.people
         .filter((person) => person.employer < 0)
         .sort((a, b) => b.skill - a.skill)
-        .slice(0, Math.max(0, firm.initialStaff - firm.employees.length))
+        .slice(0, Math.max(0, firm.targetStaff - firm.employees.length))
         .forEach((person) => this.hire(firm, person, true));
     });
     this.people.forEach((person) => {
@@ -1069,6 +1075,16 @@ export class TownSimulation {
     return null;
   }
 
+  nextShiftDay(person, { fromDay = this.day, includeToday = true } = {}) {
+    if (!person?.alive || person.employer < 0) return null;
+    const firm = this.firms[person.employer];
+    for (let offset = includeToday ? 0 : 1; offset <= 14; offset += 1) {
+      const day = fromDay + offset;
+      if (this.scheduledForShift(person, firm, day)) return day;
+    }
+    return null;
+  }
+
   nextContractOpening(contract, fromDay = this.day) {
     const supplier = this.firms[contract.supplierId];
     const buyer = this.firms[contract.buyerId];
@@ -1342,7 +1358,7 @@ export class TownSimulation {
       day: this.day,
       workday: { ...option, status: "planned", failureReason: null },
     };
-    person.currentPrimaryActivity = { day: this.day, block: "Morning", action: "schedule review" };
+    person.currentPrimaryActivity = null;
     return person.dailyPlan;
   }
 
@@ -1477,7 +1493,11 @@ export class TownSimulation {
     const knowledgeSlots = this.knowledgeEnabled && firm.archetypeId === "everyday-grocer"
       ? firm.knowledgeCapacitySlotsToday
       : 0;
-    return Math.floor(capacity * firm.operationalReadiness) + knowledgeSlots;
+    return Math.floor(capacity * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier()) + knowledgeSlots;
+  }
+
+  scheduledShiftCapacityMultiplier() {
+    return this.schedulesEnabled ? 7 / 5 : 1;
   }
 
   knowledgeCapacityContribution(firm) {
@@ -1488,7 +1508,7 @@ export class TownSimulation {
       const vocationalKnowledge = (person.knowledgeProfile.retail + person.knowledgeProfile.inventory) / 2;
       return total + firm.transactionsPerWorker * vocationalKnowledge * GROCERY_KNOWLEDGE_CAPACITY_BONUS;
     }, 0);
-    return Math.round(contribution * firm.operationalReadiness * 1_000_000) / 1_000_000;
+    return Math.round(contribution * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier() * 1_000_000) / 1_000_000;
   }
 
   accrueKnowledgeCapacity(firm) {
@@ -1636,9 +1656,10 @@ export class TownSimulation {
   }
 
   staffingIncrementalCapacity(firm) {
-    if (firm.archetypeId === "haulage") return Math.floor(TRANSPORT_CAPACITY_PER_WORKER * firm.operationalReadiness);
-    if (firm.processingPerWorker) return Math.floor(firm.processingPerWorker * firm.operationalReadiness);
-    return Math.floor(firm.transactionsPerWorker * firm.operationalReadiness);
+    const shiftCapacity = this.scheduledShiftCapacityMultiplier();
+    if (firm.archetypeId === "haulage") return Math.floor(TRANSPORT_CAPACITY_PER_WORKER * firm.operationalReadiness * shiftCapacity);
+    if (firm.processingPerWorker) return Math.floor(firm.processingPerWorker * firm.operationalReadiness * shiftCapacity);
+    return Math.floor(firm.transactionsPerWorker * firm.operationalReadiness * shiftCapacity);
   }
 
   archiveStaffingDemand(firm) {
@@ -1892,7 +1913,7 @@ export class TownSimulation {
       if (!this.firmOpenOnDay(firm) || firm.production !== "direct") return;
       const produced = firm.employees.reduce((sum, id) => {
         const person = this.people[id];
-        return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) * firm.operationalReadiness : 0);
+        return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier() : 0);
       }, 0);
       this.addFirmInventory(firm, produced);
       if (this.isPerishable(firm.sells)) firm.perishableProcessedToday += produced;
@@ -1927,7 +1948,7 @@ export class TownSimulation {
   haulageCapacity(carrier = this.firms.find((firm) => firm.active && firm.archetypeId === "haulage")) {
     if (!carrier?.active || !this.firmOpenOnDay(carrier)) return 0;
     const attendingWorkers = carrier.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
-    return Math.floor(attendingWorkers * TRANSPORT_CAPACITY_PER_WORKER * carrier.operationalReadiness);
+    return Math.floor(attendingWorkers * TRANSPORT_CAPACITY_PER_WORKER * carrier.operationalReadiness * this.scheduledShiftCapacityMultiplier());
   }
 
   processConstructionInputs(firm) {
@@ -1981,7 +2002,7 @@ export class TownSimulation {
       if (!firm.processingPerWorker) return;
       const attendingWorkers = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
       firm.processingCapacityToday = firm.active
-        ? Math.floor(attendingWorkers * firm.processingPerWorker * firm.operationalReadiness)
+        ? Math.floor(attendingWorkers * firm.processingPerWorker * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier())
         : 0;
       firm.processedToday = 0;
       firm.processingShortfallToday = 0;
@@ -2005,7 +2026,11 @@ export class TownSimulation {
         : contract.use === "construction-project" ? 0 : buyer.processingPerWorker ? buyer.inputInventory : buyer.inventory;
       const livingPopulation = this.people.filter((person) => person.alive).length;
       const populationScaledFood = contract.product === "produce" && buyer.archetypeId === "everyday-grocer" && !contract.use;
-      const dailyLimit = populationScaledFood ? Math.min(contract.dailyQuantity, livingPopulation) : contract.dailyQuantity;
+      const buyerNextOpening = populationScaledFood && this.schedulesEnabled ? this.nextOpeningDay(buyer) : null;
+      const foodCoverageDays = buyerNextOpening ? Math.max(1, buyerNextOpening - this.day) : 1;
+      const dailyLimit = populationScaledFood
+        ? Math.min(contract.dailyQuantity * foodCoverageDays, livingPopulation * foodCoverageDays)
+        : contract.dailyQuantity;
       const targetStock = populationScaledFood ? livingPopulation * 2 : contract.targetStock ?? contract.dailyQuantity * 2;
       const housingProject = contract.use === "construction-project" ? this.housingProjectDemand(buyer) : null;
       contract.requestedToday = contract.use === "construction-project"

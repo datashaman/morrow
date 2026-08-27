@@ -75,16 +75,14 @@ test("park visitors mill deterministically within the Common Park", () => {
   assert.ok(ellipticalDistance < 1);
 });
 
-test("map targets prioritize death, employment, applications, then the park", () => {
-  const parkTarget = { x: 0.5, y: 0.5 };
-  const applicationTarget = { x: 0.2, y: 0.2 };
-  const employeeTarget = { x: 0.8, y: 0.2 };
+test("map targets use only death or the current primary activity", () => {
+  const homeTarget = { x: 0.5, y: 0.5 };
+  const primaryTarget = { x: 0.8, y: 0.2 };
   const graveTarget = { x: 0.9, y: 0.8 };
 
-  assert.deepEqual(personMapTarget({ alive: false, employer: -1 }, { parkTarget, applicationTarget, employeeTarget, graveTarget }), graveTarget);
-  assert.deepEqual(personMapTarget({ alive: true, employer: 2 }, { parkTarget, applicationTarget, employeeTarget, graveTarget }), employeeTarget);
-  assert.deepEqual(personMapTarget({ alive: true, employer: -1 }, { parkTarget, applicationTarget, employeeTarget, graveTarget }), applicationTarget);
-  assert.deepEqual(personMapTarget({ alive: true, employer: -1 }, { parkTarget, applicationTarget: null, employeeTarget, graveTarget }), parkTarget);
+  assert.deepEqual(personMapTarget({ alive: false }, { primaryTarget, homeTarget, graveTarget }), graveTarget);
+  assert.deepEqual(personMapTarget({ alive: true }, { primaryTarget, homeTarget, graveTarget }), primaryTarget);
+  assert.deepEqual(personMapTarget({ alive: true }, { primaryTarget: null, homeTarget, graveTarget }), homeTarget);
 });
 
 test("the deceased marker is a cross-and-base silhouette rather than a living circle", () => {

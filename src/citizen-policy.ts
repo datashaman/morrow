@@ -489,12 +489,12 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     const scores: Record<string, number> = {};
     observation.options.forEach((option) => {
       if (option.activity === "shift") {
-        scores[option.action] = observation.profile.security * (0.75 + scarcity * 0.65)
-          + observation.reliability * 0.45
-          - healthGap * 0.65
-          - observation.stress * 0.25
-          - observation.sleepDebt * 0.45
-          - Math.min(1, observation.hungryDays / 2) * 0.25;
+        scores[option.action] = observation.profile.security * (1.05 + scarcity * 0.8)
+          + observation.reliability * 0.55
+          - healthGap * 0.4
+          - observation.stress * 0.15
+          - observation.sleepDebt * 0.35
+          - Math.min(1, observation.hungryDays / 2) * 0.15;
       } else if (option.activity === "clinic") {
         scores[option.action] = observation.profile.security * (healthGap * 2.6 + (option.expectedRecovery ?? 0) * 1.8)
           + observation.profile.planning * 0.35

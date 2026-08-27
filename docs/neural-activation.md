@@ -4,6 +4,8 @@ Morrow can let its bundled shared neural network control one reversible domain: 
 
 Food, housing, attendance, job search, job offers, and owner choices always remain under `motivation-v3`. `TownSimulation` still creates the concrete legal actions, rejects an action outside that set, and alone applies transactions and consequences. The network cannot invent a purchase, counterparty, price, job, or transfer.
 
+Workday-plan choices and Overnight sleep versus late study also remain under `motivation-v3`. They are not schema-v2 personal-time actions and are excluded from the activation certificate's controlled-decision counts.
+
 ## Bundled candidate
 
 The schema-v1 artifact `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94` was trained with the standard-library Python workflow on 8,760 synthetic decisions from seeds 11, 22, 33, 44, and 55 over 15 days. Runtime loading migrates it to schema v2 as `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94-schema2-zero-knowledge` by adding zero weights for the three knowledge inputs. Its objective is reward-weighted imitation of the active motivation policy; the migration does not retrain it or give knowledge causal influence. The model, rewards, and training set are hypotheses, not empirical behavioral evidence.

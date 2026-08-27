@@ -36,6 +36,8 @@ Each employment spell receives an immutable five-weekday rota bounded by its fir
 
 Only scheduled workers receive a shift option in their Workday plan. An unscheduled day creates no absence, reliability loss, wage, or workplace learning. One completed scheduled shift establishes staffed capacity for that firm's later same-day operations and service. The scheduled-shift base wage is `max(configured wage, policy minimum) × 7 / 5`; five fully completed shifts therefore preserve seven daily-equivalent base wages before ordinary reliability, payroll-ratio, tax, owner-waiver, and cent-rounding effects. Staffing and solvency use weekly-equivalent payroll per open day, while an investment reserve holds six full scheduled-shift wages.
 
+Configured productivity and per-worker service, processing, and haulage capacities originated as seven-day daily values. Schedule-enabled completed shifts therefore also contribute `7 / 5` of those values. Five shifts preserve seven compatibility-day worker contributions over a week; the multiplier is a migration equivalence, not a claim about shorter-week productivity.
+
 ### Citizen activity budgets
 
 When schedules are enabled, Morning Planning gives every living citizen exactly one planned Workday primary. A scheduled shift competes in the same legal set as an available clinic appointment, an available school lesson, daytime rest, and self-study. The motivation policy scores the currently legal set from physical strain, security, runway, reliability, mastery, planning, and the citizen's stable weights. The chosen plan and every alternative are recorded in the ordinary decision history.
@@ -281,6 +283,8 @@ Production, processing, sale, and consumption use the oldest viable batch first.
 ### 4. Food shopping
 
 A citizen has a stable normal reserve target of one, two, or three meals. With schedules enabled, the temporary target is the larger of that normal target and the meals required before any active food seller next opens, capped at three; an insolvent sector with no known reopening never creates an unbounded target. The simulation can offer exact top-up purchases even when the pantry is nonempty, alongside its oldest viable stored meal. Purchase quantities remain bounded by the temporary target, exact affordability, seller inventory, FIFO batch quality and shelf life, and staffed capacity. Skipping food is always legal.
+
+Harvest Foods' produce order normally remains bounded by one living-population day. Before a configured closure, that ceiling expands through its next opening, while the existing two-population stock target still caps the request. This allows Saturday procurement to cover Sunday without inventing inventory or guaranteeing that the farm, carrier, grocer, or buyers can complete the transactions.
 
 Citizens reach the food phase in a deterministic vulnerability order: more hungry days first, then lower health. Otherwise-equal citizens use a day-rotating identifier tie-break so finite stock or staffed capacity does not always exclude the same late identifiers. This is an allocation heuristic, not a shop queue or public rationing system; scarcity, congestion, unaffordability, and motivation-driven avoidance remain possible. A failed attempted purchase now states that the seller lacked staffed capacity, while a citizen facing active food shops with no remaining inventory receives a distinct no-stock event.
 

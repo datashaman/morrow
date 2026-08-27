@@ -16,6 +16,8 @@ Schema version 2 defines:
 - action features: one-hot action kind plus bounded numeric values such as price, amount, quality, age, capacity, wage, and owner-option consequences;
 - a legal mask over 27 stable action kinds.
 
+Morning Workday-plan and Overnight sleep decisions deliberately remain outside this schema. They use the inspectable motivation fallback directly, so adding calendar and sleep state did not silently widen neural control or reinterpret the checked personal-time mask.
+
 Dynamic actions such as applying to a particular firm or buying a particular food quantity share an action kind but retain their concrete numeric option features. Changing feature order, normalization, action kinds, or mask meaning requires a new schema version. Changing fixed or trained parameters requires a new weights version.
 
 The bundled schema-v1 artifact is loaded through an explicit compatibility migration. Three zero-valued input weights are inserted between the old observation vector and action vector in every hidden row, and zero knowledge values are appended to its golden observations. Its scores therefore remain bit-for-bit equivalent for the same legacy observation/action pair. The migrated weights version is suffixed `schema2-zero-knowledge`: schema v2 can observe knowledge, but the bundled network has no trained knowledge effect.

@@ -5,8 +5,6 @@ import { describeContract, describePerishableInventory, describePipeline, descri
 import { firmSelectorOptions, resolveSelectedFirmId, staffingEvidence } from "./firm-detail-presentation.js";
 import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-presentation.js";
 import {
-  applicantFirmId,
-  applicantOrbitTarget,
   COMMON_PARK,
   deceasedMarkerSegments,
   employeeOrbitTarget,
@@ -17,8 +15,9 @@ import {
 } from "./map-presentation.js";
 import { TownSimulation } from "./simulation.js";
 import { playbackPresentation } from "./playback-presentation.js";
-import { formatTemporalRecord } from "./civil-time.js";
+import { formatTemporalRecord, PHASE_BLOCKS } from "./civil-time.js";
 import { firmScheduleEvidence } from "./schedule-presentation.js";
+import { citizenScheduleEvidence } from "./citizen-schedule-presentation.js";
 
 const app = document.querySelector("#app");
 app.innerHTML = `
@@ -51,6 +50,7 @@ app.innerHTML = `
         <span class="focus" id="focus"></span>
       </div>
       <p class="person-summary" id="person-summary"></p>
+      <p class="person-summary" id="person-schedule"></p>
       <div class="needs" id="needs"></div>
       <section class="motivation-panel" aria-labelledby="knowledge-title">
         <div class="motivation-heading">
@@ -156,7 +156,7 @@ let firmLandmarks = new Map();
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail", "neural-control", "policy-status", "town-stage",
-  "person-select", "focus", "person-summary", "needs", "knowledge-profile", "learning-stream", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-select", "firm-selection-state", "firm-empty", "firm-detail", "firm-opportunities", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
+  "person-select", "focus", "person-summary", "person-schedule", "needs", "knowledge-profile", "learning-stream", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-select", "firm-selection-state", "firm-empty", "firm-detail", "firm-opportunities", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -391,6 +391,18 @@ function updateInterface() {
   elements["person-summary"].textContent = person.alive
     ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)}; ${clinicalCare}; ${healthCare} · skill ${percent(person.skill)}; ${education} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
     : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · estate ${money(person.estateTransferred)} transferred to treasury · remaining cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
+  const currentWorkday = person.dailyPlan?.day === simulation.day ? person.dailyPlan.workday : null;
+  const includeTodayForShift = state.block === "Morning" || (state.block === "Workday" && currentWorkday?.status === "planned");
+  const scheduleEvidence = citizenScheduleEvidence({
+    person,
+    employer: person.employer >= 0 ? simulation.firms[person.employer] : null,
+    day: simulation.day,
+    block: state.block,
+    scheduledToday: person.employer >= 0 && simulation.scheduledForShift(person, simulation.firms[person.employer]),
+    nextShiftDay: simulation.nextShiftDay(person, { includeToday: includeTodayForShift }),
+    daysUntilRent: simulation.daysUntilRent(),
+  });
+  elements["person-schedule"].textContent = `${scheduleEvidence.currentActivity} · ${scheduleEvidence.workStatus} · ${scheduleEvidence.nextShift} · ${scheduleEvidence.nextRent} · ${scheduleEvidence.sleep}`;
   elements.needs.hidden = !person.alive;
 
   elements.needs.replaceChildren(...Object.entries(person.needs).map(([name, value]) => {
@@ -558,14 +570,6 @@ function drawTown() {
   context.font = "700 10px system-ui";
   context.fillText("COMMON PARK", parkX, parkY - parkRadiusY - 8);
 
-  const applicationFirmIds = new Map(simulation.people
-    .filter((person) => person.alive && person.employer < 0)
-    .map((person) => [person.id, applicantFirmId(person, simulation.firms)]));
-  const applicantsByFirm = new Map(simulation.firms.map((firm) => [
-    firm.id,
-    [...applicationFirmIds].filter(([, firmId]) => firmId === firm.id).map(([personId]) => personId),
-  ]));
-
   simulation.flows.forEach((flow) => {
     const from = flow.from.kind === "person" ? simulation.people[flow.from.id] : flow.from.kind === "firm" ? simulation.firms[flow.from.id] : simulation.government;
     const to = flow.to.kind === "person" ? simulation.people[flow.to.id] : flow.to.kind === "firm" ? simulation.firms[flow.to.id] : simulation.government;
@@ -597,23 +601,37 @@ function drawTown() {
   context.fillText(`${simulation.people.filter((person) => !person.alive).length} interred`, cemeteryX, cemeteryY + cemeteryHeight / 2 + 16);
   context.globalAlpha = 1;
 
+  const currentBlock = PHASE_BLOCKS[PHASES[simulation.phase]];
+  const activityFirmFor = (activity) => {
+    if (!activity) return null;
+    if (activity.firmId !== null && activity.firmId !== undefined) return simulation.firms[activity.firmId];
+    if (["social-visit", "buy-comfort"].includes(activity.action)) return simulation.firms.find((firm) => firm.active && firm.archetypeId === "cafe") ?? null;
+    return null;
+  };
   simulation.people.forEach((person) => {
-    const employer = person.employer >= 0 ? simulation.firms[person.employer] : null;
-    const landmark = employer ? landmarks.get(employer.id) : null;
     const graveColumn = person.id % cemetery.columns;
     const graveRow = Math.floor(person.id / cemetery.columns);
-    const employeeTarget = employer ? employeeOrbitTarget(employer.employees.indexOf(person.id), employer.employees.length, landmark, { width, height }) : null;
-    const applicationFirmId = applicationFirmIds.get(person.id);
-    const applicationLandmark = applicationFirmId === null || applicationFirmId === undefined ? null : landmarks.get(applicationFirmId);
-    const applicantIds = applicationLandmark ? applicantsByFirm.get(applicationFirmId) : [];
-    const applicationTarget = applicationLandmark
-      ? applicantOrbitTarget(applicantIds.indexOf(person.id), applicantIds.length, applicationLandmark, { width, height })
+    const parkTarget = parkVisitorTarget(person.id, commonPark, performance.now());
+    const activity = person.currentPrimaryActivity?.day === simulation.day && person.currentPrimaryActivity.block === currentBlock
+      ? person.currentPrimaryActivity
       : null;
+    const activityFirm = activityFirmFor(activity);
+    const activityLandmark = activityFirm ? landmarks.get(activityFirm.id) : null;
+    const activityPeers = activityFirm ? simulation.people.filter((candidate) => {
+      const candidateActivity = candidate.currentPrimaryActivity?.day === simulation.day && candidate.currentPrimaryActivity.block === currentBlock
+        ? candidate.currentPrimaryActivity
+        : null;
+      return candidate.alive && activityFirmFor(candidateActivity)?.id === activityFirm.id;
+    }) : [];
+    const firmTarget = activityLandmark
+      ? employeeOrbitTarget(Math.max(0, activityPeers.indexOf(person)), Math.max(1, activityPeers.length), activityLandmark, { width, height })
+      : null;
+    const primaryTarget = activity?.action === "park-social" ? parkTarget : firmTarget;
+    const homeTarget = person.housed ? { x: person.homeX, y: person.homeY } : parkTarget;
     const target = personMapTarget(person, {
       graveTarget: { x: cemetery.x + (graveColumn - 2) * 0.018, y: cemetery.y + (graveRow - 3.5) * 0.012 },
-      employeeTarget,
-      applicationTarget,
-      parkTarget: parkVisitorTarget(person.id, commonPark, performance.now()),
+      primaryTarget,
+      homeTarget,
     });
     person.x += (target.x - person.x) * 0.02;
     person.y += (target.y - person.y) * 0.02;

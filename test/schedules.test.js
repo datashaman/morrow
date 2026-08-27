@@ -48,6 +48,19 @@ test("every employment spell receives a stable five-shift rota that fills least-
   assert.equal(worker.rota.weekdayIndices.length, 5);
 });
 
+test("five scheduled shifts preserve seven compatibility days of staffed capacity", () => {
+  const scheduled = new TownSimulation({ seed: 42, schedulesEnabled: true, transportEnabled: true });
+  const compatibility = new TownSimulation({ seed: 42 });
+  assert.equal(scheduled.scheduledShiftCapacityMultiplier(), 7 / 5);
+  assert.equal(compatibility.scheduledShiftCapacityMultiplier(), 1);
+  assert.equal(5 * scheduled.scheduledShiftCapacityMultiplier(), 7);
+
+  const carrier = scheduled.firms.find((firm) => firm.archetypeId === "haulage");
+  assert.equal(carrier.targetStaff, 3);
+  const coverage = Object.values(scheduled.rotaCoverage(carrier));
+  assert.ok(Math.min(...coverage) >= 2);
+});
+
 test("an unscheduled day is not an absence and five attended shifts preserve seven daily-equivalent wages", () => {
   const town = new TownSimulation({ seed: 42, schedulesEnabled: true, citizenPolicy: attendPolicy, policy: { taxRate: 0, shockRisk: 0 } });
   const farm = town.firms.find((firm) => firm.archetypeId === "farm");
@@ -93,6 +106,26 @@ test("closed firms do not operate and contracts name closure separately from sto
   assert.equal(contract.limitingFirmId, farm.id);
   assert.match(grocer.events[0].text, /closed.*next shared opening D8/);
   assert.ok(farm.employees.every((id) => town.people[id].attended === false));
+});
+
+test("the everyday grocer orders through its next opening before a closure day", () => {
+  const town = new TownSimulation({ seed: 42, schedulesEnabled: true, transportEnabled: false, citizenPolicy: attendPolicy });
+  const farm = town.firms.find((firm) => firm.archetypeId === "farm");
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const foodContract = town.contracts.find((contract) => contract.supplierId === farm.id && contract.buyerId === grocer.id && contract.product === "produce");
+  town.contracts.filter((contract) => contract !== foodContract).forEach((contract) => { contract.active = false; });
+  town.day = 6;
+  town.planningPhase();
+  farm.inventory = 200;
+  grocer.inventory = 0;
+  grocer.perishableBatches = [];
+  grocer.cash = 10_000;
+
+  town.productionPhase();
+  town.procurementPhase();
+
+  assert.equal(foodContract.requestedToday, 80);
+  assert.equal(foodContract.deliveredToday, 80);
 });
 
 test("open-day recurrence excludes closures while Monday rent and Sunday price review retain named weekly bases", () => {
