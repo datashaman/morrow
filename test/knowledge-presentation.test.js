@@ -26,8 +26,8 @@ test("citizen knowledge always shows general knowledge and only nonzero vocation
 
 test("firm knowledge evidence exposes configuration, workforce averages, and auditable effects", () => {
   const people = [
-    { knowledgeProfile: { ...createKnowledgeProfile(), fabrication: 0.2 } },
-    { knowledgeProfile: { ...createKnowledgeProfile(), fabrication: 0.6 } },
+    { alive: true, attended: true, knowledgeProfile: { ...createKnowledgeProfile(), fabrication: 0.2 } },
+    { alive: true, attended: true, knowledgeProfile: { ...createKnowledgeProfile(), fabrication: 0.6 } },
   ];
   const firm = {
     employees: [0, 1],

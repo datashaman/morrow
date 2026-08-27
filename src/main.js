@@ -282,7 +282,7 @@ function renderActivity(entity, filter, stream) {
       : filter === "events"
         ? "No life events yet"
         : filter === "knowledge-effects"
-          ? "No knowledge effects yet"
+          ? "No knowledge effects have been recorded for this firm."
           : "No activity yet";
     stream.append(item);
   }
@@ -499,7 +499,7 @@ function updateInterface() {
       <section><h4>Product pipeline and contracts</h4><p>${describePipeline(firm, PRODUCTS)}</p>${firm.processingPerWorker ? `<p class="${firm.processingShortfallToday ? "shortfall" : ""}">${describeProcessing(firm, PRODUCTS)}</p>` : ""}<ul class="contract-list">${contracts.length ? contracts.map((contract) => `<li class="${contract.shortfallToday ? "shortfall" : ""}">${describeContract(contract, PRODUCTS)}</li>`).join("") : "<li>No supply contracts.</li>"}</ul></section>
       <section><h4>Staffing evidence</h4><dl><div><dt>Headcount</dt><dd>${staffing.headcount}</dd></div><div><dt>Latest 2-of-3 gate</dt><dd>${staffing.demand}</dd></div><div><dt>Funded slot</dt><dd>${staffing.slot}</dd></div><div><dt>Latest reason</dt><dd>${staffing.reason}</dd></div></dl></section>
       <section><h4>Owner choices</h4><p class="owner-choice">${ownerChoice}</p></section>
-      <section><h4>Trade knowledge</h4><dl><div><dt>Configured domains</dt><dd>${knowledge.domains.map((domain) => `${domain.label} ${percent(domain.weight)} weight · ${percent(domain.average)} workforce average · ${percent(domain.workplaceLearningRate)} per attended shift`).join("; ")}</dd></div><div><dt>Weighted workforce</dt><dd>${percent(knowledge.workforceWeightedAverage)}</dd></div><div><dt>Effect today</dt><dd>${knowledge.effectType} · ${knowledge.scalarBaseline.toFixed(3)} scalar · ${knowledge.grossContribution.toFixed(3)} gross · ${knowledge.releasedUnits} whole released · ${percent(knowledge.carry)} carry · ${knowledge.usedUnits.toFixed(3)} used</dd></div><div><dt>Rules</dt><dd>${knowledge.domains.map((domain) => domain.learningRule).join("; ")} · ${knowledge.effectRule} · maximum ${percent(knowledge.maxBonus)}</dd></div></dl></section>
+      <section><h4>Trade knowledge</h4><dl><div><dt>Configured domains</dt><dd>${knowledge.domains.map((domain) => `${domain.label} ${percent(domain.weight)} weight · ${percent(domain.average)} attending-workforce average · ${percent(domain.workplaceLearningRate)} per attended shift`).join("; ")}</dd></div><div><dt>Weighted attendees</dt><dd>${percent(knowledge.workforceWeightedAverage)}</dd></div><div><dt>Effect today</dt><dd>${knowledge.effectType} · ${knowledge.scalarBaseline.toFixed(3)} scalar · ${knowledge.grossContribution.toFixed(3)} gross · ${knowledge.releasedUnits} whole released · ${percent(knowledge.carry)} carry · ${knowledge.usedUnits.toFixed(3)} used</dd></div><div><dt>Rules</dt><dd>${knowledge.domains.map((domain) => domain.learningRule).join("; ")} · ${knowledge.effectRule} · maximum ${percent(knowledge.maxBonus)}</dd></div></dl></section>
     </div>
   `;
   elements["firm-decision-title"].textContent = `${firmInstanceLabel(firm, simulation.firms)} owner decisions`;

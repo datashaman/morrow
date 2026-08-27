@@ -17,7 +17,7 @@ export function citizenKnowledgeEvidence(profile) {
 }
 
 export function firmKnowledgeEvidence(firm, people) {
-  const workers = firm.employees.map((id) => people[id]).filter(Boolean);
+  const workers = firm.employees.map((id) => people[id]).filter((person) => person?.alive && person.attended);
   const domains = firm.knowledge.domains.map((domain) => ({
     ...domain,
     average: workers.length

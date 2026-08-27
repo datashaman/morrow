@@ -60,7 +60,7 @@ These values are explicit gameplay hypotheses. They are not welfare, utility, he
 
 `loadSharedNeuralWeightArtifact()` rejects unknown formats, neural-schema or action-order mismatches, unsupported architectures, wrong matrix/vector shapes, missing golden vectors, and non-finite values before constructing runtime weights.
 
-The checked schema-v1 artifact and golden fixture remain accepted only through a named schema-v2 compatibility migration. That migration inserts three zero columns for general, retail, and inventory knowledge before the action features, appends zero knowledge to golden observations, and gives the loaded weights a migration suffix. It preserves old scores without claiming the old training learned from knowledge. New trajectory exports and newly trained artifacts use neural schema v2 directly.
+The checked schema-v1 artifact and golden fixture remain accepted only through a named neural schema-v2 compatibility migration. That migration inserts three zero columns for general, retail-operations, and inventory-handling knowledge before the action features, appends zero knowledge to golden observations, and gives the loaded weights a migration suffix. Citizen `knowledge-v2` maps its canonical fields into those same slots; the other vocational domains do not change the neural schema. The migration preserves old scores without claiming the old training learned from knowledge. New trajectory exports and newly trained artifacts use neural schema v2 directly.
 
 ## Cross-runtime golden test
 

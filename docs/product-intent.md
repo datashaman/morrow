@@ -32,7 +32,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Funded employment opportunities backed by attributable demand and retained firm cash, without an employment floor or guaranteed job
 - Hunger, bounded self-care and clinical treatment, health, stress, scarcity errors, arrears, eviction, rehousing, and death
-- Paid, finite education that gradually changes general skill and explicit vocational knowledge without guaranteeing employment
+- Paid, finite retail education plus transferable workplace knowledge across every current trade, with bounded operation-specific effects that never guarantee employment, demand, or success
 - Explicit labor-gated fabrication, construction-material supply, finite dwellings, and paid building projects
 - Friendships and social encounters
 - An explicitly staged citizen lifecycle with age, guardianship, family relationships, and endogenous births; these are accepted future scope and must not be presented as implemented until their tracer slices land

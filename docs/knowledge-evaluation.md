@@ -1,23 +1,34 @@
-# Knowledge tracer evaluation
+# Cross-trade knowledge evaluation
 
-Morrow compares `knowledge-v1` against the same seeded simulation with knowledge updates and effects disabled. The scalar baseline retains the existing generic-skill rules; the candidate adds workplace and retail-course learning plus the bounded everyday-grocer capacity multiplier.
+Morrow compares `knowledge-v2` with the same post-schedule simulation when vocational workplace learning and operational effects are disabled. Generic skill and every other rule remain active in both modes.
 
-Run the fixed comparison with:
+Run the checked comparison with:
 
 ```sh
 npm run evaluate:knowledge
 ```
 
-Use `--seeds 101,202 --days 60` to change the deterministic run set, or add `--json` for the full machine-readable report.
+The default uses seeds 20260823, 101, 202, 303, 404, and 505 for 60 days. Use `--seeds 101,202 --days 30` for a diagnostic subset, or `--json` for the complete machine-readable report.
 
-## Falsifiable tracer hypothesis
+## Two evidence layers
 
-Across a requested fixed run set, the candidate must produce at least one auditable learning record, at least one gross grocery capacity-point-day, and at least one accumulated whole transaction slot while both candidate and baseline conserve cash. A capacity-point-day is the continuous knowledge contribution before integer conversion; the report separately exposes whole slots released by the fractional accumulator.
+The first layer runs a deterministic 30-day fixture for all twelve archetypes. Every vocational field starts at zero. Relevant workers attend and learn at the configured rate before the same day's effect; the fixture supplies enough input and funded demand to use added capacity. Transaction, processing, and haulage effects must accumulate and use at least one whole unit. Direct yield must remain fractional and add output. The scalar pair must record no vocational learning or effect. Processing fixtures use six synthetic attending workers so the shared 0.003 rate crosses one whole unit inside 30 days; that saturation setup is evaluator evidence, not an ordinary staffing claim.
 
-The evaluator reports each paired seed's learning sources and final knowledge means, grocery capacity and completed transactions, and deltas in survival, employment, hunger, housing, and firm insolvency. Those outcome deltas are observations, not success criteria: a capacity tracer is not allowed to hide worsened hardship behind an aggregate pass.
+The second layer runs schedule, sleep, housing-capacity, transport, and latent formation features for the six fixed seeds. Each pair reports:
 
-The default five-seed, 30-day comparison is deterministic and intended for regression diagnosis. Its learning rates, capacity conversion, horizon, and seeds are gameplay hypotheses. Passing does not validate real education, competence, productivity, firm behavior, labor markets, or public policy.
+- observed and newly formed archetypes;
+- per-domain learning records and final means;
+- gross, whole released, and actually used effects by archetype;
+- realized sales by archetype and in total;
+- final employment, hunger, housing, survival, and firm failures;
+- candidate-minus-baseline deltas, replay identity, and cash conservation.
+
+Hard checks cover zero-start fixture coverage and use, scalar isolation, deterministic replay, observed town learning, and conservation. Downstream welfare and business deltas are never directional pass/fail gates.
 
 ## Checked default result
 
-On seeds 101, 202, 303, 404, and 505 for 30 days, the candidate recorded 1,527 learning updates and 30.21 gross capacity-point-days while every paired run conserved cash. The accumulator released 28 whole daily slots: 7, 4, 6, 3, and 8 by seed. Completed grocery transactions, survival, employment, hunger, housing, and firm-insolvency outcomes remained unchanged because no otherwise-legal customer reached a capacity-bound grocer on those runs. The tracer therefore demonstrates an operational capacity effect, but not increased demand, sales, welfare, or realism.
+The six-seed, 60-day evaluation passed. The twelve fixtures recorded 960 learning updates, 32.16 gross effect units, 27 whole released units, and 28.90 used units including continuous direct output. Every archetype learned and used its configured effect from zero vocational knowledge.
+
+Across paired towns, candidate learning records ranged from 1,364 to 1,553. Candidate-minus-baseline sales ranged from −98.92 to +27.50. Five seeds had no final employment delta and seed 101 had +1 employed and +1 hungry; survival, housing, and firm-failure deltas were zero in this run set. Both modes replayed exactly and conserved cash for every seed.
+
+These are deterministic gameplay observations, not evidence that knowledge improves welfare, that a negative or positive sales delta is desirable, or that the taxonomy, rates, effect ceiling, fixtures, firms, education, professions, labor markets, or town dynamics are empirically calibrated.

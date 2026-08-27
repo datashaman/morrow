@@ -126,7 +126,11 @@ Provides responsive light/dark presentation. At narrow widths metrics stack, nee
 
 ### `src/knowledge-evaluation.ts`
 
-Runs paired seeded towns with knowledge disabled and enabled, then reports auditable learning, gross and floored everyday-grocer capacity, completed transactions, town outcomes, and cash conservation. `scripts/evaluate-knowledge.ts` is the command-line adapter. This evaluator observes the domain model and does not introduce alternative simulation rules.
+Runs two deterministic evidence layers. Thirty-day zero-start saturation fixtures exercise every archetype's configured learning and operational effect. Paired schedule-enabled towns then report formation coverage, per-domain learning, per-archetype gross/released/used effects, realized sales, employment, hunger, housing, survival, firm failure, replay, and cash conservation. `scripts/evaluate-knowledge.ts` defaults to the specified six seeds for 60 days and supports JSON output. Fixture setup supplies workers, inputs, and funded demand, but effect formulas and mutations remain simulation operations rather than evaluator-owned alternatives.
+
+### `src/knowledge.js` and `src/knowledge-presentation.js`
+
+`knowledge.js` owns the canonical v2 profile, deterministic v1 migration, strict archetype-configuration validation, and weighted vocational calculation. `knowledge-presentation.js` projects citizen profiles, firm workforce averages, and structured effect entries into display evidence. Workforce averages are presentation only; simulation effects always sum per-worker contributions.
 
 ### `test/simulation.test.js`
 
@@ -134,7 +138,7 @@ Uses Node’s built-in test runner. Tests directly exercise the simulation witho
 
 ## State ownership
 
-`TownSimulation` owns people, their activity plans and current primary, sleep debt and complete sleep history, versioned knowledge and complete learning histories, configured archetypes, runtime firm instances, rotas and opening evidence, each firm's knowledge-capacity carry and daily slots, staffing-demand and investment-slot evidence, opportunity observations, contracts, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, selected-firm identity, playback timing, pause state, speed, and canvas dimensions; it renders already-derived citizen and firm state without deriving economic outcomes. Runtime firms and contracts may be appended but are never removed, so their numeric IDs remain valid references and their unique `archetypeId:instanceNumber` identities preserve lifecycle history. Historical instances remain inspectable in the firm selector; the canvas suppresses an inactive historical landmark when an active replacement of the same archetype occupies that location.
+`TownSimulation` owns people, their activity plans and current primary, sleep debt and complete sleep history, versioned knowledge and complete learning histories, configured archetypes, runtime firm instances, rotas and opening evidence, each firm's instance-local knowledge carry, daily scalar/gross/released/used values, and complete effect history, staffing-demand and investment-slot evidence, opportunity observations, contracts, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, selected-firm identity, retained activity filters, playback timing, pause state, speed, and canvas dimensions; it renders already-derived citizen and firm state without deriving economic outcomes. Runtime firms and contracts may be appended but are never removed, so their numeric IDs remain valid references and their unique `archetypeId:instanceNumber` identities preserve lifecycle history. Historical instances remain inspectable in the firm selector; the canvas suppresses an inactive historical landmark when an active replacement of the same archetype occupies that location.
 
 Person `x` and `y` positions are currently mutated by the renderer even though they live on simulation entities. The renderer derives current-primary, home, Common Park, and cemetery destinations from domain state, but those positions are display-only and must never influence domain decisions. Moving them into a view model would strengthen the boundary.
 

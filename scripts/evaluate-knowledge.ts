@@ -1,4 +1,9 @@
-import { evaluateKnowledgeTracer, formatKnowledgeEvaluation } from "../src/knowledge-evaluation.ts";
+import {
+  evaluateKnowledgeTracer,
+  formatKnowledgeEvaluation,
+  KNOWLEDGE_WHOLE_TOWN_DAYS,
+  KNOWLEDGE_WHOLE_TOWN_SEEDS,
+} from "../src/knowledge-evaluation.ts";
 
 function option(name: string) {
   const index = process.argv.indexOf(name);
@@ -11,8 +16,8 @@ function integerList(value: string) {
   return values;
 }
 
-const seeds = integerList(option("--seeds") ?? "101,202,303,404,505");
-const days = Number(option("--days") ?? 30);
+const seeds = integerList(option("--seeds") ?? KNOWLEDGE_WHOLE_TOWN_SEEDS.join(","));
+const days = Number(option("--days") ?? KNOWLEDGE_WHOLE_TOWN_DAYS);
 const report = evaluateKnowledgeTracer({ seeds, days });
 
 if (process.argv.includes("--json")) process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);

@@ -12,7 +12,7 @@ There is no network per citizen and no raw citizen ID input. Citizens differ thr
 
 Schema version 2 defines:
 
-- observation features: decision kind, seven profile weights, stress, health, hunger, runway, reliability, safety, firm trouble, option count, owner/firm runway where applicable, and bounded general, retail, and inventory knowledge;
+- observation features: decision kind, seven profile weights, stress, health, hunger, runway, reliability, safety, firm trouble, option count, owner/firm runway where applicable, and bounded general, retail-operations, and inventory-handling knowledge read through the unchanged neural schema slots;
 - action features: one-hot action kind plus bounded numeric values such as price, amount, quality, age, capacity, wage, and owner-option consequences;
 - a legal mask over 27 stable action kinds.
 

@@ -8,7 +8,7 @@ Workday-plan choices and Overnight sleep versus late study also remain under `mo
 
 ## Bundled candidate
 
-The schema-v1 artifact `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94` was trained with the standard-library Python workflow on 8,760 synthetic decisions from seeds 11, 22, 33, 44, and 55 over 15 days. Runtime loading migrates it to schema v2 as `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94-schema2-zero-knowledge` by adding zero weights for the three knowledge inputs. Its objective is reward-weighted imitation of the active motivation policy; the migration does not retrain it or give knowledge causal influence. The model, rewards, and training set are hypotheses, not empirical behavioral evidence.
+The schema-v1 artifact `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94` was trained with the standard-library Python workflow on 8,760 synthetic decisions from seeds 11, 22, 33, 44, and 55 over 15 days. Runtime loading migrates it to neural observation schema v2 as `python-reward-weighted-active-policy-imitation-v1-390ffbfc893def94-schema2-zero-knowledge` by adding zero weights for three knowledge inputs. Citizen knowledge has since migrated to `knowledge-v2`, but those unchanged slots read general, retail operations, and inventory handling through canonical fields. The other nine vocational domains are not appended. The artifact bytes, observation width, zero weights, activation certificate, and behavior therefore remain unchanged. Its objective is reward-weighted imitation of the active motivation policy; neither migration retrains it or gives knowledge causal influence. The model, rewards, and training set are hypotheses, not empirical behavioral evidence.
 
 ## Gate v1
 
