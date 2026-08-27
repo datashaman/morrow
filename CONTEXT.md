@@ -74,6 +74,18 @@ _Avoid_: Transaction, processing phase
 A short exchange, such as buying food or paying rent, that may coexist with one primary activity when its counterparty is available. It moves resources but does not consume the block's primary-activity capacity.
 _Avoid_: Primary activity, free action
 
+**Mutual-aid gift**:
+A voluntary citizen-to-citizen transfer of one existing resource without payment or debt. It changes ownership rather than creating supply, and may be constrained by the giver's protected reserve and the recipient's capacity.
+_Avoid_: Treasury support, loan, charity income
+
+**Close friendship**:
+A reciprocal friendship whose current strength is at least 0.75. It may unlock trusted interpersonal actions, but does not itself require or guarantee that either citizen takes them.
+_Avoid_: Any friendship, obligation, household
+
+**Public social venue**:
+A non-commercial town location where any living citizen may legally choose social contact regardless of hunger, housing, employment, or the availability of private firms. Scheduling and motivation may still prevent attendance; eligibility does not guarantee contact.
+_Avoid_: Welfare service, guaranteed meeting, café
+
 **Recurrence basis**:
 The declared clock that advances a timer: calendar day, firm open day, employee scheduled shift, or a named weekly recurrence. A closed day is not an operating failure unless the rule explicitly uses calendar days.
 _Avoid_: Raw day counter, implicit interval
@@ -95,6 +107,18 @@ _Avoid_: Raw day counter, implicit interval
 > **Developer:** Does paying rent prevent someone from resting that evening?
 >
 > **Domain expert:** No. Rent is a brief transaction; rest is the evening's primary activity.
+>
+> **Developer:** Does giving a friend a stored meal create food or make the recipient owe repayment?
+>
+> **Domain expert:** No. A mutual-aid gift transfers an existing meal without payment or debt; its provenance and the town's total food supply remain intact.
+>
+> **Developer:** Does every friend qualify for a mutual-aid gift?
+>
+> **Domain expert:** No. The current food-gift tracer requires a close friendship at strength 0.75 or above, and either citizen may still choose not to participate.
+>
+> **Developer:** Can hunger or a failed café make social contact illegal?
+>
+> **Domain expert:** No. Common Park is a public social venue open to every living citizen; hardship can affect their choice and available time, but not their eligibility.
 >
 > **Developer:** Does a Sunday closure advance a firm's maintenance counter?
 >
