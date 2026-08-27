@@ -10,6 +10,8 @@ import {
   ESSENTIAL_REENTRY_COST,
   ESSENTIAL_REENTRY_STAFF,
   FIRMS,
+  FIRM_OPEN_WEEKDAYS,
+  FIRM_SERVICE_WINDOWS,
   FIRM_DISTRESS_DAYS,
   FIRM_INSOLVENCY_DAYS,
   FRIENDSHIP_CONTACT_GAIN,
@@ -87,7 +89,7 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -97,6 +99,7 @@ export class TownSimulation {
     this.transportEnabled = transportEnabled;
     this.knowledgeEnabled = knowledgeEnabled;
     this.employmentInterventionEnabled = employmentInterventionEnabled;
+    this.schedulesEnabled = schedulesEnabled;
     this.reset();
   }
 
@@ -109,6 +112,10 @@ export class TownSimulation {
       instanceNumber,
       instanceId: `${archetype.archetypeId}:${instanceNumber}`,
       foundingDay,
+      openWeekdays: FIRM_OPEN_WEEKDAYS[archetype.archetypeId],
+      serviceWindow: FIRM_SERVICE_WINDOWS[archetype.archetypeId],
+      openDayCount: 0,
+      lastOpenDay: null,
       founderCapital,
       cash,
       inventory,
@@ -148,6 +155,9 @@ export class TownSimulation {
       transportLoadToday: 0,
       operationalReadiness: 1,
       lastMaintenanceDay: 0,
+      maintenanceUseDays: 0,
+      lastMaintenanceUseCount: 0,
+      maintenanceUseMarkedDay: null,
       receivershipDay: null,
       receivershipCount: 0,
       reentryCount: 0,
@@ -219,6 +229,7 @@ export class TownSimulation {
     this.controlHistory = [];
     this.opportunitySequence = 0;
     this.opportunityHistory = [];
+    this.pendingFormations = {};
     this.opportunityWindows = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, []]));
     this.firmInstanceCounts = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, 0]));
     this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
@@ -270,6 +281,10 @@ export class TownSimulation {
         learningSequence: 0,
         reliability: 0.55 + this.random() * 0.43,
         employer: -1,
+        employmentSpellSequence: 0,
+        rota: null,
+        scheduledShiftsWorked: 0,
+        scheduledShiftsElapsed: 0,
         jobApplicationFirm: -1,
         relationships: {},
         socialCapacity: 3 + Math.floor(this.random() * 4),
@@ -527,7 +542,7 @@ export class TownSimulation {
       : null;
     const carrier = this.transportEnabled ? this.firms.find((firm) => firm.active && firm.archetypeId === "haulage") : null;
     const expectedDailyCost = roundMoney(
-      Math.max(this.policy.minimumWage, archetype.wage) * requiredWorkers
+      this.averageOpenDayWage(archetype) * requiredWorkers
       + templates.filter((contract) => contract.buyer === archetype.name).reduce(
         (sum, contract) => {
           const inputCost = contract.use === "operations"
@@ -706,6 +721,8 @@ export class TownSimulation {
     const results = [];
     this.formationArchetypeIds.map((archetypeId) => this.firmArchetype(archetypeId)).filter(Boolean).forEach((archetype) => {
       if (this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId)) return;
+      if (this.pendingFormations[archetype.archetypeId]) return;
+      if (!this.archetypeOpenOnDay(archetype)) return;
       const window = this.opportunityWindows[archetype.archetypeId];
       window.push(Object.freeze({
         day: this.day,
@@ -724,7 +741,10 @@ export class TownSimulation {
         foundedInstanceId: null,
       };
       this.opportunityHistory.unshift(history);
-      const firm = this.foundFirm(archetype, evidence);
+      let firm = null;
+      if (this.schedulesEnabled && evidence.ready) {
+        this.pendingFormations[archetype.archetypeId] = { evidence: structuredClone(evidence), historySequence: history.sequence };
+      } else firm = this.foundFirm(archetype, evidence);
       if (firm) history.foundedInstanceId = firm.instanceId;
       results.push(firm ?? evidence);
     });
@@ -1017,11 +1037,92 @@ export class TownSimulation {
     return person.needs;
   }
 
+  firmOpenOnDay(firm, day = this.day) {
+    if (!firm?.active) return false;
+    if (!this.schedulesEnabled) return true;
+    return (firm.openWeekdays ?? FIRM_OPEN_WEEKDAYS[firm.archetypeId]).includes(calendarForDay(day).weekdayIndex);
+  }
+
+  archetypeOpenOnDay(archetype, day = this.day) {
+    return !this.schedulesEnabled || FIRM_OPEN_WEEKDAYS[archetype.archetypeId].includes(calendarForDay(day).weekdayIndex);
+  }
+
+  firmServiceAvailable(firm, block, day = this.day) {
+    return this.firmOpenOnDay(firm, day) && (!this.schedulesEnabled || firm.serviceWindow === block);
+  }
+
+  nextOpeningDay(firm, { fromDay = this.day, includeToday = false } = {}) {
+    if (!firm?.active) return null;
+    if (!this.schedulesEnabled) return includeToday ? fromDay : fromDay + 1;
+    for (let offset = includeToday ? 0 : 1; offset <= 7; offset += 1) {
+      const day = fromDay + offset;
+      if (firm.openWeekdays.includes(calendarForDay(day).weekdayIndex)) return day;
+    }
+    return null;
+  }
+
+  nextContractOpening(contract, fromDay = this.day) {
+    const supplier = this.firms[contract.supplierId];
+    const buyer = this.firms[contract.buyerId];
+    const carrier = this.requiresHaulage(contract) ? this.firms.find((firm) => firm.active && firm.archetypeId === "haulage") : null;
+    for (let offset = 1; offset <= 14; offset += 1) {
+      const day = fromDay + offset;
+      if (this.firmOpenOnDay(supplier, day) && this.firmOpenOnDay(buyer, day) && (!carrier || this.firmOpenOnDay(carrier, day))) return day;
+    }
+    return null;
+  }
+
+  rotaCoverage(firm) {
+    return Object.fromEntries((firm.openWeekdays ?? FIRM_OPEN_WEEKDAYS[firm.archetypeId]).map((weekday) => [weekday, firm.employees.reduce((total, id) => (
+      total + Number(this.people[id]?.rota?.firmId === firm.id && this.people[id].rota.weekdayIndices.includes(weekday))
+    ), 0)]));
+  }
+
+  assignRota(firm, person) {
+    person.employmentSpellSequence += 1;
+    const coverage = this.rotaCoverage(firm);
+    const weekdayIndices = [...(firm.openWeekdays ?? FIRM_OPEN_WEEKDAYS[firm.archetypeId])]
+      .sort((left, right) => coverage[left] - coverage[right]
+        || ((left + person.id) % 7) - ((right + person.id) % 7)
+        || left - right)
+      .slice(0, 5)
+      .sort((left, right) => left - right);
+    person.rota = Object.freeze({
+      sequence: person.employmentSpellSequence,
+      firmId: firm.id,
+      assignedDay: this.day,
+      weekdayIndices: Object.freeze(weekdayIndices),
+    });
+    person.scheduledShiftsWorked = 0;
+    person.scheduledShiftsElapsed = 0;
+    return person.rota;
+  }
+
+  scheduledForShift(person, firm, day = this.day) {
+    if (!this.schedulesEnabled) return person.alive && person.employer === firm.id && firm.active;
+    return person.alive
+      && person.employer === firm.id
+      && firm.active
+      && person.rota?.firmId === firm.id
+      && person.rota.weekdayIndices.includes(calendarForDay(day).weekdayIndex);
+  }
+
+  scheduledShiftWage(firm) {
+    const dailyEquivalent = Math.max(this.policy.minimumWage, firm.wage);
+    return this.schedulesEnabled ? dailyEquivalent * 7 / 5 : dailyEquivalent;
+  }
+
+  averageOpenDayWage(firm) {
+    if (!this.schedulesEnabled) return Math.max(this.policy.minimumWage, firm.wage);
+    return this.scheduledShiftWage(firm) * 5 / (firm.openWeekdays ?? FIRM_OPEN_WEEKDAYS[firm.archetypeId]).length;
+  }
+
   hire(firm, person, silent = false) {
     if (!firm.active || !person.alive || person.employer >= 0) return false;
     person.employer = firm.id;
     person.jobApplicationFirm = -1;
     firm.employees.push(person.id);
+    this.assignRota(firm, person);
     if (!silent) this.note(person, `hired by ${firm.name}`, "good");
     return true;
   }
@@ -1029,6 +1130,7 @@ export class TownSimulation {
   fire(firm, person, reason) {
     firm.employees = firm.employees.filter((id) => id !== person.id);
     person.employer = -1;
+    person.rota = null;
     const investmentSlot = this.activeInvestmentSlot(firm);
     if (investmentSlot?.status === "evaluating" && investmentSlot.hiredCitizenId === person.id) {
       this.endInvestmentSlot(firm, investmentSlot, "ended", `${reason} ended the evaluated position`);
@@ -1067,7 +1169,7 @@ export class TownSimulation {
   }
 
   eligibleJobFirms(firms = this.firms) {
-    return firms.filter((firm) => firm.active
+    return firms.filter((firm) => this.firmOpenOnDay(firm)
       && firm.vacancyAge >= 2
       && firm.targetStaff > firm.employees.length);
   }
@@ -1083,7 +1185,7 @@ export class TownSimulation {
       action: `apply-job:${firm.id}`,
       firmId: firm.id,
       firmName: firm.name,
-      offeredWage: Math.max(this.policy.minimumWage, firm.wage),
+      offeredWage: this.scheduledShiftWage(firm),
       reservationWage,
       firmTrouble: firm.trouble,
       vacancyAge: firm.vacancyAge,
@@ -1123,7 +1225,7 @@ export class TownSimulation {
       const candidate = this.people
         .filter((person) => person.alive && person.employer < 0 && person.jobApplicationFirm === firm.id)
         .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
-      const wage = Math.max(this.policy.minimumWage, firm.wage);
+      const wage = this.scheduledShiftWage(firm);
       if (candidate && this.considerJobOffer(firm, candidate, wage)) {
         const slot = this.activeInvestmentSlot(firm);
         if (slot?.status === "recruiting") {
@@ -1131,7 +1233,10 @@ export class TownSimulation {
           slot.hiredCitizenId = candidate.id;
           slot.hiredDay = this.day;
           slot.evaluationDeadline = this.day + INVESTMENT_EVALUATION_DAYS;
-          firm.latestStaffingReason = `${candidate.name} filled investment slot ${slot.id}; evaluation ends on day ${slot.evaluationDeadline}`;
+          slot.evaluationStartScheduledShift = candidate.scheduledShiftsElapsed;
+          firm.latestStaffingReason = this.schedulesEnabled
+            ? `${candidate.name} filled investment slot ${slot.id}; evaluation lasts ${INVESTMENT_EVALUATION_DAYS} scheduled shifts`
+            : `${candidate.name} filled investment slot ${slot.id}; evaluation ends on day ${slot.evaluationDeadline}`;
           this.note(firm, firm.latestStaffingReason, "good");
           this.note(candidate, `began a ${INVESTMENT_EVALUATION_DAYS}-day planned evaluation at ${firm.name}`, "neutral");
         }
@@ -1143,7 +1248,7 @@ export class TownSimulation {
   }
 
   considerAttendance(person, firm) {
-    if (!person.alive || person.employer !== firm.id || !firm.active) return false;
+    if (!person.alive || person.employer !== firm.id || !this.firmOpenOnDay(firm) || !this.scheduledForShift(person, firm)) return false;
     const baselineMissChance = 0.015 + person.stress * 0.1 + (1 - person.health) * 0.22 + (person.hungryDays ? 0.1 : 0);
     const observation = Object.freeze({
       kind: "attendance",
@@ -1229,6 +1334,7 @@ export class TownSimulation {
       const firm = this.firms[person.employer];
       firm.employees = firm.employees.filter((id) => id !== person.id);
       person.employer = -1;
+      person.rota = null;
     }
     this.friendIds(person).forEach((friendId) => {
       const friend = this.people[friendId];
@@ -1257,6 +1363,7 @@ export class TownSimulation {
   }
 
   transactionCapacity(firm) {
+    if (!this.firmOpenOnDay(firm)) return 0;
     const capacity = firm.employees.reduce((total, id) => {
       const person = this.people[id];
       if (!person.attended) return total;
@@ -1355,16 +1462,20 @@ export class TownSimulation {
   }
 
   maintainFirm(firm) {
-    if (!firm.active) return;
+    if (!firm.active || !this.firmOpenOnDay(firm)) return;
+    if (this.schedulesEnabled && firm.maintenanceUseMarkedDay !== this.day) return;
     const maintenanceContract = this.contracts.find((contract) => contract.use === "operations" && contract.buyerId === firm.id);
     if (!maintenanceContract) return;
-    const maintenanceDue = this.day - firm.lastMaintenanceDay >= MAINTENANCE_INTERVAL_DAYS;
+    const maintenanceDue = this.schedulesEnabled
+      ? firm.maintenanceUseDays - firm.lastMaintenanceUseCount >= MAINTENANCE_INTERVAL_DAYS
+      : this.day - firm.lastMaintenanceDay >= MAINTENANCE_INTERVAL_DAYS;
     if (!maintenanceDue && firm.operationalReadiness >= 1) return;
     if (firm.operatingSupplies >= 1) {
       const wasConstrained = firm.operationalReadiness < 1;
       firm.operatingSupplies -= 1;
       firm.operationalReadiness = 1;
       firm.lastMaintenanceDay = this.day;
+      firm.lastMaintenanceUseCount = firm.maintenanceUseDays;
       if (wasConstrained) this.note(firm, "maintenance supplies restored full operating capacity", "good");
       return;
     }
@@ -1372,7 +1483,19 @@ export class TownSimulation {
     firm.operationalReadiness = MISSED_MAINTENANCE_CAPACITY;
   }
 
+  markFirmUse(firm) {
+    if (!this.schedulesEnabled || !this.firmOpenOnDay(firm) || firm.maintenanceUseMarkedDay === this.day) return false;
+    firm.maintenanceUseMarkedDay = this.day;
+    firm.maintenanceUseDays += 1;
+    return true;
+  }
+
   requestTransaction(firm, person, purpose) {
+    if (!this.firmOpenOnDay(firm)) {
+      const nextOpening = this.nextOpeningDay(firm);
+      this.note(person, `${firm.name} was closed for the ${purpose}${nextOpening ? `; next opening D${nextOpening}` : ""}`, "bad");
+      return false;
+    }
     firm.attemptedTransactions += 1;
     if (firm.transactionsToday >= this.transactionCapacity(firm)) {
       firm.turnedAwayTransactions += 1;
@@ -1383,6 +1506,7 @@ export class TownSimulation {
       this.note(person, `${firm.name} had no staffed capacity for the ${description}`, "bad");
       return false;
     }
+    this.markFirmUse(firm);
     firm.transactionsToday += 1;
     return true;
   }
@@ -1459,10 +1583,17 @@ export class TownSimulation {
       if (firm.cash + 1e-9 < slot.fundingRequired) {
         return this.endInvestmentSlot(firm, slot, "withdrawn", `funding fell below the ${slot.fundingRequired.toFixed(2)} retained commitment`);
       }
-      if (this.day > slot.recruitmentDeadline) return this.endInvestmentSlot(firm, slot, "withdrawn", "the recruitment deadline passed without a hire");
+      const recruitmentExpired = this.schedulesEnabled
+        ? firm.openDayCount > slot.recruitmentDeadlineOpenDay
+        : this.day > slot.recruitmentDeadline;
+      if (recruitmentExpired) return this.endInvestmentSlot(firm, slot, "withdrawn", "the recruitment deadline passed without a hire");
       return slot;
     }
-    if (this.day < slot.evaluationDeadline) return slot;
+    const evaluatedWorker = this.people[slot.hiredCitizenId];
+    const evaluationComplete = this.schedulesEnabled
+      ? evaluatedWorker && evaluatedWorker.scheduledShiftsElapsed - slot.evaluationStartScheduledShift >= INVESTMENT_EVALUATION_DAYS
+      : this.day >= slot.evaluationDeadline;
+    if (!evaluationComplete) return slot;
     const retained = incomeSupportedStaff >= firm.employees.length;
     return this.endInvestmentSlot(
       firm,
@@ -1491,8 +1622,8 @@ export class TownSimulation {
       return null;
     }
     const expectedContribution = roundMoney(qualifying.reduce((sum, record) => sum + record.expectedContribution, 0) / qualifying.length);
-    const wage = Math.max(this.policy.minimumWage, firm.wage);
-    const requiredContribution = roundMoney(wage * STAFFING_REVENUE_BUFFER);
+    const wage = this.scheduledShiftWage(firm);
+    const requiredContribution = roundMoney(this.averageOpenDayWage(firm) * STAFFING_REVENUE_BUFFER);
     if (expectedContribution + 1e-9 < requiredContribution) {
       firm.latestStaffingReason = `${expectedContribution.toFixed(2)} expected contribution did not cover ${requiredContribution.toFixed(2)} buffered wage`;
       return null;
@@ -1516,6 +1647,8 @@ export class TownSimulation {
       status: "recruiting",
       approvedDay: this.day,
       recruitmentDeadline: this.day + INVESTMENT_RECRUITMENT_DAYS,
+      approvedOpenDayCount: firm.openDayCount,
+      recruitmentDeadlineOpenDay: firm.openDayCount + INVESTMENT_RECRUITMENT_DAYS,
       hiredCitizenId: null,
       hiredDay: null,
       evaluationDeadline: null,
@@ -1547,6 +1680,10 @@ export class TownSimulation {
   buy(person, firm, units, purpose) {
     this.reconcileInventoryBatches(firm);
     if (!person.alive || !firm?.active || firm.inventory < units) return 0;
+    if (!this.firmOpenOnDay(firm)) {
+      this.requestTransaction(firm, person, purpose);
+      return 0;
+    }
     const cost = roundMoney(firm.price * units);
     if (person.cash + 1e-9 < cost) {
       firm.priceRejectionsToday += 1;
@@ -1610,7 +1747,7 @@ export class TownSimulation {
   }
 
   productionPhase() {
-    this.firms.forEach((firm) => this.maintainFirm(firm));
+    if (!this.schedulesEnabled) this.firms.forEach((firm) => this.maintainFirm(firm));
     this.people.forEach((person) => {
       if (!person.alive) {
         person.attended = false;
@@ -1620,12 +1757,22 @@ export class TownSimulation {
       person.scarcityError = this.random() < person.stress ** 2 * 0.24;
       if (person.employer < 0) return void (person.attended = false);
       const firm = this.firms[person.employer];
+      if (!this.firmOpenOnDay(firm) || !this.scheduledForShift(person, firm)) return void (person.attended = false);
+      person.scheduledShiftsElapsed += 1;
       this.considerAttendance(person, firm);
-      this.applyWorkplaceLearning(person, firm);
+      if (person.attended) {
+        person.scheduledShiftsWorked += 1;
+        this.applyWorkplaceLearning(person, firm);
+      }
+    });
+    if (this.schedulesEnabled) this.firms.forEach((firm) => {
+      if (!this.firmOpenOnDay(firm)) return;
+      if (firm.employees.some((id) => this.people[id]?.alive && this.people[id].attended)) this.markFirmUse(firm);
+      this.maintainFirm(firm);
     });
     this.firms.forEach((firm) => this.accrueKnowledgeCapacity(firm));
     this.firms.forEach((firm) => {
-      if (!firm.active || firm.production !== "direct") return;
+      if (!this.firmOpenOnDay(firm) || firm.production !== "direct") return;
       const produced = firm.employees.reduce((sum, id) => {
         const person = this.people[id];
         return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) * firm.operationalReadiness : 0);
@@ -1648,13 +1795,13 @@ export class TownSimulation {
   }
 
   haulageCapacity(carrier = this.firms.find((firm) => firm.active && firm.archetypeId === "haulage")) {
-    if (!carrier?.active) return 0;
+    if (!carrier?.active || !this.firmOpenOnDay(carrier)) return 0;
     const attendingWorkers = carrier.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
     return Math.floor(attendingWorkers * TRANSPORT_CAPACITY_PER_WORKER * carrier.operationalReadiness);
   }
 
   processConstructionInputs(firm) {
-    if (!firm.active || !firm.processingPerWorker) return 0;
+    if (!this.firmOpenOnDay(firm) || !firm.processingPerWorker) return 0;
     const attendingWorkers = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
     const remainingCapacity = Math.max(0, firm.processingCapacityToday - firm.processedToday);
     const units = Math.min(Math.floor(firm.inputInventory), remainingCapacity);
@@ -1734,8 +1881,21 @@ export class TownSimulation {
       contract.requestedToday = contract.use === "construction-project"
         ? Number(Boolean(housingProject))
         : Math.min(dailyLimit, Math.max(0, Math.ceil(targetStock - buyerStock)));
-      const available = Math.floor(supplier.inventory);
       const hauled = this.requiresHaulage(contract);
+      const closedFirm = !this.firmOpenOnDay(supplier)
+        ? supplier
+        : !this.firmOpenOnDay(buyer)
+          ? buyer
+          : hauled && carrier && !this.firmOpenOnDay(carrier) ? carrier : null;
+      if (closedFirm) {
+        contract.shortfallToday = contract.requestedToday;
+        contract.shortfallCauseToday = `${closedFirm.name} closed`;
+        contract.limitingFirmId = closedFirm.id;
+        const nextOpening = this.nextContractOpening(contract);
+        if (contract.requestedToday > 0) this.note(buyer, `${closedFirm.name} was closed, so ${contract.requestedToday} ${PRODUCTS[contract.product].unit}${contract.requestedToday === 1 ? "" : "s"} remained undelivered${nextOpening ? `; next shared opening D${nextOpening}` : ""}`, "bad");
+        return;
+      }
+      const available = Math.floor(supplier.inventory);
       const transportUnitLoad = hauled ? this.haulageUnitLoad(contract) : 0;
       const transportUnitFee = hauled && carrier ? carrier.price : 0;
       const supplierUnitPrice = hauled && carrier ? roundMoney(Math.max(0.01, contract.unitPrice - carrier.basePrice)) : contract.unitPrice;
@@ -1756,6 +1916,9 @@ export class TownSimulation {
         const paid = canSettleExactly ? this.transfer(buyer, supplier, cost, { exact: true }) : 0;
         const freightPaid = paid === cost && transportFee > 0 ? this.transfer(buyer, carrier, transportFee, { exact: true }) : 0;
         if (paid === cost && freightPaid === transportFee) {
+          this.markFirmUse(supplier);
+          this.markFirmUse(buyer);
+          if (hauled && carrier) this.markFirmUse(carrier);
           this.takeFirmInventory(supplier, units);
           if (contract.use === "operations") buyer.operatingSupplies += units;
           else if (contract.use === "construction-project") {
@@ -1788,6 +1951,7 @@ export class TownSimulation {
             contract.transportLoadToday = transportLoad;
             contract.transportFeeToday = freightPaid;
           }
+          if (this.schedulesEnabled) [supplier, buyer, ...(hauled && carrier ? [carrier] : [])].forEach((firm) => this.maintainFirm(firm));
           const unit = PRODUCTS[contract.product].unit;
           const quantity = `${units} ${unit}${units === 1 ? "" : "s"}`;
           this.ledger(buyer, { direction: "out", amount: paid, text: `${quantity} from ${supplier.name}`, before: buyerBefore });
@@ -1844,8 +2008,9 @@ export class TownSimulation {
   payrollPhase() {
     const taxRate = this.policy.taxRate / 100;
     this.firms.forEach((firm) => {
+      if (!this.firmOpenOnDay(firm)) return;
       const attendees = firm.employees.map((id) => this.people[id]).filter((person) => person.alive && person.attended);
-      const wage = Math.max(this.policy.minimumWage, firm.wage);
+      const wage = this.scheduledShiftWage(firm);
       const compensation = attendees.map((person) => ({
         person,
         decision: person.id === firm.owner ? this.ownerWageDecision(firm, person) : { draw: true, reason: "employee wage for attended work" },
@@ -1912,7 +2077,7 @@ export class TownSimulation {
   }
 
   foodPhase() {
-    const foodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food").sort((a, b) => a.price - b.price);
+    const foodFirms = this.firms.filter((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "food").sort((a, b) => a.price - b.price);
     this.foodAccessOrder().forEach((person) => {
       person.socialToday = false;
       person.socialVenueToday = null;
@@ -2028,7 +2193,7 @@ export class TownSimulation {
   }
 
   housingPhase() {
-    const housing = this.firms.find((firm) => firm.active && firm.sector === "housing");
+    const housing = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "housing");
     if (!housing) return;
     this.people.forEach((person) => {
       if (!person.alive) return;
@@ -2105,11 +2270,11 @@ export class TownSimulation {
   }
 
   personalPhase() {
-    const café = this.firms.find((firm) => firm.active && firm.sector === "service" && firm.inventory >= 1);
-    const makers = this.firms.find((firm) => firm.active && firm.sector === "goods" && firm.inventory >= 1);
-    const apothecary = this.firms.find((firm) => firm.active && firm.archetypeId === "apothecary" && firm.inventory >= 1);
-    const school = this.firms.find((firm) => firm.active && firm.archetypeId === "school" && firm.inventory >= 1);
-    const clinic = this.firms.find((firm) => firm.active && firm.archetypeId === "clinic" && firm.inventory >= 1);
+    const café = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "service" && firm.inventory >= 1);
+    const makers = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "goods" && firm.inventory >= 1);
+    const apothecary = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.archetypeId === "apothecary" && firm.inventory >= 1);
+    const school = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.archetypeId === "school" && firm.inventory >= 1);
+    const clinic = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.archetypeId === "clinic" && firm.inventory >= 1);
     this.people.forEach((person) => {
       if (!person.alive) return;
       const receivedClinicalCare = this.considerClinicalCare(person, clinic);
@@ -2397,9 +2562,13 @@ export class TownSimulation {
       if (paid) this.ledger(person, { direction: "in", amount: paid, text: "support from treasury", before });
     });
 
-    this.firms.forEach((firm) => this.prepareFirmSettlement(firm));
+    if (this.schedulesEnabled && calendarForDay(this.day).weekdayIndex === 6) {
+      this.firms.filter((firm) => firm.active).forEach((firm) => this.reviewOwnerPrice(firm));
+    }
+    const operatingFirms = this.firms.filter((firm) => this.firmOpenOnDay(firm));
+    operatingFirms.forEach((firm) => this.prepareFirmSettlement(firm));
     this.runJobMarket();
-    this.firms.forEach((firm) => this.finishFirmSettlement(firm));
+    operatingFirms.forEach((firm) => this.finishFirmSettlement(firm));
     this.decayRelationships();
     this.people.forEach((person) => {
       if (!person.alive) return;
@@ -2457,7 +2626,7 @@ export class TownSimulation {
   }
 
   nextOperatingNeed(firm) {
-    const wage = Math.max(this.policy.minimumWage, firm.wage);
+    const wage = this.averageOpenDayWage(firm);
     const payroll = wage * Math.max(1, firm.employees.length);
     const inputs = this.contracts
       .filter((contract) => contract.active && contract.buyerId === firm.id)
@@ -2727,7 +2896,8 @@ export class TownSimulation {
   }
 
   reviewOwnerPrice(firm) {
-    if (this.day % PRICE_REVIEW_DAYS !== 0) return false;
+    const reviewDue = this.schedulesEnabled ? calendarForDay(this.day).weekdayIndex === 6 : this.day % PRICE_REVIEW_DAYS === 0;
+    if (!reviewDue || firm.ownerDecision.priceDay === this.day) return false;
     const owner = this.people[firm.owner];
     const window = firm.pricingWindow;
     const previousPrice = firm.price;
@@ -2889,7 +3059,7 @@ export class TownSimulation {
   }
 
   prepareFirmSettlement(firm) {
-    if (!firm.active) return;
+    if (!this.firmOpenOnDay(firm)) return;
     this.archiveStaffingDemand(firm);
     firm.pricingWindow.unitsSold += firm.unitsSold;
     firm.pricingWindow.revenue += firm.sales;
@@ -2897,7 +3067,7 @@ export class TownSimulation {
     firm.pricingWindow.priceRejections += firm.priceRejectionsToday;
     firm.pricingWindow.turnedAway += firm.turnedAwayTransactions;
     this.reviewOwnerPrice(firm);
-    const wage = Math.max(this.policy.minimumWage, firm.wage);
+    const wage = this.averageOpenDayWage(firm);
     const netSales = Math.max(0, firm.sales - firm.inputCosts);
     const revenueSample = firm.sector === "housing" ? (firm.sales > 0 ? netSales / RENT_INTERVAL_DAYS : null) : netSales;
     if (revenueSample !== null) firm.revenueEMA = firm.revenueEMA * 0.72 + revenueSample * 0.28;
@@ -2924,7 +3094,7 @@ export class TownSimulation {
   }
 
   finishFirmSettlement(firm) {
-    if (!firm.active) return;
+    if (!this.firmOpenOnDay(firm)) return;
     if (this.random() < (this.policy.shockRisk / 100) * 0.025) {
       this.transfer(firm, this.government, Math.min(firm.cash, 12 + this.random() * 22));
       firm.trouble += 1;
@@ -2952,6 +3122,21 @@ export class TownSimulation {
 
   planningPhase() {
     this.expirePerishableInventory();
+    if (this.schedulesEnabled) Object.entries(this.pendingFormations).forEach(([archetypeId, pending]) => {
+      const archetype = this.firmArchetype(archetypeId);
+      if (!archetype || !this.archetypeOpenOnDay(archetype)) return;
+      const firm = this.foundFirm(archetype, pending.evidence);
+      if (firm) {
+        const history = this.opportunityHistory.find((entry) => entry.sequence === pending.historySequence);
+        if (history) history.foundedInstanceId = firm.instanceId;
+      }
+      delete this.pendingFormations[archetypeId];
+    });
+    if (this.schedulesEnabled) this.firms.forEach((firm) => {
+      if (!this.firmOpenOnDay(firm) || firm.lastOpenDay === this.day) return;
+      firm.openDayCount += 1;
+      firm.lastOpenDay = this.day;
+    });
   }
 
   isExtinct() {
@@ -2982,6 +3167,12 @@ export class TownSimulation {
     if (this.firms.some((firm, id) => firm.id !== id)) throw new Error("Firm entity IDs must remain stable array references");
     if (new Set(this.firms.map((firm) => firm.instanceId)).size !== this.firms.length) throw new Error("Firm instance identities must remain unique");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
+    if (this.schedulesEnabled && this.people.some((person) => person.employer >= 0 && (
+      person.rota?.firmId !== person.employer
+      || person.rota.weekdayIndices.length !== 5
+      || person.rota.weekdayIndices.some((weekday) => !this.firms[person.employer].openWeekdays.includes(weekday))
+    ))) throw new Error("An employed citizen must have a valid five-shift rota");
+    if (this.people.some((person) => person.employer < 0 && person.rota !== null)) throw new Error("An unemployed citizen cannot retain an active rota");
     this.firms.filter((firm) => this.isPerishable(firm.sells)).forEach((firm) => {
       const batchTotal = firm.inventoryBatches.reduce((total, batch) => total + batch.quantity, 0);
       if (Math.abs(batchTotal - firm.inventory) > 1e-6) throw new Error(`Perishable inventory batches do not reconcile for ${firm.name}`);
@@ -3054,6 +3245,7 @@ export class TownSimulation {
           load: carrier?.transportLoadToday ?? 0,
         };
       })(),
+      schedulesEnabled: this.schedulesEnabled,
       citizenPolicy: this.policyMetadata(),
       controlHistory: this.controlHistory.map((entry) => ({ ...entry })),
       townStage,

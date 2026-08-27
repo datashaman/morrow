@@ -26,7 +26,8 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Named individual agents with heterogeneous starting conditions
 - Firms with sectors, workers, cash, inventory, products, input costs, prices, wages, and owners
 - A treasury that receives taxes and redistributes support
-- Agriculture, paid finite haulage, supply contracts and procurement, production, payroll, food, housing, discretionary activity, and settlement
+- A deterministic civil calendar, configured business openings, stable five-shift worker rotas, agriculture, paid finite haulage, supply contracts and procurement, production, payroll, food, housing, discretionary activity, and settlement
+- Dated perishable produce and food with FIFO use, expiry, and attributable waste
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Funded employment opportunities backed by attributable demand and retained firm cash, without an employment floor or guaranteed job
 - Hunger, bounded self-care and clinical treatment, health, stress, scarcity errors, arrears, eviction, rehousing, and death

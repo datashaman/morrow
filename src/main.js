@@ -18,6 +18,7 @@ import {
 import { TownSimulation } from "./simulation.js";
 import { playbackPresentation } from "./playback-presentation.js";
 import { formatTemporalRecord } from "./civil-time.js";
+import { firmScheduleEvidence } from "./schedule-presentation.js";
 
 const app = document.querySelector("#app");
 app.innerHTML = `
@@ -141,7 +142,7 @@ app.innerHTML = `
   </section>
 `;
 
-const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true, transportEnabled: true });
+const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true, transportEnabled: true, schedulesEnabled: true });
 let selected = simulation.people.findIndex((person) => person.name === "Sizwe");
 let selectedFirm = 0;
 let paused = false;
@@ -454,11 +455,20 @@ function updateInterface() {
   const operatingState = `${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.sector === "housing" ? `${simulation.housingOccupancy()}/${firm.dwellingCapacity} dwellings occupied` : firm.sector === "transport" ? `${firm.transportLoadToday}/${firm.transportCapacityToday} freight load used today` : firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""}${knowledgeCapacity} · ${money(firm.revenueEMA)} smoothed net income`;
   const ownerChoice = `Price ${firm.ownerDecision.priceDecision}${firm.ownerDecision.priceDay ? ` on D${firm.ownerDecision.priceDay}` : ""} at ${price(firm.ownerDecision.price)}: ${firm.ownerDecision.priceReason}. Wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason}. Capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason}. ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason}. ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}.`;
   const perishableState = describePerishableInventory(firm, PRODUCTS, simulation.day);
+  const schedule = firmScheduleEvidence({
+    firm,
+    people: simulation.people,
+    day: simulation.day,
+    open: simulation.firmOpenOnDay(firm),
+    nextOpeningDay: simulation.nextOpeningDay(firm),
+    shiftWage: simulation.scheduledShiftWage(firm),
+  });
+  const scheduleState = `${schedule.currentState}${schedule.nextOpening ? ` · next opening D${schedule.nextOpening}` : ""} · ${schedule.openingPattern} · ${schedule.serviceWindow} service · ${schedule.scheduledWorkers} scheduled, ${schedule.attendees} attending · ${money(schedule.shiftWage)} per shift, ${money(schedule.weeklyGross)} five-shift gross`;
   elements["firm-selection-state"].innerHTML = `<i class="status ${firm.status}">${firm.status}</i>`;
   elements["firm-detail"].innerHTML = `
     <header class="firm-detail-heading"><div><p class="eyebrow">Selected economic actor</p><h3>${firmInstanceLabel(firm, simulation.firms)}</h3></div><span>${lifecycle}</span></header>
     <div class="firm-detail-grid">
-      <section><h4>Identity and lifecycle</h4><p>${operatingState}</p>${perishableState ? `<p>${perishableState}</p>` : ""}</section>
+      <section><h4>Identity and lifecycle</h4><p>${operatingState}</p><p>${scheduleState}</p>${perishableState ? `<p>${perishableState}</p>` : ""}</section>
       <section><h4>Product pipeline and contracts</h4><p>${describePipeline(firm, PRODUCTS)}</p>${firm.processingPerWorker ? `<p class="${firm.processingShortfallToday ? "shortfall" : ""}">${describeProcessing(firm, PRODUCTS)}</p>` : ""}<ul class="contract-list">${contracts.length ? contracts.map((contract) => `<li class="${contract.shortfallToday ? "shortfall" : ""}">${describeContract(contract, PRODUCTS)}</li>`).join("") : "<li>No supply contracts.</li>"}</ul></section>
       <section><h4>Staffing evidence</h4><dl><div><dt>Headcount</dt><dd>${staffing.headcount}</dd></div><div><dt>Latest 2-of-3 gate</dt><dd>${staffing.demand}</dd></div><div><dt>Funded slot</dt><dd>${staffing.slot}</dd></div><div><dt>Latest reason</dt><dd>${staffing.reason}</dd></div></dl></section>
       <section><h4>Owner choices</h4><p class="owner-choice">${ownerChoice}</p></section>
@@ -628,6 +638,8 @@ function drawTown() {
 
   mapFirms.forEach((firm) => {
     const landmark = landmarks.get(firm.id);
+    context.save();
+    if (firm.active && !simulation.firmOpenOnDay(firm)) context.globalAlpha = 0.42;
     if (firm.id === selectedFirm) {
       context.fillStyle = colors.accent;
       context.fillRect(landmark.centerX - landmark.width / 2 - 3, landmark.centerY - landmark.height / 2 - 3, landmark.width + 6, landmark.height + 6);
@@ -640,6 +652,7 @@ function drawTown() {
     context.fillText(landmark.label, landmark.centerX, landmark.centerY - 5);
     context.font = "500 11px system-ui";
     context.fillText(landmarkMeta(firm), landmark.centerX, landmark.centerY + 15);
+    context.restore();
   });
 
   const treasuryX = simulation.government.x * width;

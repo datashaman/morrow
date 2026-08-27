@@ -89,6 +89,10 @@ Formats domain-owned formation evidence and blockers for the firm panel. It does
 
 Resolves stable current or historical firm selection and formats the selected firm's staffing target, latest three-day demand evidence, retained funding, active investment slot, and latest reason. It owns no hiring or funding decisions.
 
+### `src/schedule-presentation.js`
+
+Formats configuration-owned opening weekdays and domain-owned rota, attendance, next-opening, service-window, and scheduled-wage evidence for the selected-firm dossier. Calendar, rota assignment, access, payroll, and recurrence decisions remain in the simulation.
+
 ### `src/employment-evaluation.ts`
 
 Runs paired fixed-seed towns with the shared employment intervention disabled and enabled. It reports completed-day work, hiring, business, assistance, hardship, health, mortality, first-wage, slot, and conservation evidence and applies explicit gameplay acceptance gates. `scripts/evaluate-employment.ts` is the concise text and JSON command-line adapter.

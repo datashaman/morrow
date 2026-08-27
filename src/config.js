@@ -84,6 +84,34 @@ export const CLINIC_TREATMENT_THRESHOLD = 0.38;
 export const CLINIC_TREATMENT_RECOVERY = 0.18;
 export const CLINIC_TREATMENT_RESERVE_DAYS = 1;
 export const DEFAULT_LATENT_FIRM_NAMES = Object.freeze(["Common Café", "Green Basket", "Morrow Apothecary", "Morrow School", "Morrow Materials", "Morrow Clinic", "Morrow Builders"]);
+export const FIRM_OPEN_WEEKDAYS = Object.freeze({
+  "housing-provider": Object.freeze([0, 1, 2, 3, 4]),
+  toolmaker: Object.freeze([0, 1, 2, 3, 4]),
+  school: Object.freeze([0, 1, 2, 3, 4]),
+  "materials-yard": Object.freeze([0, 1, 2, 3, 4]),
+  builder: Object.freeze([0, 1, 2, 3, 4]),
+  "everyday-grocer": Object.freeze([0, 1, 2, 3, 4, 5]),
+  "premium-grocer": Object.freeze([0, 1, 2, 3, 4, 5]),
+  apothecary: Object.freeze([0, 1, 2, 3, 4, 5]),
+  haulage: Object.freeze([0, 1, 2, 3, 4, 5]),
+  farm: Object.freeze([0, 1, 2, 3, 4, 5]),
+  cafe: Object.freeze([2, 3, 4, 5, 6]),
+  clinic: Object.freeze([0, 1, 2, 3, 4, 5, 6]),
+});
+export const FIRM_SERVICE_WINDOWS = Object.freeze({
+  school: "Workday",
+  clinic: "Workday",
+  "everyday-grocer": "Evening",
+  "premium-grocer": "Evening",
+  "housing-provider": "Evening",
+  cafe: "Evening",
+  apothecary: "Evening",
+  toolmaker: "Workday",
+  "materials-yard": "Workday",
+  builder: "Workday",
+  haulage: "Workday",
+  farm: "Workday",
+});
 
 export const NAMES = [
   "Amina", "Jonah", "Thandi", "Leo", "Maya", "Kwame", "Sofia", "Noah",

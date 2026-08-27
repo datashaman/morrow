@@ -43,7 +43,7 @@ test("temporal records format and sort by day, phase, then local sequence", () =
   assert.deepEqual([...records].sort(compareTemporalNewest), [records[2], records[0], records[1], records[3]]);
 });
 
-test("Planning advances only the phase and consumes no simulation randomness", () => {
+test("first-day Planning advances deterministically without a clock-only random draw", () => {
   const planned = new TownSimulation({ seed: 42 });
   const control = new TownSimulation({ seed: 42 });
   const money = planned.totalMoney();

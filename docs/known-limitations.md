@@ -19,7 +19,7 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 ## Economic simplifications
 
 - Owners adjust prices through one bounded weekly heuristic. There is no inflation, bargaining, competitor forecasting, promotion, product differentiation, price discrimination, explicit demand curve, or wage competition. Food quality, productivity, wages, and health-recovery multipliers remain fixed and uncalibrated.
-- The civil calendar identifies weeks, weekdays, and four daily blocks, but firms do not yet have opening days, staff rotas, closure-day access rules, or activity-time budgets. Wages and food still operate daily while rent is billed every seven days. This is an internally balanced gameplay calendar, not a claim about real payment schedules.
+- Firms have fixed opening weekdays, public-service windows, and deterministic five-shift rotas, but owners cannot alter hours, workers cannot negotiate schedules, and citizens do not yet have shared activity-time budgets. There are no split shifts, overtime, paid leave, sick leave, holidays, shift swaps, multiple jobs, commuting, childcare, or claims that the configured week is empirically correct.
 - There is no banking, saving account, debt, credit, interest, insurance, or negative balance. Insolvency is an administrative cash-runway rule rather than a legal bankruptcy process.
 - All money is inside one closed town. There is no external trade, remittance, investment, monetary creation, or destruction.
 - A “shock” moves firm cash to the treasury. It behaves more like a fine or emergency levy than a destructive loss.

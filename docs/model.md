@@ -17,9 +17,28 @@ The simulation has a deterministic civil calendar independent of wall-clock time
 | Personal time | Evening |
 | Settlement | Overnight |
 
-Planning is initially a deterministic boundary: it changes no economic state and consumes no seeded randomness. The day counter increments during settlement, so a full day requires eight calls to `step()`. Reset starts at week 1, Monday morning, Planning. Extinction remains terminal.
+Planning is a deterministic start-of-day boundary. It expires perishable batches, opens any already-approved pending firm whose configured morning has arrived, and projects the day's firm openings and rota coverage without consuming seeded randomness merely to advance the clock. The day counter increments during settlement, so a full day requires eight calls to `step()`. Reset starts at week 1, Monday morning, Planning. Extinction remains terminal.
 
 Transactions, life events, policy decisions, learning records, and firm-effect histories store the civil-time block, canonical processing phase, phase index, and an entity-local sequence alongside the day. Week and weekday are derived from the day instead of being duplicated in every record. Histories use day, phase order, and sequence for deterministic ordering and display timestamps such as `W2 Tue · Evening · Food`.
+
+### Firm calendars and worker rotas
+
+The browser enables schedules. Headless callers can disable them for calendar-only compatibility runs. Configuration fixes the opening weekdays and public-service window:
+
+| Firms | Opening weekdays | Public/service window |
+|---|---|---|
+| HomeWorks, Makers Guild, Morrow School, Morrow Materials, Morrow Builders | Monday–Friday | Evening for housing; Workday otherwise |
+| Harvest Foods, Green Basket, Morrow Apothecary, Morrow Haulage, Morrow Fields | Monday–Saturday | Evening for grocers and apothecary; Workday otherwise |
+| Common Café | Wednesday–Sunday | Evening |
+| Morrow Clinic | Every day | Workday |
+
+Each employment spell receives an immutable five-weekday rota bounded by its firm's openings. Assignment chooses the least-covered opening days, then uses weekday and citizen identity as deterministic tie-breakers. Existing rotas never move when another worker joins. A dismissal, death, or closure removes that worker's coverage; rehiring creates a newly sequenced rota.
+
+Only scheduled workers receive an attendance choice. An unscheduled day creates no absence, reliability loss, wage, or workplace learning. One attended scheduled shift establishes staffed capacity for that firm's later same-day operations and service. The scheduled-shift base wage is `max(configured wage, policy minimum) × 7 / 5`; five fully attended shifts therefore preserve seven daily-equivalent base wages before ordinary reliability, payroll-ratio, tax, owner-waiver, and cent-rounding effects. Staffing and solvency use weekly-equivalent payroll per open day, while an investment reserve holds six full scheduled-shift wages.
+
+A closed firm retains its cash, inventory, contracts, and obligations but performs no production, procurement, delivery, public transaction, scheduled shift, payroll, workplace learning, or ordinary firm settlement. A blocked contract records the closed limiting firm and next shared opening rather than misclassifying closure as missing stock, staffing, or affordability. Latent-firm observations and formation occur only on that archetype's open days.
+
+Recurrence bases are explicit. Perishable ageing, health, support, relationships, mortality, receivership, essential re-entry, and housing deterioration use calendar days. Demand and staffing evidence, vacancy maturity, recruitment, pricing evidence, distress, financing, distributions, and ordinary solvency advance only on firm open days. Worker evaluation advances by scheduled shifts. Rent remains due Monday evening, and owner price review occurs Sunday night. Maintenance wear advances only on an open day with attended capacity or a completed transaction or delivery.
 
 Policy sliders commit on release, and neural personal-time control changes immediately. Every value change records the current day and phase, setting, and before/after value in a complete newest-first run history. Repeating the current value creates no duplicate. Reset begins a fresh history while retaining the currently selected policy configuration and controller mode as the new run's starting state.
 
@@ -30,7 +49,7 @@ Policy sliders commit on release, and neural personal-time control changes immed
 There are 40 named people. Each person carries:
 
 - Economic state: cash, employer, current job application, seller references, food reserve, housing status, rent arrears, and transaction ledger
-- Capacity and mortality: skill, versioned general/retail/inventory knowledge, complete learning history, reliability, attendance, missed work, health, living status, critical-health duration, and death day
+- Capacity and mortality: skill, versioned general/retail/inventory knowledge, complete learning history, reliability, stable employment-spell rota, scheduled and attended shift counts, missed work, health, living status, critical-health duration, and death day
 - Psychology: stress, current scarcity error, Maslow-inspired needs, and current focus
 - Motivation: seven stable, seed-derived weights for comfort, connection, mastery, security, food quality, planning, and avoidance plus a complete in-memory policy-decision history
 - Social state: symmetric relationships with strength and last-contact state, social capacity, and last social contact day
