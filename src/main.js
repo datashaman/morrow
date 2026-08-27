@@ -17,6 +17,7 @@ import {
 } from "./map-presentation.js";
 import { TownSimulation } from "./simulation.js";
 import { playbackPresentation } from "./playback-presentation.js";
+import { formatTemporalRecord } from "./civil-time.js";
 
 const app = document.querySelector("#app");
 app.innerHTML = `
@@ -200,7 +201,7 @@ function renderControlHistory(history) {
     const after = entry.type === "policy" ? entry.after : entry.after ? "on" : "off";
     const time = document.createElement("time");
     const change = document.createElement("span");
-    time.textContent = `D${entry.day} · ${entry.phaseName}`;
+    time.textContent = formatTemporalRecord(entry);
     change.textContent = `${label}: ${before} → ${after}`;
     item.append(time, change);
     return item;
@@ -259,8 +260,8 @@ function renderActivity(entity, filter, stream) {
     const item = document.createElement("li");
     item.className = entry.type === "transaction" ? entry.direction : `event ${entry.kind}`;
     item.innerHTML = entry.type === "transaction"
-      ? `<time>D${entry.day}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
-      : `<time>D${entry.day}</time><span>${entry.text}</span><b>Life event</b>`;
+      ? `<time>${formatTemporalRecord(entry)}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
+      : `<time>${formatTemporalRecord(entry)}</time><span>${entry.text}</span><b>Life event</b>`;
     return item;
   }));
   if (!activity.length) {
@@ -289,7 +290,7 @@ function renderDecisions(entity, stream) {
     const shadow = decision.shadow
       ? ` · ${neuralLabel}: ${actionName(decision, decision.shadow.action)}${decision.shadow.diverged ? " (diverged from motivation fallback)" : " (agreed with motivation fallback)"} · unmasked ${decision.shadow.unmaskedPreference}${decision.shadow.invalidPreferenceBeforeMask ? " (illegal before masking)" : ""}`
       : "";
-    item.innerHTML = `<time>D${decision.day} · ${decision.phase}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""}${shadow} · ${decision.policy}</small>`;
+    item.innerHTML = `<time>${formatTemporalRecord(decision)}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""}${shadow} · ${decision.policy}</small>`;
     return item;
   }));
   if (!entity.decisions.length) {
@@ -322,7 +323,7 @@ function renderKnowledge(person) {
   const previousScrollTop = stream.scrollTop;
   stream.replaceChildren(...person.learningHistory.map((record) => {
     const item = document.createElement("li");
-    item.innerHTML = `<time>D${record.day} · ${record.phase}</time><b>${record.domain[0].toUpperCase()}${record.domain.slice(1)} knowledge</b><span>${record.sourceName}: ${percent(record.before)} → ${percent(record.after)}</span><small>${record.rule}</small>`;
+    item.innerHTML = `<time>${formatTemporalRecord(record)}</time><b>${record.domain[0].toUpperCase()}${record.domain.slice(1)} knowledge</b><span>${record.sourceName}: ${percent(record.before)} → ${percent(record.after)}</span><small>${record.rule}</small>`;
     return item;
   }));
   if (!person.learningHistory.length) {
@@ -372,7 +373,7 @@ function updateInterface() {
     ? (person.rentSeller >= 0 ? `last housing: housed through ${simulation.firms[person.rentSeller].name}` : "last housing: housed")
     : (person.rentSeller >= 0 ? `last housing: unhoused; previous provider ${simulation.firms[person.rentSeller].name}` : "last housing: unhoused");
 
-  elements.clock.textContent = `Day ${state.day} · ${state.phaseName}${playback.clockSuffix}`;
+  elements.clock.textContent = `W${state.calendar.week} ${state.calendar.weekday} · ${state.block} · ${state.phaseName}${playback.clockSuffix}`;
   elements["neural-control"].checked = state.citizenPolicy.mode === "neural";
   elements["policy-status"].textContent = `${state.citizenPolicy.mode === "neural" ? "Neural controls personal time" : "Motivation policy controls all choices"} · ${state.citizenPolicy.weightsVersion} · gate v${state.citizenPolicy.gateVersion} passed`;
   renderControlHistory(state.controlHistory);

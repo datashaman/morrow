@@ -1,12 +1,6 @@
-export const PHASES = [
-  "Production",
-  "Supply & procurement",
-  "Payroll",
-  "Food shopping",
-  "Housing & bills",
-  "Personal time",
-  "Settlement",
-];
+import { PROCESSING_PHASES } from "./civil-time.js";
+
+export const PHASES = PROCESSING_PHASES;
 
 export const PRODUCTS = {
   produce: { name: "Farm produce", unit: "crate" },

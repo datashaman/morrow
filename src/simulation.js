@@ -80,6 +80,7 @@ import {
 import { createDefaultCitizenPolicy } from "./neural-runtime.ts";
 import { createRandom } from "./random.js";
 import { inferTownStage } from "./town-stage.js";
+import { calendarForDay, PHASE_BLOCKS, temporalMetadata } from "./civil-time.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
@@ -145,6 +146,7 @@ export class TownSimulation {
       priceRejectionsToday: 0,
       staffingDemandToday: { consumerUnits: 0, contractUnits: 0, productionUnits: 0, evidence: [] },
       staffingDemandHistory: [],
+      staffingDemandSequence: 0,
       staffingDemandArchivedDay: null,
       incomeSupportedTarget: targetStaff,
       latestStaffingReason: "initial staffing",
@@ -247,6 +249,7 @@ export class TownSimulation {
           inventory: 0,
         },
         learningHistory: [],
+        learningSequence: 0,
         reliability: 0.55 + this.random() * 0.43,
         employer: -1,
         jobApplicationFirm: -1,
@@ -288,7 +291,7 @@ export class TownSimulation {
         decisionSequence: 0,
         decisions: [],
         ledger: [],
-        events: [{ day: 1, sequence: 1, text: "entered the town economy", kind: "neutral" }],
+        events: [{ day: 1, ...temporalMetadata(1, "Planning"), sequence: 1, text: "entered the town economy", kind: "neutral" }],
       };
     });
 
@@ -341,6 +344,7 @@ export class TownSimulation {
       day: this.day,
       phase: this.phase,
       phaseName: PHASES[this.phase],
+      ...temporalMetadata(this.day, this.phase),
       sequence: this.controlSequence,
       type,
       setting,
@@ -681,11 +685,22 @@ export class TownSimulation {
     this.formationArchetypeIds.map((archetypeId) => this.firmArchetype(archetypeId)).filter(Boolean).forEach((archetype) => {
       if (this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId)) return;
       const window = this.opportunityWindows[archetype.archetypeId];
-      window.push(Object.freeze({ day: this.day, potentialCustomers: this.opportunityDemandCount(archetype) }));
+      window.push(Object.freeze({
+        day: this.day,
+        ...temporalMetadata(this.day, "Settlement"),
+        sequence: this.opportunitySequence + 1,
+        potentialCustomers: this.opportunityDemandCount(archetype),
+      }));
       if (window.length > this.formationObservationDays()) window.shift();
       const evidence = this.opportunityEvidence(archetype, window);
       this.opportunitySequence += 1;
-      const history = { day: this.day, sequence: this.opportunitySequence, ...structuredClone(evidence), foundedInstanceId: null };
+      const history = {
+        day: this.day,
+        ...temporalMetadata(this.day, "Settlement"),
+        sequence: this.opportunitySequence,
+        ...structuredClone(evidence),
+        foundedInstanceId: null,
+      };
       this.opportunityHistory.unshift(history);
       const firm = this.foundFirm(archetype, evidence);
       if (firm) history.foundedInstanceId = firm.instanceId;
@@ -696,13 +711,14 @@ export class TownSimulation {
 
   note(person, text, kind = "neutral") {
     person.activitySequence += 1;
-    person.events.unshift({ day: this.day, sequence: person.activitySequence, text, kind });
+    person.events.unshift({ day: this.day, ...temporalMetadata(this.day, this.phase), sequence: person.activitySequence, text, kind });
   }
 
   ledger(person, { direction, amount, text, before }) {
     person.activitySequence += 1;
     person.ledger.unshift({
       day: this.day,
+      ...temporalMetadata(this.day, this.phase),
       sequence: person.activitySequence,
       direction,
       amount: roundMoney(amount),
@@ -719,7 +735,7 @@ export class TownSimulation {
     from.cash = roundMoney(from.cash - amount);
     to.cash = roundMoney(to.cash + amount);
     if (from.cash < -1e-9) throw new Error(`${from.name} was overdrawn`);
-    if (amount > 0) this.flows.push({ from: { kind: from.kind, id: from.id }, to: { kind: to.kind, id: to.id }, amount, phase: this.phase });
+    if (amount > 0) this.flows.push({ from: { kind: from.kind, id: from.id }, to: { kind: to.kind, id: to.id }, amount, phase: this.phase, ...temporalMetadata(this.day, this.phase) });
     this.flows = this.flows.slice(-40);
     return amount;
   }
@@ -1001,6 +1017,7 @@ export class TownSimulation {
     person.decisions.unshift({
       day: this.day,
       phase,
+      ...temporalMetadata(this.day, phase),
       sequence: person.decisionSequence,
       policy: decision.policy ?? this.citizenPolicy.id ?? "unknown",
       kind: observation.kind,
@@ -1119,9 +1136,12 @@ export class TownSimulation {
     const after = Math.round(clamp(nextValue) * 1_000_000) / 1_000_000;
     if (after <= before) return null;
     person.knowledgeProfile[domain] = after;
+    person.learningSequence += 1;
     const record = {
       day: this.day,
       phase,
+      ...temporalMetadata(this.day, phase),
+      sequence: person.learningSequence,
       source,
       sourceId,
       sourceName,
@@ -1236,8 +1256,11 @@ export class TownSimulation {
     const incrementalCapacity = this.staffingIncrementalCapacity(firm);
     const expectedUnits = Math.min(totalUnits * INVESTMENT_DEMAND_CAPTURE_RATE, incrementalCapacity);
     const unitContribution = Math.max(0, roundMoney(firm.price - this.staffingInputUnitCost(firm)));
+    firm.staffingDemandSequence += 1;
     const record = Object.freeze({
       day: this.day,
+      ...temporalMetadata(this.day, "Settlement"),
+      sequence: firm.staffingDemandSequence,
       ...structuredClone(firm.staffingDemandToday),
       totalUnits,
       incrementalCapacity,
@@ -1344,6 +1367,8 @@ export class TownSimulation {
     slot.attempts.push(Object.freeze({
       approval: slot.approvalCount,
       approvedDay: this.day,
+      ...temporalMetadata(this.day, "Settlement"),
+      sequence: slot.approvalCount,
       recruitmentDeadline: slot.recruitmentDeadline,
       expectedContribution,
       requiredContribution,
@@ -2728,6 +2753,8 @@ export class TownSimulation {
     this.finishFirmSettlement(firm);
   }
 
+  planningPhase() {}
+
   isExtinct() {
     return !this.people.some((person) => person.alive);
   }
@@ -2736,6 +2763,7 @@ export class TownSimulation {
     if (this.isExtinct()) return this.snapshot();
     this.flows = [];
     [
+      () => this.planningPhase(),
       () => this.productionPhase(),
       () => this.procurementPhase(),
       () => this.payrollPhase(),
@@ -2798,6 +2826,8 @@ export class TownSimulation {
       day: this.day,
       phase: this.phase,
       phaseName: PHASES[this.phase],
+      block: PHASE_BLOCKS[PHASES[this.phase]],
+      calendar: calendarForDay(this.day),
       totalMoney: this.totalMoney(),
       initialMoney: this.initialMoney,
       employed: this.people.filter((person) => person.alive && person.employer >= 0).length,

@@ -6,7 +6,8 @@ The project is a client-side Vite application with no server or persistent stora
 
 ```text
 src/config.js ─────────┐
-src/random.js ─────────┼──> src/simulation.js ──> state snapshots
+src/random.js ─────────┤
+src/civil-time.js ───────┤──> src/simulation.js ──> state snapshots
 src/citizen-policy.ts ─┘              │
                                       v
                                src/main.js
@@ -29,6 +30,10 @@ Use this module for starting parameters, not evolving state.
 ### `src/random.js`
 
 Creates an isolated seeded pseudorandom generator. Simulation code must use `this.random`; using `Math.random()` would break deterministic replay.
+
+### `src/civil-time.js`
+
+Owns the deterministic week and weekday projection, the eight canonical processing phases, their four civil-time blocks, temporal metadata, shared newest-first ordering, and browser timestamp formatting. It derives calendar labels from the simulation day and never reads wall-clock time or consumes simulation randomness.
 
 ### `src/simulation.js`
 

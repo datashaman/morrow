@@ -4,17 +4,22 @@ This document describes the implementation in `src/simulation.js`. It is descrip
 
 ## Time
 
-One simulated day has seven phases. `step()` executes the current phase and advances to the next.
+The simulation has a deterministic civil calendar independent of wall-clock time. Day 1 is Monday of week 1, day 7 is Sunday, and day 8 is Monday of week 2. Each day has four civil-time blocks and eight processing phases. `step()` executes the current phase and advances to the next.
 
-1. Production
-2. Supply and procurement
-3. Payroll
-4. Food shopping
-5. Housing and bills
-6. Personal time
-7. Settlement
+| Processing phase | Civil-time block |
+|---|---|
+| Planning | Morning |
+| Production | Workday |
+| Procurement | Workday |
+| Payroll | Workday |
+| Food | Evening |
+| Housing | Evening |
+| Personal time | Evening |
+| Settlement | Overnight |
 
-The day counter increments during settlement. A full day therefore requires seven calls to `step()`.
+Planning is initially a deterministic boundary: it changes no economic state and consumes no seeded randomness. The day counter increments during settlement, so a full day requires eight calls to `step()`. Reset starts at week 1, Monday morning, Planning. Extinction remains terminal.
+
+Transactions, life events, policy decisions, learning records, and firm-effect histories store the civil-time block, canonical processing phase, phase index, and an entity-local sequence alongside the day. Week and weekday are derived from the day instead of being duplicated in every record. Histories use day, phase order, and sequence for deterministic ordering and display timestamps such as `W2 Tue · Evening · Food`.
 
 Policy sliders commit on release, and neural personal-time control changes immediately. Every value change records the current day and phase, setting, and before/after value in a complete newest-first run history. Repeating the current value creates no duplicate. Reset begins a fresh history while retaining the currently selected policy configuration and controller mode as the new run's starting state.
 

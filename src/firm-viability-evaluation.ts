@@ -123,6 +123,7 @@ export function evaluateOptionalFirmRun({ seed, days, firms = DEFAULT_OPTIONAL_F
     const start = Object.fromEntries(targets.map((firm: any) => [firm.name, { cash: firm.cash, active: firm.active, status: firm.status }]));
     town.step();
     town.step();
+    town.step();
     const contracts = Object.fromEntries(targets.map((firm: any) => [firm.name, town.contracts.filter((contract: any) => contract.buyerId === firm.id).map((contract: any) => ({
       use: contract.use ?? "production",
       requested: contract.requestedToday,

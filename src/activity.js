@@ -1,3 +1,5 @@
+import { compareTemporalNewest } from "./civil-time.js";
+
 export function activityItems(person, filter = "all") {
   const transactions = person.ledger.map((entry) => ({ ...entry, type: "transaction" }));
   const events = person.events.map((entry) => ({ ...entry, type: "event" }));
@@ -7,5 +9,5 @@ export function activityItems(person, filter = "all") {
       ? events
       : [...transactions, ...events];
 
-  return entries.sort((a, b) => (b.sequence ?? 0) - (a.sequence ?? 0) || b.day - a.day);
+  return entries.sort(compareTemporalNewest);
 }

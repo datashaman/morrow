@@ -40,13 +40,13 @@ function evaluateRun(seed: number, days: number, knowledgeEnabled: boolean) {
   for (let elapsed = 0; elapsed < days && !town.isExtinct(); elapsed += 1) {
     for (let phase = 0; phase < PHASES.length; phase += 1) {
       town.step();
-      if (phase === 0) {
+      if (PHASES[phase] === "Production") {
         const capacity = groceryCapacity(town);
         actualCapacityPointDays += capacity.actual;
         scalarCounterfactualCapacityPointDays += capacity.scalarCounterfactual;
         grossKnowledgeBonusCapacityPointDays += capacity.grossKnowledgeBonus;
       }
-      if (phase === 3) {
+      if (PHASES[phase] === "Food") {
         groceryTransactions += sum(town.firms
           .filter((firm: any) => firm.active && firm.archetypeId === "everyday-grocer")
           .map((firm: any) => firm.transactionsToday));

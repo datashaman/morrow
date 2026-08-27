@@ -18,15 +18,15 @@ test("money remains inside the closed economy", () => {
 test("mid-run policy changes retain complete before-and-after control history", () => {
   const town = new TownSimulation({ seed: 42 });
   town.day = 12;
-  town.phase = 4;
+  town.phase = 5;
 
   town.setPolicy("supportRate", 60);
   town.setPolicy("supportRate", 60);
   town.setPolicy("minimumWage", 5.8);
 
   assert.deepEqual(town.controlHistory, [
-    { day: 12, phase: 4, phaseName: "Housing & bills", sequence: 2, type: "policy", setting: "minimumWage", before: 5, after: 5.8 },
-    { day: 12, phase: 4, phaseName: "Housing & bills", sequence: 1, type: "policy", setting: "supportRate", before: 35, after: 60 },
+    { day: 12, phase: 5, phaseName: "Housing", block: "Evening", processingPhase: "Housing", phaseIndex: 5, sequence: 2, type: "policy", setting: "minimumWage", before: 5, after: 5.8 },
+    { day: 12, phase: 5, phaseName: "Housing", block: "Evening", processingPhase: "Housing", phaseIndex: 5, sequence: 1, type: "policy", setting: "supportRate", before: 35, after: 60 },
   ]);
   assert.deepEqual(town.snapshot().controlHistory, town.controlHistory);
 });
@@ -665,6 +665,7 @@ test("a funded rent payment records auditable before and after balances", () => 
   sizwe.cash = rehousingCost + 0.5;
   sizwe.housed = false;
   sizwe.ledger = [];
+  town.phase = 5;
 
   town.housingPhase();
 
@@ -672,6 +673,9 @@ test("a funded rent payment records auditable before and after balances", () => 
   assert.equal(sizwe.cash, 0.5);
   assert.deepEqual(sizwe.ledger[0], {
     day: 1,
+    block: "Evening",
+    processingPhase: "Housing",
+    phaseIndex: 5,
     sequence: 2,
     direction: "out",
     amount: rehousingCost,
