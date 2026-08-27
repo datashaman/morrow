@@ -82,6 +82,38 @@ _Avoid_: Treasury support, loan, charity income
 A reciprocal friendship whose current strength is at least 0.75. It may unlock trusted interpersonal actions, but does not itself require or guarantee that either citizen takes them.
 _Avoid_: Any friendship, obligation, household
 
+**Romantic partnership**:
+An explicit, mutually accepted relationship between two adult citizens that is distinct from friendship and does not automatically create a household or birth. The initial lifecycle model permits at most one active romantic partnership per citizen.
+_Avoid_: Close friendship, household, automatic birth
+
+**Dependent citizen**:
+A named citizen in the infant, child, or student lifecycle stage who has needs and a complete history but cannot perform adult economic or relationship actions. A dependent becomes an adult after 168 calendar days and must have an explicit guardian while dependent.
+_Avoid_: Smaller adult, employee, household
+
+**Guardian**:
+A living adult citizen, or the treasury as a finite institutional fallback, authorized to make traced decisions and exact payments for a dependent citizen. Co-guardians retain separate finances, and guardianship continues independently of romantic partnership status.
+_Avoid_: Owner, pooled wallet, guaranteed provider
+
+**Parent**:
+An adult citizen recorded as one of the two participants in the joint birth decision that produced a citizen. Parentage is immutable lineage; it does not guarantee continuing guardianship, residence, care, or romantic partnership.
+_Avoid_: Guardian, household member, current partner
+
+**Care-weighted runway**:
+A guardian's cash divided by their own daily essential cost plus their allocated share of dependent food cost. Two living co-guardians each carry half of a shared dependent's modeled cost; a sole citizen guardian carries all of it. Costs covered by a dependent's restricted inheritance balance do not burden the guardian, but that balance never increases guardian cash or runway. This is a planning measure, not pooled cash or a split transaction.
+_Avoid_: Household balance, shared wallet, guaranteed care
+
+**Estate duty**:
+A mandatory transfer of 10% of every deceased citizen's cash estate to the treasury before the remainder is distributed to eligible heirs. It has no exemption or threshold in the initial lifecycle model and is an explicit Morrow policy for recirculating money within the closed economy. Duty is rounded down to whole cents so it never exceeds 10%.
+_Avoid_: Intestate estate, inheritance, empirically calibrated tax
+
+**Intestate inheritance**:
+Distribution of the cash estate that remains after estate duty. Eligible heirs are the active romantic partner at death and all living biological children, including adults and dependents; former partners, guardians who are not parents, parents, siblings, and friends are not heirs. With a partner and children, the partner receives half rounded down and the children divide the rest; a partner or children alone receive the full remainder; with neither, the treasury receives it. Child shares use whole cents and allocate leftover cents in ascending immutable citizen-ID order. Citizens dying in the same resolution phase cannot inherit from one another. A dependent child's share must remain their property rather than becoming guardian cash.
+_Avoid_: Estate duty, guardian income, equal distribution among all citizens
+
+**Restricted inheritance balance**:
+Cash inherited by a dependent citizen that remains the dependent's property. It pays only that citizen's traceable food, medicine, clinical care, and education before guardian or treasury funds; it cannot fund gifts or become guardian cash. It contributes to that dependent's care capacity and removes covered costs from guardian burden without increasing guardian wealth. The remainder becomes ordinary personal cash at adulthood or enters the dependent's estate if they die.
+_Avoid_: Guardian wallet, general household fund, treasury support
+
 **Public social venue**:
 A non-commercial town location where any living citizen may legally choose social contact regardless of hunger, housing, employment, or the availability of private firms. Scheduling and motivation may still prevent attendance; eligibility does not guarantee contact.
 _Avoid_: Welfare service, guaranteed meeting, café
@@ -115,6 +147,54 @@ _Avoid_: Raw day counter, implicit interval
 > **Developer:** Does every friend qualify for a mutual-aid gift?
 >
 > **Domain expert:** No. The current food-gift tracer requires a close friendship at strength 0.75 or above, and either citizen may still choose not to participate.
+>
+> **Developer:** Is a close friendship automatically a romantic partnership?
+>
+> **Domain expert:** No. A romantic partnership is a distinct relationship that both adult citizens must choose; friendship alone creates neither partnership nor birth.
+>
+> **Developer:** Is a newborn just another adult citizen with lower skill?
+>
+> **Domain expert:** No. A newborn is a dependent citizen with stage-specific needs and no adult economic agency until maturation.
+>
+> **Developer:** Do co-guardians automatically share all their cash?
+>
+> **Domain expert:** No. Each guardian remains a separate economic actor; a specific guardian funds each exact dependent purchase, with treasury guardianship only as a finite fallback.
+>
+> **Developer:** If a parent dies or separates, does the citizen stop being their child?
+>
+> **Domain expert:** No. Parentage is immutable lineage; guardianship and partnership are separate roles that can change.
+>
+> **Developer:** Does counting a dependent in both guardians' planning create two meals of cost?
+>
+> **Domain expert:** No. Care-weighted runway allocates one modeled dependent food cost across living co-guardians while every real purchase still has one exact payer.
+>
+> **Developer:** Does the treasury receive an estate only when no heir survives?
+>
+> **Domain expert:** No. Every estate first pays 10% estate duty to the treasury; only the remaining 90% is available to heirs or, if none exist, to the treasury.
+>
+> **Developer:** Does a guardian receive a dependent child's inheritance as personal cash?
+>
+> **Domain expert:** No. The dependent owns their inherited share; guardians may only direct its use under the restricted-care rules.
+>
+> **Developer:** Can a dependent's inheritance quietly subsidize their guardian or sibling?
+>
+> **Domain expert:** No. A restricted inheritance balance may pay only for that dependent's actually delivered eligible care, and every payment remains traceable in the dependent's history.
+>
+> **Developer:** Does a dependent's inheritance make their guardian wealthier?
+>
+> **Domain expert:** No. It improves only that dependent's care coverage and reduces the guardian's modeled burden for covered costs.
+>
+> **Developer:** Does a former partner or guardian automatically inherit?
+>
+> **Domain expert:** No. Only the active romantic partner at death and living biological children are eligible in the initial intestacy model; guardianship alone creates no inheritance right.
+>
+> **Developer:** Can two citizens dying in the same phase inherit from one another according to resolution order?
+>
+> **Domain expert:** No. The whole death cohort is treated as deceased before any of its estates are distributed, so inheritance never depends on citizen processing order.
+>
+> **Developer:** Can estate rounding create or discard a cent?
+>
+> **Domain expert:** No. Duty and shares use deterministic whole-cent allocation, and every cent leaves the deceased estate exactly once.
 >
 > **Developer:** Can hunger or a failed café make social contact illegal?
 >
