@@ -39,6 +39,8 @@ import {
   INVESTMENT_WAGE_RESERVE_DAYS,
   INVENTORY_WORK_LEARNING_RATE,
   KNOWLEDGE_SCHEMA_VERSION,
+  LEGACY_OPPORTUNITY_OBSERVATION_DAYS,
+  LEGACY_OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
   MAINTENANCE_INTERVAL_DAYS,
   MIN_FOOD_QUALITY,
   MISSED_MAINTENANCE_CAPACITY,
@@ -47,6 +49,7 @@ import {
   OPPORTUNITY_MARGIN_BUFFER,
   OPPORTUNITY_OBSERVATION_DAYS,
   OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
+  OPPORTUNITY_REQUIRED_VIABLE_DAYS,
   OPPORTUNITY_STARTUP_CAPITAL,
   PHASES,
   PRIVATE_FORMATION_ARCHETYPE_IDS,
@@ -396,7 +399,7 @@ export class TownSimulation {
   }
 
   premiumFoodDemandCount(archetype) {
-    const reserve = this.essentialCost() * OPPORTUNITY_PROTECTED_RUNWAY_DAYS;
+    const reserve = this.essentialCost() * this.formationProtectedRunwayDays();
     return this.people.reduce((total, person) => {
       if (!person.alive || person.foodStock.length || person.cash + 1e-9 < archetype.price + reserve) return total;
       const affordableUnits = Math.floor((person.cash - reserve + 1e-9) / archetype.price);
@@ -456,8 +459,20 @@ export class TownSimulation {
     return 0;
   }
 
+  formationObservationDays() {
+    return this.employmentInterventionEnabled
+      ? OPPORTUNITY_OBSERVATION_DAYS
+      : LEGACY_OPPORTUNITY_OBSERVATION_DAYS;
+  }
+
+  formationProtectedRunwayDays() {
+    return this.employmentInterventionEnabled
+      ? OPPORTUNITY_PROTECTED_RUNWAY_DAYS
+      : LEGACY_OPPORTUNITY_PROTECTED_RUNWAY_DAYS;
+  }
+
   founderCandidates(excludedOwnerIds = []) {
-    const protectedCash = roundMoney(this.essentialCost() * OPPORTUNITY_PROTECTED_RUNWAY_DAYS);
+    const protectedCash = roundMoney(this.essentialCost() * this.formationProtectedRunwayDays());
     const excludedOwners = new Set(excludedOwnerIds);
     return this.people
       .filter((person) => person.alive
@@ -470,6 +485,38 @@ export class TownSimulation {
         || b.cash - a.cash
         || a.id - b.id
       ));
+  }
+
+  opportunityFinancials(archetype, potentialCustomers, requiredWorkers, templates) {
+    const produceTemplate = templates.find((contract) => contract.buyer === archetype.name && contract.use !== "operations");
+    const demandScaledInputs = ["premium-grocer", "apothecary", "school", "materials-yard", "clinic", "builder"].includes(archetype.archetypeId);
+    const outputCapacity = produceTemplate?.dailyQuantity ?? archetype.transactionsPerWorker * requiredWorkers;
+    const demandCaptureRate = ["materials-yard", "builder"].includes(archetype.archetypeId) ? 1 : OPPORTUNITY_DEMAND_CAPTURE_RATE;
+    const expectedOutputUnits = demandScaledInputs
+      ? Math.min(potentialCustomers * demandCaptureRate, outputCapacity)
+      : potentialCustomers * (this.policy.discretionaryDemand / 100) * OPPORTUNITY_DEMAND_CAPTURE_RATE;
+    const expectedDailyRevenue = roundMoney(expectedOutputUnits * archetype.price);
+    const variableDemandInputs = demandScaledInputs
+      ? expectedOutputUnits * (produceTemplate?.unitPrice ?? 0)
+      : null;
+    const carrier = this.transportEnabled ? this.firms.find((firm) => firm.active && firm.archetypeId === "haulage") : null;
+    const expectedDailyCost = roundMoney(
+      Math.max(this.policy.minimumWage, archetype.wage) * requiredWorkers
+      + templates.filter((contract) => contract.buyer === archetype.name).reduce(
+        (sum, contract) => {
+          const inputCost = contract.use === "operations"
+            ? contract.dailyQuantity * contract.unitPrice / MAINTENANCE_INTERVAL_DAYS
+            : (variableDemandInputs ?? contract.dailyQuantity * contract.unitPrice);
+          const units = variableDemandInputs === null ? contract.dailyQuantity : expectedOutputUnits;
+          const freightDelta = carrier && contract.use !== "operations" && contract.use !== "construction-project"
+            ? units * (carrier.price - carrier.basePrice)
+            : 0;
+          return sum + inputCost + freightDelta;
+        },
+        0,
+      ),
+    );
+    return { expectedDailyRevenue, expectedDailyCost };
   }
 
   opportunityEvidence(archetype, observations = this.opportunityWindows[archetype.archetypeId] ?? []) {
@@ -494,50 +541,37 @@ export class TownSimulation {
     const expectedDailyDemand = observations.length
       ? observations.reduce((sum, observation) => sum + observation.potentialCustomers, 0) / observations.length
       : 0;
-    const produceTemplate = templates.find((contract) => contract.buyer === archetype.name && contract.use !== "operations");
-    const demandScaledInputs = ["premium-grocer", "apothecary", "school", "materials-yard", "clinic", "builder"].includes(archetype.archetypeId);
-    const outputCapacity = produceTemplate?.dailyQuantity ?? archetype.transactionsPerWorker * requiredWorkers;
-    const demandCaptureRate = ["materials-yard", "builder"].includes(archetype.archetypeId) ? 1 : OPPORTUNITY_DEMAND_CAPTURE_RATE;
-    const expectedOutputUnits = demandScaledInputs
-      ? Math.min(expectedDailyDemand * demandCaptureRate, outputCapacity)
-      : expectedDailyDemand * (this.policy.discretionaryDemand / 100) * OPPORTUNITY_DEMAND_CAPTURE_RATE;
-    const expectedDailyRevenue = roundMoney(expectedOutputUnits * archetype.price);
-    const variableDemandInputs = demandScaledInputs
-      ? expectedOutputUnits * (produceTemplate?.unitPrice ?? 0)
-      : null;
-    const carrier = this.transportEnabled ? this.firms.find((firm) => firm.active && firm.archetypeId === "haulage") : null;
-    const expectedDailyCost = roundMoney(
-      Math.max(this.policy.minimumWage, archetype.wage) * requiredWorkers
-      + templates.filter((contract) => contract.buyer === archetype.name).reduce(
-        (sum, contract) => {
-          const inputCost = contract.use === "operations"
-            ? contract.dailyQuantity * contract.unitPrice / MAINTENANCE_INTERVAL_DAYS
-            : (variableDemandInputs ?? contract.dailyQuantity * contract.unitPrice);
-          const units = variableDemandInputs === null ? contract.dailyQuantity : expectedOutputUnits;
-          const freightDelta = carrier && contract.use !== "operations" && contract.use !== "construction-project"
-            ? units * (carrier.price - carrier.basePrice)
-            : 0;
-          return sum + inputCost + freightDelta;
-        },
-        0,
-      ),
+    const { expectedDailyRevenue, expectedDailyCost } = this.opportunityFinancials(
+      archetype,
+      expectedDailyDemand,
+      requiredWorkers,
+      templates,
     );
+    const requiredObservationDays = this.formationObservationDays();
+    const protectedRunwayDays = this.formationProtectedRunwayDays();
+    const viableObservationDays = observations.filter((observation) => {
+      const financials = this.opportunityFinancials(archetype, observation.potentialCustomers, requiredWorkers, templates);
+      return financials.expectedDailyRevenue + 1e-9 >= financials.expectedDailyCost * OPPORTUNITY_MARGIN_BUFFER;
+    }).length;
     const reasons = [];
     if (activeInstance) reasons.push(`${activeInstance.name} is already operating`);
     if (cooldownRemaining) reasons.push(`${cooldownRemaining} day${cooldownRemaining === 1 ? "" : "s"} remain in the post-failure confidence cooldown`);
-    if (observations.length < OPPORTUNITY_OBSERVATION_DAYS) reasons.push(`${OPPORTUNITY_OBSERVATION_DAYS - observations.length} observation day${OPPORTUNITY_OBSERVATION_DAYS - observations.length === 1 ? "" : "s"} still required`);
+    if (observations.length < requiredObservationDays) reasons.push(`${requiredObservationDays - observations.length} observation day${requiredObservationDays - observations.length === 1 ? "" : "s"} still required`);
+    if (this.employmentInterventionEnabled && viableObservationDays < OPPORTUNITY_REQUIRED_VIABLE_DAYS) reasons.push(`${OPPORTUNITY_REQUIRED_VIABLE_DAYS - viableObservationDays} more viable demand day${OPPORTUNITY_REQUIRED_VIABLE_DAYS - viableObservationDays === 1 ? " is" : "s are"} required`);
     if (expectedDailyRevenue + 1e-9 < expectedDailyCost * OPPORTUNITY_MARGIN_BUFFER) reasons.push("observed demand does not cover expected wages and inputs with a margin buffer");
     const missingSuppliers = supplierStates.filter((supplier) => !supplier.available).map((supplier) => supplier.name);
     if (missingSuppliers.length) reasons.push(`missing active supplier${missingSuppliers.length === 1 ? "" : "s"}: ${missingSuppliers.join(", ")}`);
     if (availableWorkers.length < requiredWorkers) reasons.push(`${requiredWorkers - availableWorkers.length} more unemployed worker${requiredWorkers - availableWorkers.length === 1 ? " is" : "s are"} required`);
-    if (!founder) reasons.push(`no unemployed founder can invest ${OPPORTUNITY_STARTUP_CAPITAL.toFixed(1)} while protecting ${OPPORTUNITY_PROTECTED_RUNWAY_DAYS} days of essentials`);
+    if (!founder) reasons.push(`no unemployed founder can invest ${OPPORTUNITY_STARTUP_CAPITAL.toFixed(1)} while protecting ${protectedRunwayDays} days of essentials`);
     return Object.freeze({
       archetypeId: archetype.archetypeId,
       name: archetype.name,
       status: reasons.length ? "not-ready" : "ready",
       ready: reasons.length === 0,
       observedDays: observations.length,
-      requiredObservationDays: OPPORTUNITY_OBSERVATION_DAYS,
+      requiredObservationDays,
+      viableObservationDays,
+      requiredViableDays: this.employmentInterventionEnabled ? OPPORTUNITY_REQUIRED_VIABLE_DAYS : null,
       latestPotentialCustomers: observations.at(-1)?.potentialCustomers ?? 0,
       demandUnit: archetype.archetypeId === "premium-grocer" ? "food portions" : archetype.archetypeId === "apothecary" ? "eligible patients" : archetype.archetypeId === "school" ? "eligible students" : archetype.archetypeId === "materials-yard" ? "housing material bundles" : archetype.archetypeId === "clinic" ? "severe-care patients" : archetype.archetypeId === "builder" ? "housing projects" : "potential customers",
       expectedDailyDemand,
@@ -545,7 +579,7 @@ export class TownSimulation {
       expectedDailyCost,
       marginBuffer: OPPORTUNITY_MARGIN_BUFFER,
       startupCapital: OPPORTUNITY_STARTUP_CAPITAL,
-      protectedRunwayDays: OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
+      protectedRunwayDays,
       previousInstanceIds: previousInstances.map((firm) => firm.instanceId),
       latestFailureDay: latestFailure?.closedDay ?? null,
       cooldownDays: PRIVATE_REENTRY_COOLDOWN_DAYS,
@@ -609,6 +643,9 @@ export class TownSimulation {
       instanceNumber,
       foundingDay: this.day,
     });
+    firm.formationObservedDays = evidence.observedDays;
+    firm.formationViableDays = evidence.viableObservationDays;
+    firm.protectedRunwayDays = evidence.protectedRunwayDays;
     this.firms.push(firm);
     this.firmInstanceCounts[archetype.archetypeId] = instanceNumber;
     const founderBefore = founder.cash;
@@ -645,7 +682,7 @@ export class TownSimulation {
       if (this.firms.some((firm) => firm.active && firm.archetypeId === archetype.archetypeId)) return;
       const window = this.opportunityWindows[archetype.archetypeId];
       window.push(Object.freeze({ day: this.day, potentialCustomers: this.opportunityDemandCount(archetype) }));
-      if (window.length > OPPORTUNITY_OBSERVATION_DAYS) window.shift();
+      if (window.length > this.formationObservationDays()) window.shift();
       const evidence = this.opportunityEvidence(archetype, window);
       this.opportunitySequence += 1;
       const history = { day: this.day, sequence: this.opportunitySequence, ...structuredClone(evidence), foundedInstanceId: null };

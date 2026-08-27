@@ -52,7 +52,9 @@ test("minimal starts permit optional formation without eliminating hardship", ()
 
   const optionalFirm = formation.firms.find((firm) => firm.foundingDay > 1);
   assert.ok(optionalFirm);
-  assert.equal(optionalFirm.foundingDay, 7);
+  assert.equal(optionalFirm.foundingDay, 3);
+  assert.ok(optionalFirm.formationViableDays >= 2);
+  assert.equal(optionalFirm.protectedRunwayDays, 6);
   assert.ok(formation.opportunityHistory.some((entry) => entry.foundedInstanceId === optionalFirm.instanceId));
   assert.ok(hardship.snapshot().dead > 0 || hardship.snapshot().unhoused > 0 || hardship.snapshot().hungry > 0 || hardship.firms.some((firm) => !firm.active));
   formation.assertInvariants();

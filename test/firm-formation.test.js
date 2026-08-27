@@ -93,6 +93,40 @@ test("viable demand founds a zero-windfall café with exact capital, staff, cont
   town.assertInvariants();
 });
 
+test("the intervention accelerates viable formation while control preserves the legacy gate", () => {
+  const treatment = latentCafeTown(42);
+  const control = new TownSimulation({
+    seed: 42,
+    latentFirmNames: ["Common Café"],
+    employmentInterventionEnabled: false,
+    policy: { discretionaryDemand: 100, shockRisk: 0 },
+  });
+  createViableCafeDemand(treatment);
+  createViableCafeDemand(control);
+  let treatmentResult;
+  let controlResult;
+  for (let day = 1; day <= 3; day += 1) {
+    treatment.day = day;
+    control.day = day;
+    treatmentResult = resultForArchetype(treatment.observeFirmOpportunities(), "cafe");
+    controlResult = resultForArchetype(control.observeFirmOpportunities(), "cafe");
+  }
+
+  assert.equal(treatmentResult.instanceId, "cafe:1");
+  assert.equal(treatmentResult.foundingDay, 3);
+  assert.equal(treatmentResult.protectedRunwayDays, 6);
+  assert.equal(control.firms.some((firm) => firm.archetypeId === "cafe"), false);
+  assert.equal(controlResult.requiredObservationDays, 7);
+  assert.equal(controlResult.protectedRunwayDays, 10);
+
+  for (let day = 4; day <= 7; day += 1) {
+    control.day = day;
+    controlResult = resultForArchetype(control.observeFirmOpportunities(), "cafe");
+  }
+  assert.equal(controlResult.instanceId, "cafe:1");
+  assert.equal(controlResult.foundingDay, 7);
+});
+
 test("missing produce supply blocks café formation despite viable demand", () => {
   const town = latentCafeTown();
   createViableCafeDemand(town);

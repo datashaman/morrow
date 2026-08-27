@@ -17,7 +17,7 @@ test("optional-firm diagnostics are deterministic, serializable, and cash-conser
   assert.ok(first.runs[0].householdPurchasingPower.every((day) => day.discretionaryCash >= 0));
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(first)));
 
-  const control = new TownSimulation({ seed: 11 });
+  const control = new TownSimulation({ seed: 11, formationArchetypeIds: ["cafe", "premium-grocer"] });
   for (let step = 0; step < 5 * PHASES.length; step += 1) control.step();
   assert.deepEqual(first.runs[0].final, control.snapshot());
 });
