@@ -83,6 +83,52 @@ test("procurement converts exact guild inputs into stocked construction material
   town.assertInvariants();
 });
 
+test("a delivered fabrication kit remains input stock when no yard worker attends", () => {
+  const { town, yard } = foundMaterialsYard();
+  const makers = town.firms.find((firm) => firm.name === "Makers Guild");
+  const fabricationContract = town.contracts.find((contract) => contract.buyerId === yard.id && contract.use !== "operations");
+  const worker = town.people[yard.owner];
+  town.contracts.filter((contract) => contract !== fabricationContract).forEach((contract) => { contract.active = false; });
+  makers.inventory = 20;
+  yard.inventory = 0;
+  yard.cash = 100;
+  worker.attended = false;
+  town.initialMoney = town.totalMoney();
+
+  town.procurementPhase();
+
+  assert.equal(fabricationContract.deliveredToday, 1);
+  assert.equal(yard.inputInventory, 1);
+  assert.equal(yard.inventory, 0);
+  assert.equal(yard.processingCapacityToday, 0);
+  assert.equal(yard.processedToday, 0);
+  assert.equal(yard.processingShortfallToday, 1);
+  assert.equal(town.totalMoney(), town.initialMoney);
+  town.assertInvariants();
+});
+
+test("maintenance readiness floors yard processing to whole units", () => {
+  const { town, yard } = foundMaterialsYard();
+  const secondWorker = town.people.find((person) => person.employer < 0 && person.id !== yard.owner);
+  town.contracts.forEach((contract) => { contract.active = false; });
+  secondWorker.employer = yard.id;
+  yard.employees.push(secondWorker.id);
+  yard.employees.forEach((id) => { town.people[id].attended = true; });
+  yard.operationalReadiness = 0.65;
+  yard.inputInventory = 3;
+  yard.inventory = 0;
+
+  town.procurementPhase();
+
+  assert.equal(yard.processingCapacityToday, 1);
+  assert.equal(yard.processedToday, 1);
+  assert.equal(yard.inputInventory, 2);
+  assert.equal(yard.inventory, 1);
+  assert.equal(yard.processingShortfallToday, 2);
+  assert.match(yard.events[0].text, /labor capacity left 2 kits unprocessed/);
+  town.assertInvariants();
+});
+
 test("realized income can approve another materials job while raw transaction counts cannot", () => {
   const { town, yard } = foundMaterialsYard();
   yard.cash = yard.wage * 10;

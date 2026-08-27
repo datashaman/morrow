@@ -108,6 +108,112 @@ test("an exact builder project consumes materials, moves cash, and expands housi
   town.assertInvariants();
 });
 
+test("same-day construction follows product order even when contracts are stored in reverse", () => {
+  const { town, builder, materials, housing } = foundBuilder();
+  const makers = town.firms.find((firm) => firm.name === "Makers Guild");
+  const chain = town.contracts.filter((contract) => (
+    (contract.supplierId === makers.id && contract.buyerId === materials.id && contract.use !== "operations")
+    || (contract.supplierId === materials.id && contract.buyerId === builder.id)
+    || (contract.supplierId === builder.id && contract.buyerId === housing.id)
+  ));
+  town.contracts.forEach((contract) => { contract.active = chain.includes(contract); });
+  town.contracts.reverse();
+  makers.inventory = 20;
+  materials.inventory = 0;
+  materials.inputInventory = 0;
+  builder.inventory = 0;
+  builder.inputInventory = 0;
+  materials.cash = 100;
+  builder.cash = 100;
+  housing.cash = 100;
+  town.people[materials.owner].attended = true;
+  town.people[builder.owner].attended = true;
+  town.initialMoney = town.totalMoney();
+  const capacityBefore = housing.dwellingCapacity;
+
+  town.procurementPhase();
+
+  assert.equal(materials.processedToday, 1);
+  assert.equal(builder.processedToday, 1);
+  assert.equal(materials.inputInventory, 0);
+  assert.equal(builder.inputInventory, 0);
+  assert.equal(housing.dwellingCapacity, capacityBefore + HOUSING_PROJECT_CAPACITY_GAIN);
+  assert.equal(town.totalMoney(), town.initialMoney);
+});
+
+test("an inactive builder cannot process retained materials", () => {
+  const { town, builder } = foundBuilder();
+  town.contracts.forEach((contract) => { contract.active = false; });
+  builder.active = false;
+  builder.status = "insolvent";
+  builder.inputInventory = 1;
+  builder.inventory = 0;
+  town.people[builder.owner].attended = true;
+
+  town.procurementPhase();
+
+  assert.equal(builder.processingCapacityToday, 0);
+  assert.equal(builder.processedToday, 0);
+  assert.equal(builder.inputInventory, 1);
+  assert.equal(builder.inventory, 0);
+});
+
+test("a builder without attending labor retains delivered materials", () => {
+  const { town, builder } = foundBuilder();
+  town.contracts.forEach((contract) => { contract.active = false; });
+  builder.inputInventory = 1;
+  builder.inventory = 0;
+  town.people[builder.owner].attended = false;
+
+  town.procurementPhase();
+
+  assert.equal(builder.processingCapacityToday, 0);
+  assert.equal(builder.processedToday, 0);
+  assert.equal(builder.inputInventory, 1);
+  assert.equal(builder.inventory, 0);
+  assert.equal(builder.processingShortfallToday, 1);
+  assert.match(builder.events[0].text, /no attending workers left 1 bundle unprocessed/);
+});
+
+test("construction processing replays from the same seed and state", () => {
+  const first = foundBuilder(404);
+  const second = foundBuilder(404);
+  [first, second].forEach(({ town, builder, materials, housing }) => {
+    const makers = town.firms.find((firm) => firm.name === "Makers Guild");
+    makers.inventory = 20;
+    materials.inventory = 0;
+    builder.inventory = 0;
+    materials.cash = 100;
+    builder.cash = 100;
+    housing.cash = 100;
+    town.people[materials.owner].attended = true;
+    town.people[builder.owner].attended = true;
+    town.initialMoney = town.totalMoney();
+    town.procurementPhase();
+  });
+  const evidence = ({ town, builder, materials, housing }) => ({
+    materials: {
+      input: materials.inputInventory,
+      output: materials.inventory,
+      capacity: materials.processingCapacityToday,
+      processed: materials.processedToday,
+      history: materials.events,
+    },
+    builder: {
+      input: builder.inputInventory,
+      output: builder.inventory,
+      capacity: builder.processingCapacityToday,
+      processed: builder.processedToday,
+      history: builder.events,
+    },
+    dwellings: housing.dwellingCapacity,
+    contracts: town.contracts.map(({ requestedToday, deliveredToday, shortfallToday }) => ({ requestedToday, deliveredToday, shortfallToday })),
+    money: town.totalMoney(),
+  });
+
+  assert.deepEqual(evidence(first), evidence(second));
+});
+
 test("periodic repair projects preserve rather than expand spare capacity", () => {
   const { town, builder, housing } = foundBuilder();
   const projectContract = town.contracts.find((contract) => contract.supplierId === builder.id && contract.use === "construction-project");

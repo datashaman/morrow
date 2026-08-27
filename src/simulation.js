@@ -99,6 +99,10 @@ export class TownSimulation {
       founderCapital,
       cash,
       inventory,
+      inputInventory: 0,
+      processingCapacityToday: 0,
+      processedToday: 0,
+      processingShortfallToday: 0,
       basePrice: archetype.price,
       minimumPrice: roundMoney(archetype.price * PRICE_FLOOR_MULTIPLIER),
       maximumPrice: roundMoney(archetype.price * PRICE_CEILING_MULTIPLIER),
@@ -1220,6 +1224,46 @@ export class TownSimulation {
     return Math.floor(attendingWorkers * TRANSPORT_CAPACITY_PER_WORKER * carrier.operationalReadiness);
   }
 
+  processConstructionInputs(firm) {
+    if (!firm.active || !firm.processingPerWorker) return 0;
+    const attendingWorkers = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+    const remainingCapacity = Math.max(0, firm.processingCapacityToday - firm.processedToday);
+    const units = Math.min(Math.floor(firm.inputInventory), remainingCapacity);
+    if (units > 0) {
+      firm.inputInventory -= units;
+      firm.inventory += units;
+      firm.processedToday += units;
+      this.note(firm, `${attendingWorkers} attending worker${attendingWorkers === 1 ? "" : "s"} processed ${units} ${PRODUCTS[firm.input].unit}${units === 1 ? "" : "s"} into ${units} ${PRODUCTS[firm.sells].unit}${units === 1 ? "" : "s"}`, "good");
+    }
+    firm.processingShortfallToday = Math.max(0, Math.floor(firm.inputInventory) - Math.max(0, firm.processingCapacityToday - firm.processedToday));
+    return units;
+  }
+
+  procurementContracts() {
+    const dependencies = new Map(this.contracts.map((contract) => [contract, new Set()]));
+    this.contracts.forEach((upstream) => {
+      if (upstream.use === "operations") return;
+      const processor = this.firms[upstream.buyerId];
+      if (!processor?.processingPerWorker) return;
+      this.contracts.forEach((downstream) => {
+        if (downstream.supplierId === processor.id) dependencies.get(downstream).add(upstream);
+      });
+    });
+    const pending = new Set(this.contracts);
+    const ordered = [];
+    while (pending.size) {
+      const ready = [...pending]
+        .filter((contract) => [...dependencies.get(contract)].every((dependency) => !pending.has(dependency)))
+        .sort((left, right) => left.id - right.id);
+      if (!ready.length) throw new Error("Supply contracts must form an acyclic product pipeline");
+      ready.forEach((contract) => {
+        pending.delete(contract);
+        ordered.push(contract);
+      });
+    }
+    return ordered;
+  }
+
   procurementPhase() {
     const carrier = this.transportEnabled ? this.firms.find((firm) => firm.active && firm.archetypeId === "haulage") : null;
     let remainingTransportCapacity = this.haulageCapacity(carrier);
@@ -1227,7 +1271,17 @@ export class TownSimulation {
       carrier.transportCapacityToday = remainingTransportCapacity;
       carrier.transportLoadToday = 0;
     }
-    this.contracts.forEach((contract) => {
+    this.firms.forEach((firm) => {
+      if (!firm.processingPerWorker) return;
+      const attendingWorkers = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+      firm.processingCapacityToday = firm.active
+        ? Math.floor(attendingWorkers * firm.processingPerWorker * firm.operationalReadiness)
+        : 0;
+      firm.processedToday = 0;
+      firm.processingShortfallToday = 0;
+      this.processConstructionInputs(firm);
+    });
+    this.procurementContracts().forEach((contract) => {
       contract.deliveredToday = 0;
       contract.shortfallToday = 0;
       contract.requestedToday = 0;
@@ -1240,7 +1294,7 @@ export class TownSimulation {
       if (!contract.active || !supplier.active || !buyer.active) return;
       const buyerStock = contract.use === "operations"
         ? buyer.operatingSupplies
-        : contract.use === "construction-project" ? 0 : buyer.inventory;
+        : contract.use === "construction-project" ? 0 : buyer.processingPerWorker ? buyer.inputInventory : buyer.inventory;
       const livingPopulation = this.people.filter((person) => person.alive).length;
       const populationScaledFood = contract.product === "produce" && buyer.archetypeId === "everyday-grocer" && !contract.use;
       const dailyLimit = populationScaledFood ? Math.min(contract.dailyQuantity, livingPopulation) : contract.dailyQuantity;
@@ -1281,6 +1335,10 @@ export class TownSimulation {
               ? `${supplier.name} expanded dwelling capacity to ${buyer.dwellingCapacity}`
               : `${supplier.name} completed a housing repair project`, "good");
           }
+          else if (buyer.processingPerWorker) {
+            buyer.inputInventory += units;
+            this.processConstructionInputs(buyer);
+          }
           else buyer.inventory += units;
           supplier.sales += paid;
           supplier.unitsSold += units;
@@ -1314,6 +1372,13 @@ export class TownSimulation {
           ? `${carrier?.name ?? "No carrier"} could transport only ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s from ${supplier.name}`
           : `${supplier.name} delivered ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s`, "bad");
       }
+    });
+    this.firms.forEach((firm) => {
+      if (!firm.active || !firm.processingPerWorker || firm.processingShortfallToday <= 0) return;
+      const attendingWorkers = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+      const inputUnit = PRODUCTS[firm.input].unit;
+      const cause = attendingWorkers === 0 ? "no attending workers" : "labor capacity";
+      this.note(firm, `${cause} left ${firm.processingShortfallToday} ${inputUnit}${firm.processingShortfallToday === 1 ? "" : "s"} unprocessed`, "bad");
     });
   }
 
@@ -2425,6 +2490,16 @@ export class TownSimulation {
       || firm.knowledgeCapacityCarry >= 1
       || !Number.isInteger(firm.knowledgeCapacitySlotsToday)
       || firm.knowledgeCapacitySlotsToday < 0)) throw new Error("Invalid knowledge capacity accumulator");
+    if (this.firms.some((firm) => firm.processingPerWorker && (
+      !Number.isInteger(firm.inputInventory)
+      || firm.inputInventory < 0
+      || !Number.isInteger(firm.processingCapacityToday)
+      || firm.processingCapacityToday < 0
+      || !Number.isInteger(firm.processedToday)
+      || firm.processedToday < 0
+      || !Number.isInteger(firm.processingShortfallToday)
+      || firm.processingShortfallToday < 0
+    ))) throw new Error("Invalid construction processing state");
     this.people.forEach((person) => {
       this.friendIds(person).forEach((friendId) => {
         const reciprocal = this.people[friendId].relationships[person.id];
