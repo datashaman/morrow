@@ -405,6 +405,21 @@ test("a persistently unfunded non-vital firm becomes insolvent", () => {
   assert.match(makers.events[0].text, /sustained insolvency/);
 });
 
+test("stock on hand reduces a retailer's next-day procurement need", () => {
+  const town = new TownSimulation({ seed: 101, latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, transportEnabled: true });
+  const grocer = town.firms.find((firm) => firm.name === "Harvest Foods");
+  town.hire(grocer, town.people.find((person) => person.employer < 0));
+  grocer.inventory = 66;
+  grocer.cash = 56.55;
+
+  const need = town.nextOperatingNeed(grocer);
+  town.assessFirmSolvency(grocer);
+
+  assert.equal(need, 46.77);
+  assert.equal(grocer.status, "operating");
+  assert.equal(grocer.distressDays, 0);
+});
+
 test("a secure working owner can waive wages to preserve a cash-poor firm", () => {
   const town = new TownSimulation({ seed: 42 });
   const firm = town.firms.find((candidate) => candidate.name === "Harvest Foods");

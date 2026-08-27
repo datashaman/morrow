@@ -22,7 +22,7 @@ test("the disabled control locks the reproducible wage and completed-day mortali
   const report = evaluateEmploymentIntervention({ seeds: DEFAULT_EMPLOYMENT_EVALUATION_SEEDS, days: 60 });
 
   assert.deepEqual(report.runs.map((run) => run.control.firstWagesByDay30), [1, 2, 1, 1, 1, 1]);
-  assert.deepEqual(report.runs.map((run) => run.control.deathsByDay60), [22, 32, 20, 21, 22, 22]);
+  assert.deepEqual(report.runs.map((run) => run.control.deathsByDay60), [23, 24, 20, 21, 22, 22]);
   assert.equal(report.controlBaseline.firstWages.matches, true);
   assert.equal(report.controlBaseline.deaths.matches, true);
 });

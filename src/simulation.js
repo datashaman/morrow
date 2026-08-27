@@ -2222,18 +2222,32 @@ export class TownSimulation {
     return true;
   }
 
+  nextProcurementUnits(contract) {
+    const buyer = this.firms[contract.buyerId];
+    if (!contract.active || !buyer?.active || contract.use === "operations") return 0;
+    if (contract.use === "construction-project") return this.housingProjectDemand(buyer) ? contract.dailyQuantity : 0;
+    const livingPopulation = this.people.filter((person) => person.alive).length;
+    const populationScaledFood = contract.product === "produce" && buyer.archetypeId === "everyday-grocer";
+    const dailyLimit = populationScaledFood ? Math.min(contract.dailyQuantity, livingPopulation) : contract.dailyQuantity;
+    const targetStock = populationScaledFood ? livingPopulation * 2 : contract.targetStock ?? contract.dailyQuantity * 2;
+    const buyerStock = buyer.processingPerWorker ? buyer.inputInventory : buyer.inventory;
+    return Math.min(dailyLimit, Math.max(0, Math.ceil(targetStock - buyerStock)));
+  }
+
   nextOperatingNeed(firm) {
     const wage = Math.max(this.policy.minimumWage, firm.wage);
     const payroll = wage * Math.max(1, firm.employees.length);
     const inputs = this.contracts
       .filter((contract) => contract.active && contract.buyerId === firm.id)
       .reduce((total, contract) => {
-        if (contract.use === "construction-project" && !this.housingProjectDemand(firm)) return total;
         const carrier = this.transportEnabled && this.requiresHaulage(contract)
           ? this.firms.find((candidate) => candidate.active && candidate.archetypeId === "haulage")
           : null;
-        const dailyInput = contract.dailyQuantity * contract.unitPrice / (contract.use === "operations" ? MAINTENANCE_INTERVAL_DAYS : 1);
-        const freightDelta = carrier ? contract.dailyQuantity * (carrier.price - carrier.basePrice) : 0;
+        const units = contract.use === "operations"
+          ? contract.dailyQuantity / MAINTENANCE_INTERVAL_DAYS
+          : this.nextProcurementUnits(contract);
+        const dailyInput = units * contract.unitPrice;
+        const freightDelta = carrier ? units * (carrier.price - carrier.basePrice) : 0;
         return total + dailyInput + freightDelta;
       }, 0);
     return roundMoney(payroll + inputs);
