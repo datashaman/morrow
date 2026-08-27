@@ -114,6 +114,50 @@ _Avoid_: Estate duty, guardian income, equal distribution among all citizens
 Cash inherited by a dependent citizen that remains the dependent's property. It pays only that citizen's traceable food, medicine, clinical care, and education before guardian or treasury funds; it cannot fund gifts or become guardian cash. It contributes to that dependent's care capacity and removes covered costs from guardian burden without increasing guardian wealth. The remainder becomes ordinary personal cash at adulthood or enters the dependent's estate if they die.
 _Avoid_: Guardian wallet, general household fund, treasury support
 
+**Food Assistance**:
+A finite welfare programme that contributes treasury cash directly to one exact everyday-food portion per eligible citizen per day from the cheapest available seller. It cannot fund premium food or stockpiling. Approval does not bypass price, stock, staffing, schedule, or capacity, and an undelivered purchase moves no money or food.
+_Avoid_: Free meal, food inventory, unrestricted cash support
+
+**Rent Assistance**:
+A finite welfare programme that contributes treasury cash directly to an eligible housed citizen's exact current scheduled weekly rent payment to an available housing provider. It cannot fund a new tenancy, rehousing deposit, or unmodeled arrears debt, and approval does not create a dwelling or provider capacity.
+_Avoid_: Public housing, rent cancellation, unrestricted cash support
+
+**Emergency Cash Relief**:
+The named unrestricted-cash welfare fallback assessed only after direct Food Assistance and Rent Assistance. Eligible adults receive one automatic daily offer and may accept or refuse it through motivation-v3. Dependents cannot receive unrestricted cash relief. Treasury direct aid received by that citizen reduces the day's five-cash fallback cap dollar for dollar, without preventing an exact direct essential purchase from exceeding five. The programme preserves adult spending agency but remains means-tested, budget-limited, and unable to guarantee essentials or survival.
+_Avoid_: Universal income, direct provider assistance, entitlement without limits
+
+**Shared welfare budget**:
+The existing daily treasury support envelope used in order by Food Assistance, Rent Assistance, and then Emergency Cash Relief. Within Food Assistance, longer hunger, lower health, lower runway, and a week-rotating citizen ID determine priority; Rent Assistance uses greater eviction risk, lower runway, and rotating ID; Emergency Cash Relief uses longer hunger, unhoused status, lower runway, and rotating ID. It is not a separate fund: unspent capacity remains ordinary treasury cash, does not roll over as an entitlement, and every programme stops when the daily envelope or treasury cash is exhausted.
+_Avoid_: Insurance fund, programme reserve, guaranteed appropriation
+
+**Daily treasury priority**:
+The welfare envelope is snapshotted after payroll taxes at the start of Food Shopping. Direct food and rent assistance settle in their ordinary phases, followed by housing receivership and essential-sector re-entry, remaining Emergency Cash Relief, and then eligible vital-business rescue. The envelope limits welfare spending but does not reserve treasury cash.
+_Avoid_: Separate welfare fund, same-day tax exclusion, implicit call-order priority
+
+**Exact-shortfall assistance**:
+A direct welfare co-payment offered only after a named citizen chooses a legal essential transaction whose complete price exceeds the eligible cash available from that citizen or dependent-care chain. Available private funds pay first and the treasury may pay only the exact remainder; if every payer cannot fund the full atomic purchase, all cash and resources stay put.
+_Avoid_: Discount, partial purchase, protected private reserve
+
+**Automatic welfare offer**:
+An immediate programme assessment triggered by an otherwise legal unaffordable essential action, without an application queue or persistent entitlement. The citizen, or responsible guardian for a dependent, may accept or refuse through motivation-v3; an accepted offer applies only to that transaction and disappears if delivery fails. An undelivered offer moves no cash or resources, consumes no budget or aid cap, records the exact failure, and does not block later cash relief.
+_Avoid_: Automatic payment, saved voucher, welfare-office application
+
+**Welfare take-up**:
+The motivation-v3 choice to accept or refuse an automatic welfare offer, using programme-specific urgency with security, planning, avoidance, and stress; a guardian's connection to a dependent may additionally motivate accepting care assistance. Ties refuse. The initial tracer has no stigma or institutional-trust trait.
+_Avoid_: Random take-up, forced receipt, empirically calibrated claimant behaviour
+
+**Direct-assistance transaction**:
+A reusable atomic settlement in which eligible private payers contribute available cash, the treasury contributes the exact remaining shortfall, and a real provider delivers the complete eligible good or service. It produces matched programme evidence and can later support dependent care without introducing a household wallet.
+_Avoid_: Generic discount, partial payment, unrestricted grant
+
+**Welfare inspector**:
+The single programme-selectable view of the shared daily envelope and programme outcomes, with `All` as its default. It summarizes eligibility, offers, acceptance, delivery, refusal, failure reasons, contributions, providers, and the selected citizen's evidence without replacing ordinary transaction history.
+_Avoid_: Separate programme card grid, entitlement wallet, duplicate ledger
+
+**Welfare budget**:
+The renamed policy control formerly shown as Support budget. Its value, range, persistence, and envelope formula remain unchanged while it now governs all initial welfare programmes.
+_Avoid_: New tax, separate fund, programme-specific slider
+
 **Public social venue**:
 A non-commercial town location where any living citizen may legally choose social contact regardless of hunger, housing, employment, or the availability of private firms. Scheduling and motivation may still prevent attendance; eligibility does not guarantee contact.
 _Avoid_: Welfare service, guaranteed meeting, café
@@ -195,6 +239,62 @@ _Avoid_: Raw day counter, implicit interval
 > **Developer:** Can estate rounding create or discard a cent?
 >
 > **Domain expert:** No. Duty and shares use deterministic whole-cent allocation, and every cent leaves the deceased estate exactly once.
+>
+> **Developer:** Does direct essential assistance eliminate unrestricted citizen support?
+>
+> **Domain expert:** No. Food Assistance and Rent Assistance are assessed first, while Emergency Cash Relief remains a bounded final fallback whose recipient may still choose how to spend it.
+>
+> **Developer:** Can direct welfare buy premium meals, stored reserves, or a new tenancy?
+>
+> **Domain expert:** No. Food Assistance buys at most one cheapest everyday meal for immediate need, and Rent Assistance pays only a housed citizen's current scheduled rent.
+>
+> **Developer:** Does each welfare programme receive a guaranteed pot of money?
+>
+> **Domain expert:** No. The three initial programmes draw in order from one finite daily envelope and compete for treasury cash.
+>
+> **Developer:** Does a fixed citizen ID always win scarce welfare?
+>
+> **Domain expert:** No. Each programme prioritizes its relevant hardship measures and uses a week-rotating citizen ID as the final tie-breaker.
+>
+> **Developer:** Can an implementation call order decide whether citizens or firms receive treasury cash first?
+>
+> **Domain expert:** No. Direct food and rent come first, structural essential-sector recovery comes next, unrestricted cash relief follows, and vital-business rescue is last.
+>
+> **Developer:** Can welfare take part of a citizen's cash when the treasury cannot complete the purchase?
+>
+> **Domain expert:** No. Citizen and treasury contributions settle atomically with the complete essential transaction or none of them move.
+>
+> **Developer:** Does welfare eligibility force a citizen to receive assistance?
+>
+> **Domain expert:** No. Assessment is automatic, but a citizen or responsible guardian may refuse the immediate offer.
+>
+> **Developer:** Does an approved but undelivered welfare purchase consume its benefit?
+>
+> **Domain expert:** No. It records why delivery failed but moves and consumes nothing, creates no saved claim, and leaves an adult eligible for later cash relief.
+>
+> **Developer:** Can unrestricted emergency relief be deposited without a citizen's choice?
+>
+> **Domain expert:** No. An eligible adult receives one daily offer and may refuse it; dependents receive only direct guardian-managed assistance.
+>
+> **Developer:** Does the initial welfare tracer implement every proposed benefit and an administrative office?
+>
+> **Domain expert:** No. It establishes reusable direct assistance plus adult food, rent, and cash relief; later domain tracers extend it to child care and other programmes.
+>
+> **Developer:** Does each welfare programme need its own dashboard card?
+>
+> **Domain expert:** No. One Welfare inspector uses a programme dropdown and preserves the combined `All` view.
+>
+> **Developer:** Is Welfare budget a new control in addition to Support budget?
+>
+> **Domain expert:** No. It is the same persisted policy control and formula under a name that reflects its broader use.
+>
+> **Developer:** Can a citizen receive direct essentials and then automatically collect the full cash fallback?
+>
+> **Domain expert:** No. Treasury direct aid reduces that recipient's five-cash fallback cap dollar for dollar, although an exact essential transaction itself is not truncated at five.
+>
+> **Developer:** Is welfare refusal random or attributed to a stigma trait?
+>
+> **Domain expert:** Neither. It is a deterministic motivation-v3 comparison using immediate need and existing traits; stigma and institutional trust are not modeled in the initial tracer.
 >
 > **Developer:** Can hunger or a failed café make social contact illegal?
 >
