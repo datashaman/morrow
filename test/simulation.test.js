@@ -125,6 +125,82 @@ test("a supply contract cannot put its buyer into debt", () => {
   assert.equal(harvest.cash, 1);
 });
 
+test("an affordable contract shortfall at a maintained direct producer records production hiring demand", () => {
+  const town = new TownSimulation({ seed: 42, employmentInterventionEnabled: true, transportEnabled: false });
+  const farm = town.firms.find((firm) => firm.archetypeId === "farm");
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const contract = town.contracts.find((candidate) => candidate.supplierId === farm.id && candidate.buyerId === grocer.id);
+  town.contracts.filter((candidate) => candidate !== contract).forEach((candidate) => { candidate.active = false; });
+  farm.inventory = 0;
+  farm.operationalReadiness = 1;
+  grocer.inventory = 0;
+  grocer.cash = 1000;
+
+  town.procurementPhase();
+
+  assert.equal(contract.deliveredToday, 0);
+  assert.equal(contract.shortfallCauseToday, "supplier production labor");
+  assert.equal(contract.limitingFirmId, farm.id);
+  assert.equal(farm.staffingDemandToday.productionUnits, contract.requestedToday);
+  assert.equal(grocer.staffingDemandToday.contractUnits, 0);
+});
+
+test("contract funding, maintenance, and unavailable transport do not masquerade as labor demand", () => {
+  const fundingTown = new TownSimulation({ seed: 42, employmentInterventionEnabled: true, transportEnabled: false });
+  const fundingFarm = fundingTown.firms.find((firm) => firm.archetypeId === "farm");
+  const fundingGrocer = fundingTown.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const fundingContract = fundingTown.contracts.find((contract) => contract.supplierId === fundingFarm.id && contract.buyerId === fundingGrocer.id);
+  fundingTown.contracts.filter((contract) => contract !== fundingContract).forEach((contract) => { contract.active = false; });
+  fundingFarm.inventory = 100;
+  fundingGrocer.inventory = 0;
+  fundingGrocer.cash = 0;
+  fundingTown.procurementPhase();
+  assert.equal(fundingContract.shortfallCauseToday, "buyer funding");
+  assert.equal(fundingFarm.staffingDemandToday.productionUnits, 0);
+
+  const maintenanceTown = new TownSimulation({ seed: 42, employmentInterventionEnabled: true, transportEnabled: false });
+  const maintenanceFarm = maintenanceTown.firms.find((firm) => firm.archetypeId === "farm");
+  const maintenanceGrocer = maintenanceTown.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const maintenanceContract = maintenanceTown.contracts.find((contract) => contract.supplierId === maintenanceFarm.id && contract.buyerId === maintenanceGrocer.id);
+  maintenanceTown.contracts.filter((contract) => contract !== maintenanceContract).forEach((contract) => { contract.active = false; });
+  maintenanceFarm.inventory = 0;
+  maintenanceFarm.operationalReadiness = 0.65;
+  maintenanceGrocer.inventory = 0;
+  maintenanceGrocer.cash = 1000;
+  maintenanceTown.procurementPhase();
+  assert.equal(maintenanceContract.shortfallCauseToday, "supplier maintenance");
+  assert.equal(maintenanceFarm.staffingDemandToday.productionUnits, 0);
+
+  const transportTown = new TownSimulation({ seed: 42, employmentInterventionEnabled: true, transportEnabled: true });
+  const transportFarm = transportTown.firms.find((firm) => firm.archetypeId === "farm");
+  const transportGrocer = transportTown.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  const carrier = transportTown.firms.find((firm) => firm.archetypeId === "haulage");
+  const transportContract = transportTown.contracts.find((contract) => contract.supplierId === transportFarm.id && contract.buyerId === transportGrocer.id);
+  transportTown.contracts.filter((contract) => contract !== transportContract).forEach((contract) => { contract.active = false; });
+  carrier.active = false;
+  carrier.status = "insolvent";
+  transportFarm.inventory = 100;
+  transportGrocer.inventory = 0;
+  transportGrocer.cash = 1000;
+  transportTown.procurementPhase();
+  assert.equal(transportContract.shortfallCauseToday, "carrier unavailable");
+  assert.equal(transportFarm.staffingDemandToday.productionUnits, 0);
+  assert.equal(transportGrocer.staffingDemandToday.contractUnits, 0);
+});
+
+test("missing stock and unaffordability do not create consumer hiring demand", () => {
+  const town = new TownSimulation({ seed: 42, employmentInterventionEnabled: true });
+  const firm = town.firms.find((candidate) => candidate.archetypeId === "everyday-grocer");
+  const buyer = town.people.find((person) => person.employer !== firm.id);
+  buyer.cash = 100;
+  firm.inventory = 0;
+  assert.equal(town.buy(buyer, firm, 1, "food"), 0);
+  firm.inventory = 1;
+  buyer.cash = 0;
+  assert.equal(town.buy(buyer, firm, 1, "food"), 0);
+  assert.deepEqual(firm.staffingDemandToday.evidence, []);
+});
+
 test("replenishment cannot exceed a contract's daily quantity", () => {
   const town = new TownSimulation({ seed: 42 });
   const harvest = town.firms.find((firm) => firm.name === "Harvest Foods");
@@ -1150,6 +1226,154 @@ test("attending staff cap the number of daily transactions", () => {
   assert.equal(firm.attemptedTransactions, 3);
   assert.equal(firm.turnedAwayTransactions, 1);
   assert.match(buyers[2].events[0].text, /had no staffed capacity/);
+});
+
+test("an affordable stocked purchase rejected only by staffing records hiring demand", () => {
+  const town = new TownSimulation({ seed: 42, employmentInterventionEnabled: true });
+  const firm = town.firms.find((candidate) => candidate.archetypeId === "everyday-grocer");
+  const buyer = town.people.find((person) => person.employer !== firm.id);
+  firm.inventory = 1;
+  buyer.cash = 100;
+  firm.transactionsToday = town.transactionCapacity(firm);
+
+  assert.equal(town.buy(buyer, firm, 1, "food"), 0);
+  assert.deepEqual(firm.staffingDemandToday, {
+    consumerUnits: 1,
+    contractUnits: 0,
+    productionUnits: 0,
+    evidence: [{ cause: "staffed transaction capacity", kind: "consumer", units: 1 }],
+  });
+});
+
+test("two qualifying demand days approve one funded investment vacancy", () => {
+  const town = new TownSimulation({ seed: 42, employmentInterventionEnabled: true });
+  const firm = town.firms.find((candidate) => candidate.archetypeId === "toolmaker");
+  const startingStaff = firm.employees.length;
+  const supportedSales = firm.wage * 1.08 * startingStaff;
+
+  firm.sales = supportedSales;
+  town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+  town.prepareFirmSettlement(firm);
+  town.finishFirmSettlement(firm);
+  town.day += 1;
+  firm.sales = supportedSales;
+  town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+  town.prepareFirmSettlement(firm);
+
+  assert.equal(firm.staffingDemandHistory.length, 2);
+  assert.equal(firm.investmentSlots.length, 1);
+  assert.equal(firm.investmentSlots[0].status, "recruiting");
+  assert.equal(firm.investmentSlots[0].approvedDay, town.day);
+  assert.equal(firm.investmentSlots[0].recruitmentDeadline, town.day + 3);
+  assert.equal(firm.targetStaff, startingStaff + 1);
+  assert.equal(firm.vacancyAge, 1);
+  assert.match(firm.latestStaffingReason, /approved investment slot/);
+});
+
+test("disabling the employment intervention preserves legacy staffing despite recorded demand", () => {
+  const town = new TownSimulation({ seed: 42, employmentInterventionEnabled: false });
+  const firm = town.firms.find((candidate) => candidate.archetypeId === "toolmaker");
+  const startingStaff = firm.employees.length;
+  const supportedSales = firm.wage * 1.08 * startingStaff;
+  for (let day = 1; day <= 2; day += 1) {
+    town.day = day;
+    firm.sales = supportedSales;
+    town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+    town.prepareFirmSettlement(firm);
+  }
+
+  assert.equal(firm.staffingDemandHistory.length, 2);
+  assert.deepEqual(firm.investmentSlots, []);
+  assert.equal(firm.targetStaff, startingStaff);
+});
+
+test("an investment hire enters one protected evaluation without stacking another slot", () => {
+  const citizenPolicy = {
+    id: "accept-investment-work-test",
+    decide({ observation, legalActions }) {
+      if (observation.kind === "job-search") return { action: legalActions.find((action) => action.startsWith("apply-job:")), reasons: ["test applied"], scores: {} };
+      if (observation.kind === "job-offer") return { action: "accept-job-offer", reasons: ["test accepted"], scores: {} };
+      return { action: legalActions[0], reasons: ["test fallback"], scores: {} };
+    },
+  };
+  const town = new TownSimulation({ seed: 42, citizenPolicy, employmentInterventionEnabled: true, policy: { shockRisk: 0 } });
+  const firm = town.firms.find((candidate) => candidate.archetypeId === "toolmaker");
+  const startingStaff = firm.employees.length;
+  const supportedSales = firm.wage * 1.08 * startingStaff;
+  for (let day = 1; day <= 2; day += 1) {
+    town.day = day;
+    firm.sales = supportedSales;
+    town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+    town.prepareFirmSettlement(firm);
+    town.finishFirmSettlement(firm);
+  }
+  town.day = 3;
+  firm.sales = supportedSales;
+  town.prepareFirmSettlement(firm);
+
+  assert.equal(town.runJobMarket([firm]), 1);
+  assert.equal(firm.employees.length, startingStaff + 1);
+  assert.equal(firm.investmentSlots[0].status, "evaluating");
+  assert.equal(firm.investmentSlots[0].hiredDay, town.day);
+  assert.equal(firm.investmentSlots[0].evaluationDeadline, town.day + 7);
+
+  town.day = 4;
+  firm.sales = supportedSales;
+  town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+  town.prepareFirmSettlement(firm);
+  assert.equal(firm.investmentSlots.length, 1);
+  assert.equal(firm.targetStaff, firm.employees.length);
+});
+
+test("a recruitment commitment is withdrawn with an explicit funding reason", () => {
+  const town = new TownSimulation({ seed: 42, employmentInterventionEnabled: true, policy: { shockRisk: 0 } });
+  const firm = town.firms.find((candidate) => candidate.archetypeId === "toolmaker");
+  const supportedSales = firm.wage * 1.08 * firm.employees.length;
+  for (let day = 1; day <= 2; day += 1) {
+    town.day = day;
+    firm.sales = supportedSales;
+    town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+    town.prepareFirmSettlement(firm);
+  }
+  firm.cash = 0;
+  town.day = 3;
+  firm.sales = supportedSales;
+
+  town.prepareFirmSettlement(firm);
+
+  assert.equal(firm.investmentSlots[0].status, "withdrawn");
+  assert.equal(firm.investmentSlots[0].endedDay, town.day);
+  assert.match(firm.investmentSlots[0].outcome, /funding fell below/);
+  assert.equal(firm.targetStaff, firm.employees.length);
+  assert.match(firm.events[0].text, /withdrew investment slot.*funding fell below/);
+});
+
+test("reopening an investment vacancy preserves its stable headcount-slot identity", () => {
+  const town = new TownSimulation({ seed: 42, employmentInterventionEnabled: true, policy: { shockRisk: 0 } });
+  const firm = town.firms.find((candidate) => candidate.archetypeId === "toolmaker");
+  const supportedSales = firm.wage * 1.08 * firm.employees.length;
+  for (let day = 1; day <= 2; day += 1) {
+    town.day = day;
+    firm.sales = supportedSales;
+    town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+    town.prepareFirmSettlement(firm);
+  }
+  const slotId = firm.investmentSlots[0].id;
+  firm.cash = 0;
+  town.day = 3;
+  firm.sales = supportedSales;
+  town.prepareFirmSettlement(firm);
+  firm.cash = 150;
+  town.day = 4;
+  firm.sales = supportedSales;
+  town.recordStaffingDemand(firm, "consumer", 10, "staffed transaction capacity");
+
+  town.prepareFirmSettlement(firm);
+
+  assert.equal(firm.investmentSlots.length, 1);
+  assert.equal(firm.investmentSlots[0].id, slotId);
+  assert.equal(firm.investmentSlots[0].status, "recruiting");
+  assert.equal(firm.investmentSlots[0].approvalCount, 2);
 });
 
 test("bulk units contribute their full realized income through one transaction", () => {

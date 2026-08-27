@@ -31,6 +31,12 @@ import {
   GROCERY_KNOWLEDGE_CAPACITY_BONUS,
   INITIAL_FRIENDSHIP_STRENGTH,
   INITIAL_DWELLING_CAPACITY,
+  INVESTMENT_DEMAND_CAPTURE_RATE,
+  INVESTMENT_DEMAND_REQUIRED_DAYS,
+  INVESTMENT_DEMAND_WINDOW_DAYS,
+  INVESTMENT_EVALUATION_DAYS,
+  INVESTMENT_RECRUITMENT_DAYS,
+  INVESTMENT_WAGE_RESERVE_DAYS,
   INVENTORY_WORK_LEARNING_RATE,
   KNOWLEDGE_SCHEMA_VERSION,
   MAINTENANCE_INTERVAL_DAYS,
@@ -76,7 +82,7 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true } = {}) {
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -85,6 +91,7 @@ export class TownSimulation {
     this.housingCapacityEnabled = housingCapacityEnabled;
     this.transportEnabled = transportEnabled;
     this.knowledgeEnabled = knowledgeEnabled;
+    this.employmentInterventionEnabled = employmentInterventionEnabled;
     this.reset();
   }
 
@@ -133,6 +140,13 @@ export class TownSimulation {
       attemptedTransactions: 0,
       turnedAwayTransactions: 0,
       priceRejectionsToday: 0,
+      staffingDemandToday: { consumerUnits: 0, contractUnits: 0, productionUnits: 0, evidence: [] },
+      staffingDemandHistory: [],
+      staffingDemandArchivedDay: null,
+      incomeSupportedTarget: targetStaff,
+      latestStaffingReason: "initial staffing",
+      investmentSlotSequence: 0,
+      investmentSlots: [],
       pricingWindow: { unitsSold: 0, revenue: 0, inputCosts: 0, priceRejections: 0, turnedAway: 0 },
       active: true,
       status: "operating",
@@ -201,6 +215,8 @@ export class TownSimulation {
       transportLoadToday: 0,
       transportFeeToday: 0,
       transportConstrainedToday: false,
+      shortfallCauseToday: null,
+      limitingFirmId: null,
     })).filter((contract) => contract.supplierId >= 0 && contract.buyerId >= 0).map((contract, id) => ({ ...contract, id }));
     this.contracts.filter((contract) => contract.use === "operations").forEach((contract) => {
       this.firms[contract.buyerId].operatingSupplies = contract.targetStock;
@@ -571,6 +587,8 @@ export class TownSimulation {
         transportLoadToday: 0,
         transportFeeToday: 0,
         transportConstrainedToday: false,
+        shortfallCauseToday: null,
+        limitingFirmId: null,
       });
     });
   }
@@ -794,6 +812,10 @@ export class TownSimulation {
   fire(firm, person, reason) {
     firm.employees = firm.employees.filter((id) => id !== person.id);
     person.employer = -1;
+    const investmentSlot = this.activeInvestmentSlot(firm);
+    if (investmentSlot?.status === "evaluating" && investmentSlot.hiredCitizenId === person.id) {
+      this.endInvestmentSlot(firm, investmentSlot, "ended", `${reason} ended the evaluated position`);
+    }
     this.note(person, `${reason} at ${firm.name}`, "bad");
   }
 
@@ -886,6 +908,16 @@ export class TownSimulation {
         .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
       const wage = Math.max(this.policy.minimumWage, firm.wage);
       if (candidate && this.considerJobOffer(firm, candidate, wage)) {
+        const slot = this.activeInvestmentSlot(firm);
+        if (slot?.status === "recruiting") {
+          slot.status = "evaluating";
+          slot.hiredCitizenId = candidate.id;
+          slot.hiredDay = this.day;
+          slot.evaluationDeadline = this.day + INVESTMENT_EVALUATION_DAYS;
+          firm.latestStaffingReason = `${candidate.name} filled investment slot ${slot.id}; evaluation ends on day ${slot.evaluationDeadline}`;
+          this.note(firm, firm.latestStaffingReason, "good");
+          this.note(candidate, `began a ${INVESTMENT_EVALUATION_DAYS}-day planned evaluation at ${firm.name}`, "neutral");
+        }
         firm.vacancyAge = 0;
         hires += 1;
       }
@@ -1123,6 +1155,7 @@ export class TownSimulation {
     firm.attemptedTransactions += 1;
     if (firm.transactionsToday >= this.transactionCapacity(firm)) {
       firm.turnedAwayTransactions += 1;
+      this.recordStaffingDemand(firm, "consumer", 1, "staffed transaction capacity");
       const description = purpose === "food"
         ? "food purchase"
         : purpose;
@@ -1131,6 +1164,158 @@ export class TownSimulation {
     }
     firm.transactionsToday += 1;
     return true;
+  }
+
+  recordStaffingDemand(firm, kind, units, cause) {
+    if (!firm?.active || units <= 0 || !["consumer", "contract", "production"].includes(kind)) return false;
+    const key = `${kind}Units`;
+    firm.staffingDemandToday[key] += units;
+    firm.staffingDemandToday.evidence.push(Object.freeze({ kind, units, cause }));
+    return true;
+  }
+
+  staffingInputUnitCost(firm) {
+    const inputContract = this.contracts.find((contract) => contract.active
+      && contract.buyerId === firm.id
+      && contract.use !== "operations");
+    if (!inputContract) return 0;
+    const carrier = this.transportEnabled && this.requiresHaulage(inputContract)
+      ? this.firms.find((candidate) => candidate.active && candidate.archetypeId === "haulage")
+      : null;
+    return roundMoney(inputContract.unitPrice + (carrier ? carrier.price - carrier.basePrice : 0));
+  }
+
+  staffingIncrementalCapacity(firm) {
+    if (firm.archetypeId === "haulage") return Math.floor(TRANSPORT_CAPACITY_PER_WORKER * firm.operationalReadiness);
+    if (firm.processingPerWorker) return Math.floor(firm.processingPerWorker * firm.operationalReadiness);
+    return Math.floor(firm.transactionsPerWorker * firm.operationalReadiness);
+  }
+
+  archiveStaffingDemand(firm) {
+    if (firm.staffingDemandArchivedDay === this.day) return firm.staffingDemandHistory.at(-1) ?? null;
+    const totalUnits = firm.staffingDemandToday.consumerUnits
+      + firm.staffingDemandToday.contractUnits
+      + firm.staffingDemandToday.productionUnits;
+    const incrementalCapacity = this.staffingIncrementalCapacity(firm);
+    const expectedUnits = Math.min(totalUnits * INVESTMENT_DEMAND_CAPTURE_RATE, incrementalCapacity);
+    const unitContribution = Math.max(0, roundMoney(firm.price - this.staffingInputUnitCost(firm)));
+    const record = Object.freeze({
+      day: this.day,
+      ...structuredClone(firm.staffingDemandToday),
+      totalUnits,
+      incrementalCapacity,
+      expectedUnits,
+      unitContribution,
+      expectedContribution: roundMoney(expectedUnits * unitContribution),
+    });
+    firm.staffingDemandHistory.push(record);
+    firm.staffingDemandArchivedDay = this.day;
+    firm.staffingDemandToday = { consumerUnits: 0, contractUnits: 0, productionUnits: 0, evidence: [] };
+    return record;
+  }
+
+  activeInvestmentSlot(firm) {
+    return firm.investmentSlots.find((slot) => ["recruiting", "evaluating"].includes(slot.status)) ?? null;
+  }
+
+  endInvestmentSlot(firm, slot, status, outcome, kind = "bad") {
+    slot.status = status;
+    slot.endedDay = this.day;
+    slot.outcome = outcome;
+    firm.latestStaffingReason = `${status} investment slot ${slot.id}: ${outcome}`;
+    this.note(firm, `${status === "withdrawn" ? "withdrew" : "ended"} investment slot ${slot.id}: ${outcome}`, kind);
+    return slot;
+  }
+
+  maintainInvestmentSlot(firm, incomeSupportedStaff) {
+    const slot = this.activeInvestmentSlot(firm);
+    if (!slot) return null;
+    if (firm.status !== "operating") return this.endInvestmentSlot(firm, slot, "withdrawn", `firm entered ${firm.status}`);
+    if (slot.status === "recruiting") {
+      if (firm.cash + 1e-9 < slot.fundingRequired) {
+        return this.endInvestmentSlot(firm, slot, "withdrawn", `funding fell below the ${slot.fundingRequired.toFixed(2)} retained commitment`);
+      }
+      if (this.day > slot.recruitmentDeadline) return this.endInvestmentSlot(firm, slot, "withdrawn", "the recruitment deadline passed without a hire");
+      return slot;
+    }
+    if (this.day < slot.evaluationDeadline) return slot;
+    const retained = incomeSupportedStaff >= firm.employees.length;
+    return this.endInvestmentSlot(
+      firm,
+      slot,
+      "completed",
+      retained ? "realized income supported the evaluated worker" : "the planned evaluation ended and ordinary staffing rules resumed",
+      retained ? "good" : "neutral",
+    );
+  }
+
+  approveInvestmentHiring(firm, incomeSupportedStaff) {
+    if (!this.employmentInterventionEnabled
+      || firm.status !== "operating"
+      || firm.employees.length >= firm.maxStaff
+      || this.activeInvestmentSlot(firm)) return null;
+    if (firm.employees.length !== incomeSupportedStaff) {
+      firm.latestStaffingReason = firm.employees.length < incomeSupportedStaff
+        ? "ordinary income-supported expansion takes precedence"
+        : "current staffing already exceeds the income-supported target";
+      return null;
+    }
+    const window = firm.staffingDemandHistory.slice(-INVESTMENT_DEMAND_WINDOW_DAYS);
+    const qualifying = window.filter((record) => record.totalUnits > 0);
+    if (qualifying.length < INVESTMENT_DEMAND_REQUIRED_DAYS) {
+      firm.latestStaffingReason = `${qualifying.length} of ${INVESTMENT_DEMAND_REQUIRED_DAYS} required staffing-demand days qualified`;
+      return null;
+    }
+    const expectedContribution = roundMoney(qualifying.reduce((sum, record) => sum + record.expectedContribution, 0) / qualifying.length);
+    const wage = Math.max(this.policy.minimumWage, firm.wage);
+    const requiredContribution = roundMoney(wage * STAFFING_REVENUE_BUFFER);
+    if (expectedContribution + 1e-9 < requiredContribution) {
+      firm.latestStaffingReason = `${expectedContribution.toFixed(2)} expected contribution did not cover ${requiredContribution.toFixed(2)} buffered wage`;
+      return null;
+    }
+    const fundingRequired = roundMoney(wage * INVESTMENT_WAGE_RESERVE_DAYS + this.nextOperatingNeed(firm));
+    if (firm.cash + 1e-9 < fundingRequired) {
+      firm.latestStaffingReason = `${firm.cash.toFixed(2)} cash did not cover the ${fundingRequired.toFixed(2)} investment reserve`;
+      return null;
+    }
+    let slot = firm.investmentSlots[0] ?? null;
+    if (!slot) {
+      firm.investmentSlotSequence += 1;
+      slot = {
+        id: `${firm.instanceId}:investment:${firm.investmentSlotSequence}`,
+        approvalCount: 0,
+        attempts: [],
+      };
+      firm.investmentSlots.push(slot);
+    }
+    Object.assign(slot, {
+      status: "recruiting",
+      approvedDay: this.day,
+      recruitmentDeadline: this.day + INVESTMENT_RECRUITMENT_DAYS,
+      hiredCitizenId: null,
+      hiredDay: null,
+      evaluationDeadline: null,
+      expectedContribution,
+      requiredContribution,
+      fundingRequired,
+      demandDays: qualifying.map((record) => record.day),
+      incomeSupportedTargetAtApproval: incomeSupportedStaff,
+      endedDay: null,
+      outcome: null,
+    });
+    slot.approvalCount += 1;
+    slot.attempts.push(Object.freeze({
+      approval: slot.approvalCount,
+      approvedDay: this.day,
+      recruitmentDeadline: slot.recruitmentDeadline,
+      expectedContribution,
+      requiredContribution,
+      fundingRequired,
+      demandDays: [...slot.demandDays],
+    }));
+    firm.latestStaffingReason = `approved investment slot ${slot.id} from ${qualifying.length} qualifying demand days`;
+    this.note(firm, `${firm.latestStaffingReason}; ${expectedContribution.toFixed(2)} expected contribution and ${fundingRequired.toFixed(2)} retained funding passed`, "good");
+    return slot;
   }
 
   buy(person, firm, units, purpose) {
@@ -1288,6 +1473,8 @@ export class TownSimulation {
       contract.transportLoadToday = 0;
       contract.transportFeeToday = 0;
       contract.transportConstrainedToday = false;
+      contract.shortfallCauseToday = null;
+      contract.limitingFirmId = null;
       contract.supplierUnitPriceToday = contract.unitPrice;
       const supplier = this.firms[contract.supplierId];
       const buyer = this.firms[contract.buyerId];
@@ -1368,6 +1555,31 @@ export class TownSimulation {
       if (contract.shortfallToday > 0) {
         const transportCause = hauled && (!carrier || transportable < Math.min(contract.requestedToday, available, affordable));
         contract.transportConstrainedToday = transportCause;
+        const buyerCouldAfford = affordable >= contract.requestedToday;
+        if (hauled && !carrier) {
+          contract.shortfallCauseToday = "carrier unavailable";
+          contract.limitingFirmId = null;
+        } else if (!buyerCouldAfford) {
+          contract.shortfallCauseToday = "buyer funding";
+          contract.limitingFirmId = buyer.id;
+        } else if (transportCause) {
+          contract.shortfallCauseToday = carrier
+            ? carrier.operationalReadiness >= 1 ? "carrier labor" : "carrier maintenance"
+            : "carrier unavailable";
+          contract.limitingFirmId = carrier?.id ?? null;
+          if (carrier && carrier.operationalReadiness >= 1) this.recordStaffingDemand(carrier, "contract", contract.shortfallToday, "staffed haulage capacity");
+        } else if (available < contract.requestedToday) {
+          const maintained = supplier.operationalReadiness >= 1;
+          const directLabor = supplier.production === "direct" && maintained;
+          const processingLabor = supplier.processingPerWorker && maintained && supplier.processingShortfallToday > 0;
+          contract.shortfallCauseToday = directLabor
+            ? "supplier production labor"
+            : processingLabor ? "supplier processing labor" : maintained ? "supplier inventory" : "supplier maintenance";
+          contract.limitingFirmId = supplier.id;
+          if (directLabor || processingLabor) this.recordStaffingDemand(supplier, "production", contract.shortfallToday, contract.shortfallCauseToday);
+        } else {
+          contract.shortfallCauseToday = "unattributed contract constraint";
+        }
         this.note(buyer, transportCause
           ? `${carrier?.name ?? "No carrier"} could transport only ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s from ${supplier.name}`
           : `${supplier.name} delivered ${contract.deliveredToday} of ${contract.requestedToday} requested ${PRODUCTS[contract.product].unit}s`, "bad");
@@ -1993,6 +2205,8 @@ export class TownSimulation {
   closeFirm(firm, reason = "sustained insolvency ended operations") {
     if (!firm.active) return false;
     [...firm.employees].forEach((id) => this.fire(firm, this.people[id], "business insolvency ended employment"));
+    const investmentSlot = this.activeInvestmentSlot(firm);
+    if (investmentSlot) this.endInvestmentSlot(firm, investmentSlot, "withdrawn", "firm closure ended the funded headcount commitment");
     firm.active = false;
     firm.closedDay = this.day;
     const entersReceivership = firm.sector === "housing";
@@ -2320,6 +2534,8 @@ export class TownSimulation {
       ? `${firm.status} firms retain cash`
       : firm.lastRescueDay !== null && this.day - firm.lastRescueDay < 14
         ? "recent treasury rescue requires cash retention"
+        : this.activeInvestmentSlot(firm)
+          ? "active investment hiring commitment requires cash retention"
         : firm.targetStaff > firm.employees.length
           ? "approved expansion requires cash retention"
           : null;
@@ -2401,6 +2617,7 @@ export class TownSimulation {
 
   prepareFirmSettlement(firm) {
     if (!firm.active) return;
+    this.archiveStaffingDemand(firm);
     firm.pricingWindow.unitsSold += firm.unitsSold;
     firm.pricingWindow.revenue += firm.sales;
     firm.pricingWindow.inputCosts += firm.inputCosts;
@@ -2414,7 +2631,14 @@ export class TownSimulation {
     const minimumStaff = firm.sector === "housing" ? 2 : 1;
     const incomeSupportedStaff = clamp(Math.floor(firm.revenueEMA / (wage * STAFFING_REVENUE_BUFFER) + 1e-9), minimumStaff, firm.maxStaff);
     const fundedExpansion = incomeSupportedStaff > firm.employees.length && firm.cash >= wage * 6 && firm.employees.length < firm.maxStaff;
-    firm.targetStaff = fundedExpansion ? Math.min(incomeSupportedStaff, firm.employees.length + 1) : Math.min(incomeSupportedStaff, firm.employees.length);
+    firm.incomeSupportedTarget = incomeSupportedStaff;
+    const incomeTarget = fundedExpansion ? Math.min(incomeSupportedStaff, firm.employees.length + 1) : Math.min(incomeSupportedStaff, firm.employees.length);
+    const investmentSlot = this.maintainInvestmentSlot(firm, incomeSupportedStaff) ?? this.approveInvestmentHiring(firm, incomeSupportedStaff);
+    firm.targetStaff = investmentSlot?.status === "recruiting"
+      ? Math.max(incomeTarget, firm.employees.length + 1)
+      : investmentSlot?.status === "evaluating"
+        ? Math.max(incomeTarget, firm.employees.length)
+        : incomeTarget;
     firm.trouble = firm.cash < wage * Math.max(1, firm.employees.length) * 0.7 ? firm.trouble + 1 : Math.max(0, firm.trouble - 1);
     firm.overstaffedDays = firm.employees.length > incomeSupportedStaff || firm.trouble >= 3 ? firm.overstaffedDays + 1 : 0;
     if (firm.overstaffedDays >= 3 && firm.employees.length > 1) {
@@ -2500,6 +2724,11 @@ export class TownSimulation {
       || !Number.isInteger(firm.processingShortfallToday)
       || firm.processingShortfallToday < 0
     ))) throw new Error("Invalid construction processing state");
+    if (this.firms.some((firm) => firm.investmentSlots.length > 1
+      || new Set(firm.investmentSlots.map((slot) => slot.id)).size !== firm.investmentSlots.length
+      || firm.investmentSlots.some((slot) => !["recruiting", "evaluating", "withdrawn", "completed", "ended"].includes(slot.status)))) {
+      throw new Error("Invalid investment headcount-slot state");
+    }
     this.people.forEach((person) => {
       this.friendIds(person).forEach((friendId) => {
         const reciprocal = this.people[friendId].relationships[person.id];
