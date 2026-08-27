@@ -12,12 +12,16 @@ const person = {
     { day: 2, sequence: 3, kind: "bad", text: "missed rent" },
     { day: 1, sequence: 1, kind: "neutral", text: "entered town" },
   ],
+  knowledgeEffectHistory: [
+    { day: 4, phaseIndex: 1, sequence: 1, effectType: "direct-yield", grossContribution: 0.2 },
+  ],
 };
 
-test("activity defaults to all transactions and life events in sequence order", () => {
+test("activity defaults to all transactions, life events, and knowledge effects in sequence order", () => {
   assert.deepEqual(
     activityItems(person).map(({ type, text }) => [type, text]),
     [
+      ["knowledge-effect", undefined],
       ["event", "found work"],
       ["transaction", "wage"],
       ["event", "missed rent"],
@@ -30,15 +34,18 @@ test("activity defaults to all transactions and life events in sequence order", 
 test("activity can be filtered by record type", () => {
   assert.deepEqual(activityItems(person, "transactions").map(({ text }) => text), ["wage", "food"]);
   assert.deepEqual(activityItems(person, "events").map(({ text }) => text), ["found work", "missed rent", "entered town"]);
+  assert.deepEqual(activityItems(person, "knowledge-effects").map(({ grossContribution }) => grossContribution), [0.2]);
 });
 
 test("activity returns the complete matching history", () => {
   const longHistory = {
     ledger: Array.from({ length: 15 }, (_, index) => ({ day: index + 1, sequence: index + 1, text: `transaction ${index + 1}` })),
     events: Array.from({ length: 11 }, (_, index) => ({ day: index + 1, sequence: index + 16, text: `event ${index + 1}` })),
+    knowledgeEffectHistory: Array.from({ length: 4 }, (_, index) => ({ day: index + 1, sequence: index + 27 })),
   };
 
-  assert.equal(activityItems(longHistory).length, 26);
+  assert.equal(activityItems(longHistory).length, 30);
   assert.equal(activityItems(longHistory, "transactions").length, 15);
   assert.equal(activityItems(longHistory, "events").length, 11);
+  assert.equal(activityItems(longHistory, "knowledge-effects").length, 4);
 });

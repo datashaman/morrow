@@ -18,6 +18,12 @@ import { playbackPresentation } from "./playback-presentation.js";
 import { formatTemporalRecord, PHASE_BLOCKS } from "./civil-time.js";
 import { firmScheduleEvidence } from "./schedule-presentation.js";
 import { citizenScheduleEvidence } from "./citizen-schedule-presentation.js";
+import {
+  citizenKnowledgeEvidence,
+  domainLabel,
+  firmKnowledgeEvidence,
+  knowledgeEffectDescription,
+} from "./knowledge-presentation.js";
 
 const app = document.querySelector("#app");
 app.innerHTML = `
@@ -111,6 +117,7 @@ app.innerHTML = `
             <option value="all" selected>All</option>
             <option value="transactions">Transactions</option>
             <option value="events">Life events</option>
+            <option value="knowledge-effects">Knowledge effects</option>
           </select>
         </label>
       </div>
@@ -259,16 +266,24 @@ function renderActivity(entity, filter, stream) {
   const activity = activityItems(entity, filter);
   stream.replaceChildren(...activity.map((entry) => {
     const item = document.createElement("li");
-    item.className = entry.type === "transaction" ? entry.direction : `event ${entry.kind}`;
+    item.className = entry.type === "transaction" ? entry.direction : entry.type === "knowledge-effect" ? "knowledge-effect" : `event ${entry.kind}`;
     item.innerHTML = entry.type === "transaction"
       ? `<time>${formatTemporalRecord(entry)}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
-      : `<time>${formatTemporalRecord(entry)}</time><span>${entry.text}</span><b>Life event</b>`;
+      : entry.type === "knowledge-effect"
+        ? `<time>${formatTemporalRecord(entry)}</time><span>${knowledgeEffectDescription(entry)}</span><b>Knowledge effect</b>`
+        : `<time>${formatTemporalRecord(entry)}</time><span>${entry.text}</span><b>Life event</b>`;
     return item;
   }));
   if (!activity.length) {
     const item = document.createElement("li");
     item.className = "activity-empty";
-    item.textContent = filter === "transactions" ? "No transactions yet" : filter === "events" ? "No life events yet" : "No activity yet";
+    item.textContent = filter === "transactions"
+      ? "No transactions yet"
+      : filter === "events"
+        ? "No life events yet"
+        : filter === "knowledge-effects"
+          ? "No knowledge effects yet"
+          : "No activity yet";
     stream.append(item);
   }
   if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
@@ -313,18 +328,20 @@ function renderMotivations(person) {
 }
 
 function renderKnowledge(person) {
-  elements["knowledge-profile"].replaceChildren(...["general", "retail", "inventory"].map((domain) => {
+  const knowledge = citizenKnowledgeEvidence(person.knowledgeProfile);
+  const profileItems = [{ label: "General", value: knowledge.general }, ...knowledge.vocational];
+  elements["knowledge-profile"].replaceChildren(...profileItems.map(({ label, value }) => {
     const item = document.createElement("span");
-    item.innerHTML = `${domain[0].toUpperCase()}${domain.slice(1)} <b>${percent(person.knowledgeProfile[domain])}</b>`;
+    item.innerHTML = `${label} <b>${percent(value)}</b>`;
     return item;
-  }));
+  }), ...(!knowledge.vocational.length ? [Object.assign(document.createElement("span"), { className: "knowledge-empty", textContent: "No vocational knowledge yet" })] : []));
   const stream = elements["learning-stream"];
   const followingNewest = stream.scrollTop <= 8;
   const previousScrollHeight = stream.scrollHeight;
   const previousScrollTop = stream.scrollTop;
   stream.replaceChildren(...person.learningHistory.map((record) => {
     const item = document.createElement("li");
-    item.innerHTML = `<time>${formatTemporalRecord(record)}</time><b>${record.domain[0].toUpperCase()}${record.domain.slice(1)} knowledge</b><span>${record.sourceName}: ${percent(record.before)} → ${percent(record.after)}</span><small>${record.rule}</small>`;
+    item.innerHTML = `<time>${formatTemporalRecord(record)}</time><b>${domainLabel(record.domain)} knowledge</b><span>${record.sourceName}: ${percent(record.before)} → ${percent(record.after)}</span><small>${record.rule}</small>`;
     return item;
   }));
   if (!person.learningHistory.length) {
@@ -460,11 +477,9 @@ function updateInterface() {
   const hasOperatingSupply = simulation.contracts.some((contract) => contract.use === "operations" && contract.buyerId === firm.id);
   const product = PRODUCTS[firm.sells];
   const staffing = staffingEvidence(firm);
-  const knowledgeCapacity = firm.archetypeId === "everyday-grocer"
-    ? ` · knowledge +${firm.knowledgeCapacitySlotsToday} slot${firm.knowledgeCapacitySlotsToday === 1 ? "" : "s"} today, ${percent(firm.knowledgeCapacityCarry)} carry`
-    : "";
+  const knowledge = firmKnowledgeEvidence(firm, simulation.people);
   const lifecycle = `${firm.vital ? "Vital · " : ""}${firm.active ? `Founded D${firm.foundingDay}` : `Closed D${firm.closedDay}`}${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}`;
-  const operatingState = `${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.sector === "housing" ? `${simulation.housingOccupancy()}/${firm.dwellingCapacity} dwellings occupied` : firm.sector === "transport" ? `${firm.transportLoadToday}/${firm.transportCapacityToday} freight load used today` : firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""}${knowledgeCapacity} · ${money(firm.revenueEMA)} smoothed net income`;
+  const operatingState = `${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.sector === "housing" ? `${simulation.housingOccupancy()}/${firm.dwellingCapacity} dwellings occupied` : firm.sector === "transport" ? `${firm.transportLoadToday}/${firm.transportCapacityToday} freight load used today` : firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""} · ${money(firm.revenueEMA)} smoothed net income`;
   const ownerChoice = `Price ${firm.ownerDecision.priceDecision}${firm.ownerDecision.priceDay ? ` on D${firm.ownerDecision.priceDay}` : ""} at ${price(firm.ownerDecision.price)}: ${firm.ownerDecision.priceReason}. Wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason}. Capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason}. ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason}. ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}.`;
   const perishableState = describePerishableInventory(firm, PRODUCTS, simulation.day);
   const schedule = firmScheduleEvidence({
@@ -484,6 +499,7 @@ function updateInterface() {
       <section><h4>Product pipeline and contracts</h4><p>${describePipeline(firm, PRODUCTS)}</p>${firm.processingPerWorker ? `<p class="${firm.processingShortfallToday ? "shortfall" : ""}">${describeProcessing(firm, PRODUCTS)}</p>` : ""}<ul class="contract-list">${contracts.length ? contracts.map((contract) => `<li class="${contract.shortfallToday ? "shortfall" : ""}">${describeContract(contract, PRODUCTS)}</li>`).join("") : "<li>No supply contracts.</li>"}</ul></section>
       <section><h4>Staffing evidence</h4><dl><div><dt>Headcount</dt><dd>${staffing.headcount}</dd></div><div><dt>Latest 2-of-3 gate</dt><dd>${staffing.demand}</dd></div><div><dt>Funded slot</dt><dd>${staffing.slot}</dd></div><div><dt>Latest reason</dt><dd>${staffing.reason}</dd></div></dl></section>
       <section><h4>Owner choices</h4><p class="owner-choice">${ownerChoice}</p></section>
+      <section><h4>Trade knowledge</h4><dl><div><dt>Configured domains</dt><dd>${knowledge.domains.map((domain) => `${domain.label} ${percent(domain.weight)} weight · ${percent(domain.average)} workforce average · ${percent(domain.workplaceLearningRate)} per attended shift`).join("; ")}</dd></div><div><dt>Weighted workforce</dt><dd>${percent(knowledge.workforceWeightedAverage)}</dd></div><div><dt>Effect today</dt><dd>${knowledge.effectType} · ${knowledge.scalarBaseline.toFixed(3)} scalar · ${knowledge.grossContribution.toFixed(3)} gross · ${knowledge.releasedUnits} whole released · ${percent(knowledge.carry)} carry · ${knowledge.usedUnits.toFixed(3)} used</dd></div><div><dt>Rules</dt><dd>${knowledge.domains.map((domain) => domain.learningRule).join("; ")} · ${knowledge.effectRule} · maximum ${percent(knowledge.maxBonus)}</dd></div></dl></section>
     </div>
   `;
   elements["firm-decision-title"].textContent = `${firmInstanceLabel(firm, simulation.firms)} owner decisions`;
