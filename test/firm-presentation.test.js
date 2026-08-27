@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { PRODUCTS } from "../src/config.js";
-import { describeContract, describePipeline, describeProcessing } from "../src/firm-presentation.js";
+import { describeContract, describePerishableInventory, describePipeline, describeProcessing } from "../src/firm-presentation.js";
 import { TownSimulation } from "../src/simulation.js";
 
 test("firm pipeline descriptions name every output and upstream producer", () => {
@@ -63,4 +63,23 @@ test("construction processing exposes separate input, output, capacity, and shor
     describeProcessing(yard, PRODUCTS),
     "Processing · 2 kits awaiting · 3 bundles stocked · 1/1 units processed today · 1 labor-limited input shortfall",
   );
+});
+
+test("perishable presentation exposes dated stock, next expiry, processing, sales, and waste", () => {
+  const town = new TownSimulation({ seed: 42 });
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  grocer.inventory = 0;
+  grocer.inventoryBatches = [];
+  town.day = 2;
+  town.addFirmInventory(grocer, 2, { batchDay: 1 });
+  town.addFirmInventory(grocer, 3, { batchDay: 2 });
+  grocer.perishableProcessedToday = 3;
+  grocer.perishableSalesToday = 1;
+  town.recordWaste(grocer, { product: grocer.sells, quantity: 4, batchDay: -2, age: 4, reason: "test" });
+
+  assert.equal(
+    describePerishableInventory(grocer, PRODUCTS, town.day),
+    "Perishable stock · 5.0 meals (age 0: 3.0, age 1: 2.0) · next expiry D4 · 3 processed today · 1 sold today · 4.0 wasted total",
+  );
+  assert.equal(describePerishableInventory(town.firms.find((firm) => firm.archetypeId === "toolmaker"), PRODUCTS, town.day), "");
 });

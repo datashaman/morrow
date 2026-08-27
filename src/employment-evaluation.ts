@@ -1,10 +1,10 @@
 import { DEFAULT_LATENT_FIRM_NAMES, PHASES } from "./config.js";
 import { TownSimulation } from "./simulation.js";
 
-export const EMPLOYMENT_EVALUATION_SCHEMA_VERSION = 2;
+export const EMPLOYMENT_EVALUATION_SCHEMA_VERSION = 3;
 export const DEFAULT_EMPLOYMENT_EVALUATION_SEEDS = Object.freeze([20260823, 101, 202, 303, 404, 505]);
-const CONTROL_FIRST_WAGES = Object.freeze([1, 2, 1, 1, 1, 1]);
-const CONTROL_DEATHS = Object.freeze([23, 24, 20, 21, 22, 22]);
+const CONTROL_FIRST_WAGES = Object.freeze([1, 1, 1, 1, 1, 2]);
+const CONTROL_DEATHS = Object.freeze([22, 20, 21, 22, 40, 21]);
 
 type EvaluationConfig = Readonly<{ seeds: readonly number[]; days: number }>;
 

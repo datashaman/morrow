@@ -51,6 +51,7 @@ import {
   OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
   OPPORTUNITY_REQUIRED_VIABLE_DAYS,
   OPPORTUNITY_STARTUP_CAPITAL,
+  PERISHABLE_SHELF_LIFE,
   PHASES,
   PRIVATE_FORMATION_ARCHETYPE_IDS,
   PRIVATE_REENTRY_COOLDOWN_DAYS,
@@ -100,6 +101,7 @@ export class TownSimulation {
   }
 
   createFirmInstance(archetype, id, { owner = id, cash = 150, founderCapital = cash, inventory = archetype.inventory, revenueEMA = archetype.initialStaff * archetype.wage * STAFFING_REVENUE_BUFFER, targetStaff = archetype.initialStaff, instanceNumber = 1, foundingDay = 1 } = {}) {
+    const shelfLife = PERISHABLE_SHELF_LIFE[archetype.sells] ?? null;
     return {
       ...archetype,
       kind: "firm",
@@ -110,6 +112,22 @@ export class TownSimulation {
       founderCapital,
       cash,
       inventory,
+      inventoryBatchSequence: inventory > 0 && shelfLife ? 1 : 0,
+      inventoryBatches: inventory > 0 && shelfLife ? [{
+        sequence: 1,
+        product: archetype.sells,
+        quantity: inventory,
+        batchDay: foundingDay,
+        qualityBasis: archetype.quality ?? null,
+        shelfLife,
+        ownerKind: "firm",
+        ownerId: id,
+        ownerName: archetype.name,
+      }] : [],
+      wasteSequence: 0,
+      wasteHistory: [],
+      perishableProcessedToday: 0,
+      perishableSalesToday: 0,
       inputInventory: 0,
       processingCapacityToday: 0,
       processedToday: 0,
@@ -272,6 +290,10 @@ export class TownSimulation {
         foodSeller: -1,
         foodReserveTarget: 1 + (id % 3),
         foodStock: [],
+        foodConsumedToday: 0,
+        foodConsumedTotal: 0,
+        wasteSequence: 0,
+        wasteHistory: [],
         lastFoodQuality: null,
         lastFoodAge: null,
         personalSeller: -1,
@@ -712,6 +734,148 @@ export class TownSimulation {
   note(person, text, kind = "neutral") {
     person.activitySequence += 1;
     person.events.unshift({ day: this.day, ...temporalMetadata(this.day, this.phase), sequence: person.activitySequence, text, kind });
+  }
+
+  isPerishable(product) {
+    return Boolean(PERISHABLE_SHELF_LIFE[product]);
+  }
+
+  reconcileInventoryBatches(firm) {
+    if (!this.isPerishable(firm.sells)) return;
+    const batchTotal = firm.inventoryBatches.reduce((total, batch) => total + batch.quantity, 0);
+    if (Math.abs(batchTotal - firm.inventory) <= 1e-9) return;
+    const inventory = firm.inventory;
+    firm.inventoryBatches = [];
+    firm.inventoryBatchSequence = 0;
+    firm.inventory = 0;
+    if (inventory > 0) this.addFirmInventory(firm, inventory, { batchDay: this.day });
+  }
+
+  addFirmInventory(firm, quantity, { batchDay = this.day, qualityBasis = firm.quality ?? null } = {}) {
+    if (!(quantity > 0)) return 0;
+    if (!this.isPerishable(firm.sells)) {
+      firm.inventory += quantity;
+      return quantity;
+    }
+    this.reconcileInventoryBatches(firm);
+    const shelfLife = PERISHABLE_SHELF_LIFE[firm.sells];
+    const latest = firm.inventoryBatches.at(-1);
+    if (latest && latest.batchDay === batchDay && latest.qualityBasis === qualityBasis && latest.shelfLife === shelfLife) latest.quantity += quantity;
+    else {
+      firm.inventoryBatchSequence += 1;
+      firm.inventoryBatches.push({
+        sequence: firm.inventoryBatchSequence,
+        product: firm.sells,
+        quantity,
+        batchDay,
+        qualityBasis,
+        shelfLife,
+        ownerKind: firm.kind,
+        ownerId: firm.id,
+        ownerName: firm.name,
+      });
+    }
+    firm.inventory += quantity;
+    return quantity;
+  }
+
+  takeFirmInventory(firm, quantity) {
+    if (!(quantity > 0) || firm.inventory + 1e-9 < quantity) return [];
+    if (!this.isPerishable(firm.sells)) {
+      firm.inventory -= quantity;
+      return [{ product: firm.sells, quantity, batchDay: this.day, qualityBasis: firm.quality ?? null, shelfLife: null }];
+    }
+    this.reconcileInventoryBatches(firm);
+    let remaining = quantity;
+    const taken = [];
+    firm.inventoryBatches.sort((left, right) => left.batchDay - right.batchDay || left.sequence - right.sequence);
+    for (const batch of firm.inventoryBatches) {
+      if (remaining <= 1e-9) break;
+      const removed = Math.min(batch.quantity, remaining);
+      if (removed <= 0) continue;
+      batch.quantity -= removed;
+      remaining -= removed;
+      taken.push({ ...batch, quantity: removed });
+    }
+    firm.inventoryBatches = firm.inventoryBatches.filter((batch) => batch.quantity > 1e-9);
+    firm.inventory = Math.max(0, firm.inventory - (quantity - remaining));
+    return remaining <= 1e-9 ? taken : [];
+  }
+
+  peekFirmInventory(firm, quantity) {
+    if (!(quantity > 0) || firm.inventory + 1e-9 < quantity) return [];
+    if (!this.isPerishable(firm.sells)) return [{
+      product: firm.sells,
+      quantity,
+      batchDay: this.day,
+      qualityBasis: firm.quality ?? null,
+      shelfLife: null,
+    }];
+    this.reconcileInventoryBatches(firm);
+    let remaining = quantity;
+    const selected = [];
+    [...firm.inventoryBatches]
+      .sort((left, right) => left.batchDay - right.batchDay || left.sequence - right.sequence)
+      .forEach((batch) => {
+        if (remaining <= 1e-9) return;
+        const taken = Math.min(batch.quantity, remaining);
+        if (taken > 0) selected.push({ ...batch, quantity: taken });
+        remaining -= taken;
+      });
+    return remaining <= 1e-9 ? selected : [];
+  }
+
+  recordWaste(actor, { product, quantity, batchDay, age, reason }) {
+    actor.wasteSequence += 1;
+    const record = Object.freeze({
+      day: this.day,
+      ...temporalMetadata(this.day, "Planning"),
+      sequence: actor.wasteSequence,
+      actorKind: actor.kind,
+      actorId: actor.id,
+      actorName: actor.name,
+      product,
+      quantity,
+      batchDay,
+      age,
+      reason,
+    });
+    actor.wasteHistory.unshift(record);
+    return record;
+  }
+
+  expirePerishableInventory() {
+    this.firms.forEach((firm) => {
+      firm.perishableProcessedToday = 0;
+      firm.perishableSalesToday = 0;
+      if (!this.isPerishable(firm.sells)) return;
+      this.reconcileInventoryBatches(firm);
+      const viable = [];
+      firm.inventoryBatches.forEach((batch) => {
+        const age = this.day - batch.batchDay;
+        if (age < batch.shelfLife) return void viable.push(batch);
+        firm.inventory -= batch.quantity;
+        this.recordWaste(firm, { product: batch.product, quantity: batch.quantity, batchDay: batch.batchDay, age, reason: "expired at shelf-life boundary" });
+        this.note(firm, `${batch.quantity.toFixed(1)} ${PRODUCTS[batch.product].unit}${batch.quantity === 1 ? "" : "s"} expired after ${age} days`, "bad");
+      });
+      firm.inventoryBatches = viable;
+      if (firm.inventory < 1e-9) firm.inventory = 0;
+    });
+    this.people.forEach((person) => {
+      person.foodConsumedToday = 0;
+      if (!person.foodStock.length) return;
+      const viable = [];
+      person.foodStock.forEach((food) => {
+        const batchDay = food.processedDay ?? food.purchasedDay;
+        const shelfLife = food.shelfLife ?? PERISHABLE_SHELF_LIFE[this.firms[food.seller]?.sells] ?? 3;
+        const age = this.day - batchDay;
+        if (age < shelfLife) return void viable.push(food);
+        const product = food.product ?? this.firms[food.seller]?.sells ?? "budgetFood";
+        this.recordWaste(person, { product, quantity: 1, batchDay, age, reason: "expired in citizen pantry" });
+        this.note(person, `a stored meal from ${this.firms[food.seller]?.name ?? "an unknown seller"} expired`, "bad");
+      });
+      person.foodStock = viable;
+    });
   }
 
   ledger(person, { direction, amount, text, before }) {
@@ -1381,6 +1545,7 @@ export class TownSimulation {
   }
 
   buy(person, firm, units, purpose) {
+    this.reconcileInventoryBatches(firm);
     if (!person.alive || !firm?.active || firm.inventory < units) return 0;
     const cost = roundMoney(firm.price * units);
     if (person.cash + 1e-9 < cost) {
@@ -1391,14 +1556,27 @@ export class TownSimulation {
     const before = person.cash;
     const paid = this.transfer(person, firm, cost, { exact: true });
     if (paid !== cost) return 0;
-    firm.inventory -= units;
+    const inventoryTaken = this.takeFirmInventory(firm, units);
+    if (!inventoryTaken.length) throw new Error(`Inventory changed during exact ${purpose} purchase`);
     firm.sales += paid;
     firm.unitsSold += units;
+    if (this.isPerishable(firm.sells)) firm.perishableSalesToday += units;
     if (purpose === "food") {
       person.foodSeller = firm.id;
-      for (let unit = 0; unit < units; unit += 1) {
-        person.foodStock.push({ purchasedDay: this.day, quality: firm.quality, seller: firm.id });
-      }
+      inventoryTaken.forEach((batch) => {
+        for (let unit = 0; unit < batch.quantity; unit += 1) person.foodStock.push({
+          product: firm.sells,
+          processedDay: batch.batchDay,
+          purchasedDay: this.day,
+          quality: batch.qualityBasis ?? firm.quality,
+          qualityAtPurchase: this.effectiveFoodQuality({ quality: batch.qualityBasis ?? firm.quality, processedDay: batch.batchDay }),
+          shelfLife: batch.shelfLife,
+          seller: firm.id,
+          ownerKind: person.kind,
+          ownerId: person.id,
+          ownerName: person.name,
+        });
+      });
     } else person.personalSeller = firm.id;
     const description = purpose === "food"
       ? `bought ${units} food portion${units === 1 ? "" : "s"} from ${firm.name}`
@@ -1414,18 +1592,20 @@ export class TownSimulation {
   }
 
   consumeFood(person, food) {
-    const age = Math.max(0, this.day - food.purchasedDay);
+    const age = Math.max(0, this.day - (food.processedDay ?? food.purchasedDay));
     const quality = this.effectiveFoodQuality(food);
     person.lastFoodQuality = quality;
     person.lastFoodAge = age;
     person.foodSeller = food.seller;
+    person.foodConsumedToday += 1;
+    person.foodConsumedTotal += 1;
     person.hungryDays = Math.max(0, person.hungryDays - 1);
     person.health = clamp(person.health + quality * FOOD_HEALTH_RECOVERY);
     return quality;
   }
 
   effectiveFoodQuality(food) {
-    const age = Math.max(0, this.day - food.purchasedDay);
+    const age = Math.max(0, this.day - (food.processedDay ?? food.purchasedDay));
     return clamp(food.quality - age * FOOD_QUALITY_DECAY_PER_DAY, MIN_FOOD_QUALITY, 1);
   }
 
@@ -1446,10 +1626,12 @@ export class TownSimulation {
     this.firms.forEach((firm) => this.accrueKnowledgeCapacity(firm));
     this.firms.forEach((firm) => {
       if (!firm.active || firm.production !== "direct") return;
-      firm.inventory += firm.employees.reduce((sum, id) => {
+      const produced = firm.employees.reduce((sum, id) => {
         const person = this.people[id];
         return sum + (person.attended ? (0.42 + person.skill * 0.75) * firm.productivity * person.health * (1 - person.stress * 0.32) * firm.operationalReadiness : 0);
       }, 0);
+      this.addFirmInventory(firm, produced);
+      if (this.isPerishable(firm.sells)) firm.perishableProcessedToday += produced;
     });
   }
 
@@ -1574,7 +1756,7 @@ export class TownSimulation {
         const paid = canSettleExactly ? this.transfer(buyer, supplier, cost, { exact: true }) : 0;
         const freightPaid = paid === cost && transportFee > 0 ? this.transfer(buyer, carrier, transportFee, { exact: true }) : 0;
         if (paid === cost && freightPaid === transportFee) {
-          supplier.inventory -= units;
+          this.takeFirmInventory(supplier, units);
           if (contract.use === "operations") buyer.operatingSupplies += units;
           else if (contract.use === "construction-project") {
             if (housingProject === "expansion") buyer.dwellingCapacity += HOUSING_PROJECT_CAPACITY_GAIN * units;
@@ -1588,7 +1770,10 @@ export class TownSimulation {
             buyer.inputInventory += units;
             this.processConstructionInputs(buyer);
           }
-          else buyer.inventory += units;
+          else {
+            this.addFirmInventory(buyer, units, { batchDay: this.day });
+            if (this.isPerishable(buyer.sells)) buyer.perishableProcessedToday += units;
+          }
           supplier.sales += paid;
           supplier.unitsSold += units;
           buyer.inputCosts += paid + freightPaid;
@@ -1747,9 +1932,16 @@ export class TownSimulation {
 
   considerFood(person, foodFirms) {
     if (!person.alive) return false;
+    const oldestStoredFoodIndex = person.foodStock.reduce((oldest, food, index, stock) => {
+      if (oldest < 0) return index;
+      const day = food.processedDay ?? food.purchasedDay;
+      const oldestDay = stock[oldest].processedDay ?? stock[oldest].purchasedDay;
+      return day < oldestDay ? index : oldest;
+    }, -1);
     const options = person.foodStock.length
-      ? person.foodStock.map((food, index) => ({
-        action: `eat-stored-food:${index}`,
+      ? [person.foodStock[oldestStoredFoodIndex]].map((food) => ({
+        index: oldestStoredFoodIndex,
+        action: `eat-stored-food:${oldestStoredFoodIndex}`,
         source: "stored",
         sellerId: food.seller,
         sellerName: this.firms[food.seller]?.name ?? "unknown seller",
@@ -1757,13 +1949,17 @@ export class TownSimulation {
         unitPrice: 0,
         totalPrice: 0,
         effectiveQuality: this.effectiveFoodQuality(food),
-        age: Math.max(0, this.day - food.purchasedDay),
+        age: Math.max(0, this.day - (food.processedDay ?? food.purchasedDay)),
+        remainingShelfLife: Math.max(0, (food.shelfLife ?? 3) - Math.max(0, this.day - (food.processedDay ?? food.purchasedDay))),
         capacityAvailable: true,
       }))
       : foodFirms.flatMap((firm) => {
         const maxUnits = Math.min(person.foodReserveTarget, Math.floor(firm.inventory), Math.floor((person.cash + 1e-9) / firm.price));
         return Array.from({ length: maxUnits }, (_, index) => {
           const units = index + 1;
+          const batches = this.peekFirmInventory(firm, units);
+          const effectiveQuality = batches.reduce((total, batch) => total + this.effectiveFoodQuality({ quality: batch.qualityBasis ?? firm.quality, processedDay: batch.batchDay }) * batch.quantity, 0) / units;
+          const remainingShelfLife = Math.min(...batches.map((batch) => batch.shelfLife - (this.day - batch.batchDay)));
           return {
             action: `buy-food:${firm.id}:${units}`,
             source: "seller",
@@ -1772,8 +1968,9 @@ export class TownSimulation {
             units,
             unitPrice: firm.price,
             totalPrice: roundMoney(firm.price * units),
-            effectiveQuality: firm.quality,
-            age: 0,
+            effectiveQuality,
+            age: Math.max(...batches.map((batch) => this.day - batch.batchDay)),
+            remainingShelfLife,
             capacityAvailable: firm.transactionsToday < this.transactionCapacity(firm),
           };
         });
@@ -2753,7 +2950,9 @@ export class TownSimulation {
     this.finishFirmSettlement(firm);
   }
 
-  planningPhase() {}
+  planningPhase() {
+    this.expirePerishableInventory();
+  }
 
   isExtinct() {
     return !this.people.some((person) => person.alive);
@@ -2783,6 +2982,11 @@ export class TownSimulation {
     if (this.firms.some((firm, id) => firm.id !== id)) throw new Error("Firm entity IDs must remain stable array references");
     if (new Set(this.firms.map((firm) => firm.instanceId)).size !== this.firms.length) throw new Error("Firm instance identities must remain unique");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
+    this.firms.filter((firm) => this.isPerishable(firm.sells)).forEach((firm) => {
+      const batchTotal = firm.inventoryBatches.reduce((total, batch) => total + batch.quantity, 0);
+      if (Math.abs(batchTotal - firm.inventory) > 1e-6) throw new Error(`Perishable inventory batches do not reconcile for ${firm.name}`);
+      if (firm.inventoryBatches.some((batch) => batch.quantity <= 0 || batch.product !== firm.sells)) throw new Error(`Invalid perishable inventory batch for ${firm.name}`);
+    });
     if (this.people.some((person) => person.employer >= 0 && person.jobApplicationFirm >= 0)) throw new Error("An employed person cannot remain a job applicant");
     if (this.people.some((person) => person.employer >= 0 && (!this.firms[person.employer]?.active || !this.firms[person.employer].employees.includes(person.id)))) throw new Error("Employment references must be reciprocal and active");
     if (this.firms.some((firm) => firm.employees.some((personId) => this.people[personId]?.employer !== firm.id))) throw new Error("Firm employee references must be reciprocal");

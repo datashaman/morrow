@@ -18,8 +18,11 @@ test("physical supply settles supplier goods and paid haulage only on delivery",
   const grocer = town.firms.find((firm) => firm.name === "Harvest Foods");
   const contract = town.contracts.find((candidate) => candidate.supplierId === farm.id && candidate.buyerId === grocer.id);
   town.contracts.filter((candidate) => candidate !== contract).forEach((candidate) => { candidate.active = false; });
-  farm.inventory = 100;
+  farm.inventory = 0;
+  farm.inventoryBatches = [];
+  town.addFirmInventory(farm, 100);
   grocer.inventory = 0;
+  grocer.inventoryBatches = [];
   grocer.cash = 100;
   town.initialMoney = town.totalMoney();
   const farmBefore = farm.cash;
@@ -110,8 +113,11 @@ test("goods affordability without the complete freight fee creates no partial se
   const grocer = town.firms.find((firm) => firm.name === "Harvest Foods");
   const contract = town.contracts.find((candidate) => candidate.supplierId === farm.id && candidate.buyerId === grocer.id);
   town.contracts.filter((candidate) => candidate !== contract).forEach((candidate) => { candidate.active = false; });
-  farm.inventory = 100;
+  farm.inventory = 0;
+  farm.inventoryBatches = [];
+  town.addFirmInventory(farm, 100);
   grocer.inventory = 0;
+  grocer.inventoryBatches = [];
   grocer.cash = contract.unitPrice - town.firms.find((firm) => firm.archetypeId === "haulage").basePrice;
   town.initialMoney = town.totalMoney();
   const before = { farmStock: farm.inventory, farmCash: farm.cash, grocerCash: grocer.cash };

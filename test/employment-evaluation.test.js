@@ -21,15 +21,15 @@ test("the paired employment evaluator is deterministic, serializable, and cash-c
 test("the disabled control locks the reproducible wage and completed-day mortality baselines", () => {
   const report = evaluateEmploymentIntervention({ seeds: DEFAULT_EMPLOYMENT_EVALUATION_SEEDS, days: 60 });
 
-  assert.deepEqual(report.runs.map((run) => run.control.firstWagesByDay30), [1, 2, 1, 1, 1, 1]);
-  assert.deepEqual(report.runs.map((run) => run.control.deathsByDay60), [23, 24, 20, 21, 22, 22]);
+  assert.deepEqual(report.runs.map((run) => run.control.firstWagesByDay30), [1, 1, 1, 1, 1, 2]);
+  assert.deepEqual(report.runs.map((run) => run.control.deathsByDay60), [22, 20, 21, 22, 40, 21]);
   assert.equal(report.controlBaseline.firstWages.matches, true);
   assert.equal(report.controlBaseline.deaths.matches, true);
   assert.deepEqual(report.gates.fundedOpportunitiesByDay7.observed, [5, 3, 2, 4, 1, 2]);
   assert.equal(report.gates.fundedOpportunitiesByDay7.passed, true);
-  assert.equal(report.gates.firstWagesByDay30.passed, true);
+  assert.equal(report.gates.firstWagesByDay30.passed, false);
   assert.equal(report.gates.mortality.passed, true);
-  assert.equal(report.status, "passed");
+  assert.equal(report.status, "failed");
 });
 
 test("the report exposes paired outcomes, causal event counts, and explicit acceptance gates", () => {

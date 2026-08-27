@@ -116,6 +116,7 @@ export type FoodOption = Readonly<{
   totalPrice: number;
   effectiveQuality: number;
   age: number;
+  remainingShelfLife?: number;
   capacityAvailable: boolean;
 }>;
 

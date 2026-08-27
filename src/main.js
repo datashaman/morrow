@@ -1,7 +1,7 @@
 import "./styles.css";
 import { DEFAULT_LATENT_FIRM_NAMES, PHASES, PRODUCTS } from "./config.js";
 import { activityItems } from "./activity.js";
-import { describeContract, describePipeline, describeProcessing } from "./firm-presentation.js";
+import { describeContract, describePerishableInventory, describePipeline, describeProcessing } from "./firm-presentation.js";
 import { firmSelectorOptions, resolveSelectedFirmId, staffingEvidence } from "./firm-detail-presentation.js";
 import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-presentation.js";
 import {
@@ -243,8 +243,8 @@ function actionName(decision, action) {
   const option = decision.observation.options?.find((candidate) => candidate.action === action);
   if (option?.label) return option.label;
   const capacity = option?.capacityAvailable ? "capacity available" : "seller full";
-  if (action.startsWith("eat-stored-food:")) return `Chose stored food from ${option?.sellerName ?? "a previous seller"} (${percent(option?.effectiveQuality ?? 0)} quality, ${option?.age ?? 0}d old)`;
-  if (action.startsWith("buy-food:")) return `Tried ${option?.units ?? ""} food portion${option?.units === 1 ? "" : "s"} from ${option?.sellerName ?? "a seller"} (${money(option?.totalPrice ?? 0)}, ${percent(option?.effectiveQuality ?? 0)} quality, ${capacity})`;
+  if (action.startsWith("eat-stored-food:")) return `Chose stored food from ${option?.sellerName ?? "a previous seller"} (${percent(option?.effectiveQuality ?? 0)} quality, ${option?.age ?? 0}d old, ${option?.remainingShelfLife ?? 0}d life left)`;
+  if (action.startsWith("buy-food:")) return `Tried ${option?.units ?? ""} food portion${option?.units === 1 ? "" : "s"} from ${option?.sellerName ?? "a seller"} (${money(option?.totalPrice ?? 0)}, ${percent(option?.effectiveQuality ?? 0)} quality, ${option?.remainingShelfLife ?? 0}d life left, ${capacity})`;
   if (action.startsWith("pay-housing:")) return `Tried housing payment to ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
   if (action.startsWith("secure-housing:")) return `Tried to secure housing through ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
   if (action.startsWith("apply-job:")) return `Applied to ${option?.firmName ?? "an employer"} (${money(option?.offeredWage ?? 0)} wage)`;
@@ -453,11 +453,12 @@ function updateInterface() {
   const lifecycle = `${firm.vital ? "Vital · " : ""}${firm.active ? `Founded D${firm.foundingDay}` : `Closed D${firm.closedDay}`}${firm.rescueCount ? ` · rescued ${firm.rescueCount}× on D${firm.lastRescueDay}` : ""}${firm.receivershipDay !== null ? ` · receivership since D${firm.receivershipDay}` : ""}${firm.publiclyOperated ? " · treasury-appointed operator" : ""}`;
   const operatingState = `${money(firm.cash)} cash · ${price(firm.price)} current price · ${firm.sector === "housing" ? `${simulation.housingOccupancy()}/${firm.dwellingCapacity} dwellings occupied` : firm.sector === "transport" ? `${firm.transportLoadToday}/${firm.transportCapacityToday} freight load used today` : firm.production === "fixed-service" ? "service stock not modeled" : `${Math.floor(firm.inventory)} ${product.unit}s in stock`}${hasOperatingSupply ? ` · ${firm.operatingSupplies} maintenance kit${firm.operatingSupplies === 1 ? "" : "s"} · ${percent(firm.operationalReadiness)} capacity` : ""}${knowledgeCapacity} · ${money(firm.revenueEMA)} smoothed net income`;
   const ownerChoice = `Price ${firm.ownerDecision.priceDecision}${firm.ownerDecision.priceDay ? ` on D${firm.ownerDecision.priceDay}` : ""} at ${price(firm.ownerDecision.price)}: ${firm.ownerDecision.priceReason}. Wage ${firm.ownerDecision.wage}${firm.ownerDecision.wageDay ? ` on D${firm.ownerDecision.wageDay}` : ""}: ${firm.ownerDecision.wageReason}. Capital ${money(firm.ownerDecision.capitalContribution)}${firm.ownerDecision.capitalDay ? ` on D${firm.ownerDecision.capitalDay}` : ""}: ${firm.ownerDecision.capitalReason}. ${firm.ownerDecision.continuation}: ${firm.ownerDecision.continuationReason}. ${firm.ownerDecision.dividendType} ${money(firm.ownerDecision.dividend)}${firm.ownerDecision.dividendDay ? ` on D${firm.ownerDecision.dividendDay}` : ""}: ${firm.ownerDecision.dividendReason}.`;
+  const perishableState = describePerishableInventory(firm, PRODUCTS, simulation.day);
   elements["firm-selection-state"].innerHTML = `<i class="status ${firm.status}">${firm.status}</i>`;
   elements["firm-detail"].innerHTML = `
     <header class="firm-detail-heading"><div><p class="eyebrow">Selected economic actor</p><h3>${firmInstanceLabel(firm, simulation.firms)}</h3></div><span>${lifecycle}</span></header>
     <div class="firm-detail-grid">
-      <section><h4>Identity and lifecycle</h4><p>${operatingState}</p></section>
+      <section><h4>Identity and lifecycle</h4><p>${operatingState}</p>${perishableState ? `<p>${perishableState}</p>` : ""}</section>
       <section><h4>Product pipeline and contracts</h4><p>${describePipeline(firm, PRODUCTS)}</p>${firm.processingPerWorker ? `<p class="${firm.processingShortfallToday ? "shortfall" : ""}">${describeProcessing(firm, PRODUCTS)}</p>` : ""}<ul class="contract-list">${contracts.length ? contracts.map((contract) => `<li class="${contract.shortfallToday ? "shortfall" : ""}">${describeContract(contract, PRODUCTS)}</li>`).join("") : "<li>No supply contracts.</li>"}</ul></section>
       <section><h4>Staffing evidence</h4><dl><div><dt>Headcount</dt><dd>${staffing.headcount}</dd></div><div><dt>Latest 2-of-3 gate</dt><dd>${staffing.demand}</dd></div><div><dt>Funded slot</dt><dd>${staffing.slot}</dd></div><div><dt>Latest reason</dt><dd>${staffing.reason}</dd></div></dl></section>
       <section><h4>Owner choices</h4><p class="owner-choice">${ownerChoice}</p></section>
