@@ -285,6 +285,8 @@ export class TownSimulation {
         rota: null,
         scheduledShiftsWorked: 0,
         scheduledShiftsElapsed: 0,
+        dailyPlan: null,
+        currentPrimaryActivity: null,
         jobApplicationFirm: -1,
         relationships: {},
         socialCapacity: 3 + Math.floor(this.random() * 4),
@@ -1281,6 +1283,101 @@ export class TownSimulation {
     return person.attended;
   }
 
+  planWorkday(person) {
+    if (!person.alive) return null;
+    this.assessNeeds(person);
+    const employer = person.employer >= 0 ? this.firms[person.employer] : null;
+    const scheduled = Boolean(employer && this.firmOpenOnDay(employer) && this.scheduledForShift(person, employer));
+    const clinic = this.firms.find((firm) => firm.active && firm.archetypeId === "clinic");
+    const school = this.firms.find((firm) => firm.active && firm.archetypeId === "school");
+    const options = [];
+    if (scheduled) options.push({ action: `work-shift:${employer.id}`, activity: "shift", firmId: employer.id, firmName: employer.name });
+    if (person.health < CLINIC_TREATMENT_THRESHOLD && this.firmServiceAvailable(clinic, "Workday")) options.push({
+      action: `attend-clinic:${clinic.id}`,
+      activity: "clinic",
+      firmId: clinic.id,
+      firmName: clinic.name,
+      price: clinic.price,
+      expectedRecovery: CLINIC_TREATMENT_RECOVERY,
+      capacityAvailable: clinic.inventory >= 1,
+    });
+    if (person.skill < EDUCATION_SKILL_THRESHOLD && this.firmServiceAvailable(school, "Workday")) options.push({
+      action: `attend-school:${school.id}`,
+      activity: "school",
+      firmId: school.id,
+      firmName: school.name,
+      price: school.price,
+      skillGain: EDUCATION_SKILL_GAIN,
+      capacityAvailable: school.inventory >= 1,
+    });
+    options.push({ action: "daytime-rest", activity: "rest" }, { action: "self-study", activity: "self-study" });
+    const legalActions = Object.freeze(options.map((option) => option.action));
+    const observation = Object.freeze({
+      kind: "workday-plan",
+      citizenId: person.id,
+      citizenName: person.name,
+      scheduled,
+      health: person.health,
+      stress: person.stress,
+      hungryDays: person.hungryDays,
+      skill: person.skill,
+      reliability: person.reliability,
+      runwayDays: this.runwayDays(person),
+      profile: { ...person.motivationProfile },
+      options: options.map((option) => ({ ...option })),
+    });
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal workday action`);
+    this.recordDecision(person, observation, legalActions, decision, "Planning");
+    const option = options.find((candidate) => candidate.action === decision.action);
+    person.dailyPlan = {
+      day: this.day,
+      workday: { ...option, status: "planned", failureReason: null },
+    };
+    person.currentPrimaryActivity = { day: this.day, block: "Morning", action: "schedule review" };
+    return person.dailyPlan;
+  }
+
+  plannedServiceFailure(person, firm, reserve = 0) {
+    if (!firm?.active) return "provider is no longer operating";
+    if (!this.firmServiceAvailable(firm, "Workday")) {
+      const nextOpening = this.nextOpeningDay(firm);
+      return `provider is closed${nextOpening ? ` until D${nextOpening}` : ""}`;
+    }
+    if (firm.inventory < 1) return "provider has no service stock";
+    if (firm.transactionsToday >= this.transactionCapacity(firm)) return "provider has no staffed capacity";
+    if (person.cash + 1e-9 < firm.price + reserve) return "citizen can no longer afford the service and reserve";
+    return null;
+  }
+
+  executePlannedClinic(person, firm) {
+    const failure = this.plannedServiceFailure(person, firm, this.essentialCost() * CLINIC_TREATMENT_RESERVE_DAYS);
+    if (failure) return { completed: false, failure };
+    const beforeHealth = person.health;
+    if (!this.buy(person, firm, 1, "clinical care")) return { completed: false, failure: "the exact clinical transaction failed" };
+    person.clinicalSeller = firm.id;
+    person.lastClinicalDay = this.day;
+    person.health = clamp(person.health + CLINIC_TREATMENT_RECOVERY, 0.08, 0.96);
+    this.note(person, `clinical treatment raised health from ${Math.round(beforeHealth * 100)}% to ${Math.round(person.health * 100)}%`, "good");
+    return { completed: true };
+  }
+
+  executePlannedSchool(person, firm) {
+    const failure = this.plannedServiceFailure(person, firm, this.essentialCost() * EDUCATION_RESERVE_DAYS);
+    if (failure) return { completed: false, failure };
+    const beforeSkill = person.skill;
+    if (!this.buy(person, firm, 1, "education")) return { completed: false, failure: "the exact education transaction failed" };
+    person.educationSeller = firm.id;
+    person.lastEducationDay = this.day;
+    person.skill = clamp(person.skill + EDUCATION_SKILL_GAIN, 0, 0.95);
+    this.syncGeneralKnowledge(person, { source: "education", sourceId: firm.id, sourceName: firm.name, rule: "paid-retail-course-general-skill-v1", phase: "Production" });
+    this.applyKnowledgeLearning(person, { source: "education", sourceId: firm.id, sourceName: firm.name, domain: "retail", rate: RETAIL_COURSE_LEARNING_RATE, rule: "paid-retail-course-retail-v1", phase: "Production" });
+    this.applyKnowledgeLearning(person, { source: "education", sourceId: firm.id, sourceName: firm.name, domain: "inventory", rate: RETAIL_COURSE_INVENTORY_TRANSFER_RATE, rule: "paid-retail-course-inventory-transfer-v1", phase: "Production" });
+    person.growth = clamp(person.growth + 0.015);
+    this.note(person, `a retail operations course raised skill from ${Math.round(beforeSkill * 100)}% to ${Math.round(person.skill * 100)}% and added retail knowledge`, "good");
+    return { completed: true };
+  }
+
   recordDecision(person, observation, legalActions, decision, phase) {
     person.decisionSequence += 1;
     person.decisions.unshift({
@@ -1759,10 +1856,22 @@ export class TownSimulation {
       const firm = this.firms[person.employer];
       if (!this.firmOpenOnDay(firm) || !this.scheduledForShift(person, firm)) return void (person.attended = false);
       person.scheduledShiftsElapsed += 1;
-      this.considerAttendance(person, firm);
+      if (this.schedulesEnabled) {
+        const plan = person.dailyPlan?.day === this.day ? person.dailyPlan.workday : null;
+        person.attended = plan?.action === `work-shift:${firm.id}`;
+        if (!person.attended) {
+          person.missedWork += 1;
+          person.reliability = clamp(person.reliability - 0.018);
+          this.note(person, `chose ${plan?.activity ?? "another activity"} instead of a scheduled shift and earned no wage`, "bad");
+        } else person.missedWork = Math.max(0, person.missedWork - 1);
+      } else this.considerAttendance(person, firm);
       if (person.attended) {
         person.scheduledShiftsWorked += 1;
         this.applyWorkplaceLearning(person, firm);
+        if (this.schedulesEnabled && person.dailyPlan?.day === this.day) {
+          person.dailyPlan.workday.status = "completed";
+          person.currentPrimaryActivity = { day: this.day, block: "Workday", action: "shift", firmId: firm.id };
+        }
       }
     });
     if (this.schedulesEnabled) this.firms.forEach((firm) => {
@@ -1779,6 +1888,19 @@ export class TownSimulation {
       }, 0);
       this.addFirmInventory(firm, produced);
       if (this.isPerishable(firm.sells)) firm.perishableProcessedToday += produced;
+    });
+    if (this.schedulesEnabled) this.people.forEach((person) => {
+      if (!person.alive || person.attended || person.dailyPlan?.day !== this.day) return;
+      const activity = person.dailyPlan.workday;
+      let result = { completed: true };
+      if (activity.activity === "clinic") result = this.executePlannedClinic(person, this.firms[activity.firmId]);
+      else if (activity.activity === "school") result = this.executePlannedSchool(person, this.firms[activity.firmId]);
+      else if (activity.activity === "self-study") this.applyFreePersonalActivity(person, "self-study", "Production");
+      else if (activity.activity === "rest") this.applyFreePersonalActivity(person, "rest", "Production");
+      activity.status = result.completed ? "completed" : "failed";
+      activity.failureReason = result.failure ?? null;
+      person.currentPrimaryActivity = { day: this.day, block: "Workday", action: activity.activity, firmId: activity.firmId ?? null };
+      if (!result.completed) this.note(person, `planned ${activity.activity} failed because ${result.failure}`, "bad");
     });
   }
 
@@ -2078,11 +2200,31 @@ export class TownSimulation {
 
   foodPhase() {
     const foodFirms = this.firms.filter((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "food").sort((a, b) => a.price - b.price);
+    const activeFoodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food");
+    const nextFoodOpening = foodFirms.length ? null : activeFoodFirms
+      .map((firm) => this.nextOpeningDay(firm))
+      .filter(Boolean)
+      .sort((a, b) => a - b)[0] ?? null;
     this.foodAccessOrder().forEach((person) => {
       person.socialToday = false;
       person.socialVenueToday = null;
+      if (this.schedulesEnabled && !foodFirms.length && activeFoodFirms.length) {
+        this.note(person, `all food sellers were closed${nextFoodOpening ? `; next opening D${nextFoodOpening}` : ""}`, "neutral");
+      }
       this.considerFood(person, foodFirms);
     });
+  }
+
+  foodReserveTargetForDay(person, activeFoodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food")) {
+    const normalTarget = Math.max(1, Math.min(3, person.foodReserveTarget));
+    if (!this.schedulesEnabled || !activeFoodFirms.length) return normalTarget;
+    const nextOpening = activeFoodFirms
+      .map((firm) => this.nextOpeningDay(firm))
+      .filter(Boolean)
+      .sort((a, b) => a - b)[0];
+    if (!nextOpening) return normalTarget;
+    const mealsUntilNextOpening = Math.max(1, nextOpening - this.day);
+    return Math.min(3, Math.max(normalTarget, mealsUntilNextOpening));
   }
 
   foodAccessOrder() {
@@ -2097,13 +2239,14 @@ export class TownSimulation {
 
   considerFood(person, foodFirms) {
     if (!person.alive) return false;
+    const reserveTarget = this.foodReserveTargetForDay(person);
     const oldestStoredFoodIndex = person.foodStock.reduce((oldest, food, index, stock) => {
       if (oldest < 0) return index;
       const day = food.processedDay ?? food.purchasedDay;
       const oldestDay = stock[oldest].processedDay ?? stock[oldest].purchasedDay;
       return day < oldestDay ? index : oldest;
     }, -1);
-    const options = person.foodStock.length
+    const storedOptions = person.foodStock.length
       ? [person.foodStock[oldestStoredFoodIndex]].map((food) => ({
         index: oldestStoredFoodIndex,
         action: `eat-stored-food:${oldestStoredFoodIndex}`,
@@ -2118,8 +2261,12 @@ export class TownSimulation {
         remainingShelfLife: Math.max(0, (food.shelfLife ?? 3) - Math.max(0, this.day - (food.processedDay ?? food.purchasedDay))),
         capacityAvailable: true,
       }))
-      : foodFirms.flatMap((firm) => {
-        const maxUnits = Math.min(person.foodReserveTarget, Math.floor(firm.inventory), Math.floor((person.cash + 1e-9) / firm.price));
+      : [];
+    const purchaseOptions = foodFirms.flatMap((firm) => {
+        const topUpUnits = !this.schedulesEnabled && person.foodStock.length
+          ? 0
+          : Math.max(0, reserveTarget - person.foodStock.length);
+        const maxUnits = Math.min(topUpUnits, Math.floor(firm.inventory), Math.floor((person.cash + 1e-9) / firm.price));
         return Array.from({ length: maxUnits }, (_, index) => {
           const units = index + 1;
           const batches = this.peekFirmInventory(firm, units);
@@ -2140,6 +2287,7 @@ export class TownSimulation {
           };
         });
       });
+    const options = [...storedOptions, ...purchaseOptions];
     if (!person.foodStock.length && !options.length && foodFirms.length) {
       const stockedFirms = foodFirms.filter((firm) => firm.inventory >= 1);
       if (stockedFirms.length) stockedFirms[0].priceRejectionsToday += 1;
@@ -2154,7 +2302,7 @@ export class TownSimulation {
       health: person.health,
       hungryDays: person.hungryDays,
       runwayDays: this.runwayDays(person),
-      reserveTarget: person.foodReserveTarget,
+      reserveTarget,
       scarcityError: person.scarcityError,
       profile: { ...person.motivationProfile },
       options: options.map((option) => ({ ...option })),
@@ -2194,7 +2342,18 @@ export class TownSimulation {
 
   housingPhase() {
     const housing = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "housing");
-    if (!housing) return;
+    if (!housing) {
+      if (this.schedulesEnabled) {
+        const provider = this.firms.find((firm) => firm.active && firm.sector === "housing");
+        if (provider) {
+          const nextOpening = this.nextOpeningDay(provider);
+          this.people.filter((person) => person.alive && (!person.housed || this.rentDueToday())).forEach((person) => {
+            this.note(person, `${provider.name} was closed for housing payments${nextOpening ? `; next opening D${nextOpening}` : ""}`, "neutral");
+          });
+        }
+      }
+      return;
+    }
     this.people.forEach((person) => {
       if (!person.alive) return;
       if (!person.housed) person.rentArrears = 0;
@@ -2277,9 +2436,9 @@ export class TownSimulation {
     const clinic = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.archetypeId === "clinic" && firm.inventory >= 1);
     this.people.forEach((person) => {
       if (!person.alive) return;
-      const receivedClinicalCare = this.considerClinicalCare(person, clinic);
+      const receivedClinicalCare = this.schedulesEnabled ? false : this.considerClinicalCare(person, clinic);
       if (!receivedClinicalCare) this.considerHealthCare(person, apothecary);
-      this.considerEducation(person, school);
+      if (!this.schedulesEnabled) this.considerEducation(person, school);
       this.considerPersonalTime(person, café, makers);
     });
     ["café", "park"].forEach((venue) => this.pairSocialVisitors(
@@ -2457,7 +2616,7 @@ export class TownSimulation {
     return "rest";
   }
 
-  applyFreePersonalActivity(person, activity) {
+  applyFreePersonalActivity(person, activity, phase = "Personal time") {
     if (activity === "park-social") {
       person.socialToday = true;
       person.socialVenueToday = "park";
@@ -2470,6 +2629,7 @@ export class TownSimulation {
         sourceId: person.id,
         sourceName: person.name,
         rule: "free-self-study-general-v1",
+        phase,
       });
       person.growth = clamp(person.growth + 0.006);
       return true;
@@ -2516,6 +2676,11 @@ export class TownSimulation {
       throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal personal-time action`);
     }
     this.recordDecision(person, observation, frozenLegalActions, decision, "Personal time");
+    person.currentPrimaryActivity = {
+      day: this.day,
+      block: "Evening",
+      action: decision.action === "do-nothing" ? freeActivity : decision.action,
+    };
 
     if (decision.action === "do-nothing") return this.applyFreePersonalActivity(person, freeActivity);
 
@@ -2567,7 +2732,7 @@ export class TownSimulation {
     }
     const operatingFirms = this.firms.filter((firm) => this.firmOpenOnDay(firm));
     operatingFirms.forEach((firm) => this.prepareFirmSettlement(firm));
-    this.runJobMarket();
+    if (!this.schedulesEnabled) this.runJobMarket();
     operatingFirms.forEach((firm) => this.finishFirmSettlement(firm));
     this.decayRelationships();
     this.people.forEach((person) => {
@@ -3137,6 +3302,10 @@ export class TownSimulation {
       firm.openDayCount += 1;
       firm.lastOpenDay = this.day;
     });
+    if (this.schedulesEnabled) {
+      this.runJobMarket();
+      this.people.forEach((person) => this.planWorkday(person));
+    }
   }
 
   isExtinct() {
