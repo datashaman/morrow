@@ -21,6 +21,7 @@ npm test          # deterministic domain tests
 npm run typecheck # check TypeScript policy modules
 npm run build     # typecheck and create the production bundle
 npm run evaluate  # compare rule and motivation policies across fixed seeds
+npm run evaluate:employment # compare legacy employment/formation with the funded-opportunity intervention
 npm run evaluate:activation # rerun the held-out personal-time neural gate
 npm run evaluate:personalization -- --output personalization-report.json # compare research-only personalization variants
 npm run export:trajectories -- --seeds 11,22 --days 30 --output trajectories.json

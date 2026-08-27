@@ -13,6 +13,7 @@
 - [Knowledge tracer evaluation](./knowledge-evaluation.md): paired scalar-skill and knowledge runs, learning evidence, grocery capacity, town outcomes, and interpretation limits.
 - [Known limitations](./known-limitations.md): simplifications, inactive controls, missing behaviours, and risks.
 - [Expanded-sector balance](./sector-balance.md): paired multi-seed evidence for jobs, firms, essential access, hardship, and new-sector regressions.
+- [Employment intervention evaluation](./employment-evaluation.md): paired staffing/formation control and treatment trajectories with explicit early-work and mortality gates.
 - [Decision record](./decisions/0001-closed-individual-economy.md): foundational modeling decisions and their consequences.
 - [Personalization decision](./decisions/0002-retain-profile-only-personalization.md): research evidence for retaining stable profiles without embeddings or online adaptation.
 

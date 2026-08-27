@@ -80,6 +80,14 @@ Converts product, pipeline, and supply-contract state into display strings. It c
 
 Formats domain-owned formation evidence and blockers for the firm panel. It does not calculate demand, choose a founder, create a firm, or move cash.
 
+### `src/firm-detail-presentation.js`
+
+Resolves stable current or historical firm selection and formats the selected firm's staffing target, latest three-day demand evidence, retained funding, active investment slot, and latest reason. It owns no hiring or funding decisions.
+
+### `src/employment-evaluation.ts`
+
+Runs paired fixed-seed towns with the shared employment intervention disabled and enabled. It reports completed-day work, hiring, business, assistance, hardship, health, mortality, first-wage, slot, and conservation evidence and applies explicit gameplay acceptance gates. `scripts/evaluate-employment.ts` is the concise text and JSON command-line adapter.
+
 ### `src/town-stage.js`
 
 Projects current people, firms, policy, day, and essential cost into a deterministic descriptive stage and its evidence. It is read by `snapshot()` for presentation only and is intentionally absent from opportunity and consequence code.
@@ -90,7 +98,7 @@ Owns deterministic canvas presentation geometry: full-name firm landmark bounds,
 
 ### `src/main.js`
 
-Creates the interface, binds controls, advances the simulation on a timer, converts state into human-readable details, renders firm pipeline and activity panels, and draws firms, people, treasury, and recent money flows on canvas.
+Creates the interface, binds controls, advances the simulation on a timer, converts state into human-readable details, renders the synchronized selected-firm dossier and activity stream, and draws firms, people, treasury, and recent money flows on canvas.
 
 The UI should not decide economic outcomes. It may format or animate state but should call the simulation for changes.
 
@@ -108,7 +116,7 @@ Uses Node’s built-in test runner. Tests directly exercise the simulation witho
 
 ## State ownership
 
-`TownSimulation` owns people, their versioned knowledge and complete learning histories, configured archetypes, runtime firm instances, each firm's knowledge-capacity carry and daily slots, opportunity observations, contracts, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, selected-firm identity, playback timing, pause state, speed, and canvas dimensions; it renders the selected citizen's knowledge profile and scrollable learning stream plus the firm's already-derived capacity state without deriving learning outcomes. Runtime firms and contracts may be appended but are never removed, so their numeric IDs remain valid references and their unique `archetypeId:instanceNumber` identities preserve lifecycle history. Historical instances remain inspectable in the firm grid; the canvas suppresses an inactive historical landmark when an active replacement of the same archetype occupies that location.
+`TownSimulation` owns people, their versioned knowledge and complete learning histories, configured archetypes, runtime firm instances, each firm's knowledge-capacity carry and daily slots, staffing-demand and investment-slot evidence, opportunity observations, contracts, treasury, policy, time, and recent transfer flows. The browser owns selected-person state, selected-firm identity, playback timing, pause state, speed, and canvas dimensions; it renders the selected citizen's knowledge profile and scrollable learning stream plus the firm's already-derived capacity and staffing state without deriving economic outcomes. Runtime firms and contracts may be appended but are never removed, so their numeric IDs remain valid references and their unique `archetypeId:instanceNumber` identities preserve lifecycle history. Historical instances remain inspectable in the firm selector; the canvas suppresses an inactive historical landmark when an active replacement of the same archetype occupies that location.
 
 Person `x` and `y` positions are currently mutated by the renderer even though they live on simulation entities. The renderer derives workplace, job-application, Common Park, and cemetery destinations from domain state, but those positions are display-only and must never influence domain decisions. Moving them into a view model would strengthen the boundary.
 

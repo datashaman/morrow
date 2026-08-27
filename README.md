@@ -21,6 +21,7 @@ The app uses browser modules and should be served through Vite; opening `index.h
 npm test
 npm run build
 npm run evaluate
+npm run evaluate:employment
 npm run evaluate:sectors
 npm run evaluate:activation
 npm run evaluate:personalization -- --output personalization-report.json
