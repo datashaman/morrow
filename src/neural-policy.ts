@@ -75,8 +75,8 @@ export function encodeNeuralObservation(observation: CitizenObservation) {
     clamp01(source.firmRunwayDays / 10),
     clamp01(source.ownerRunwayDays / 20),
     clamp01(knowledge.general),
-    clamp01(knowledge.retail),
-    clamp01(knowledge.inventory),
+    clamp01(knowledge.retailOperations ?? knowledge.retail),
+    clamp01(knowledge.inventoryHandling ?? knowledge.inventory),
   ];
 }
 

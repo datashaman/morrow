@@ -77,12 +77,41 @@ export const HEALTH_TREATMENT_RESERVE_DAYS = 2;
 export const EDUCATION_SKILL_THRESHOLD = 0.72;
 export const EDUCATION_SKILL_GAIN = 0.01;
 export const EDUCATION_RESERVE_DAYS = 3;
-export const KNOWLEDGE_SCHEMA_VERSION = "knowledge-v1";
+export const LEGACY_KNOWLEDGE_SCHEMA_VERSION = "knowledge-v1";
+export const KNOWLEDGE_SCHEMA_VERSION = "knowledge-v2";
+export const KNOWLEDGE_VOCATIONAL_DOMAINS = Object.freeze([
+  "retailOperations",
+  "inventoryHandling",
+  "propertyOperations",
+  "fabrication",
+  "foodService",
+  "compounding",
+  "teaching",
+  "clinicalCare",
+  "construction",
+  "logistics",
+  "agriculture",
+]);
+export const KNOWLEDGE_DOMAIN_LABELS = Object.freeze({
+  retailOperations: "Retail operations",
+  inventoryHandling: "Inventory handling",
+  propertyOperations: "Property operations",
+  fabrication: "Fabrication",
+  foodService: "Food service",
+  compounding: "Compounding",
+  teaching: "Teaching",
+  clinicalCare: "Clinical care",
+  construction: "Construction",
+  logistics: "Logistics",
+  agriculture: "Agriculture",
+});
 export const RETAIL_WORK_LEARNING_RATE = 0.004;
 export const INVENTORY_WORK_LEARNING_RATE = 0.002;
+export const DEFAULT_TRADE_WORK_LEARNING_RATE = 0.003;
 export const RETAIL_COURSE_LEARNING_RATE = 0.04;
 export const RETAIL_COURSE_INVENTORY_TRANSFER_RATE = 0.01;
 export const GROCERY_KNOWLEDGE_CAPACITY_BONUS = 0.15;
+export const TRADE_KNOWLEDGE_MAX_BONUS = 0.15;
 export const CLINIC_TREATMENT_THRESHOLD = 0.38;
 export const CLINIC_TREATMENT_RECOVERY = 0.18;
 export const CLINIC_TREATMENT_RESERVE_DAYS = 1;
@@ -124,19 +153,58 @@ export const NAMES = [
   "Sizwe", "Ana", "Omar", "Luca", "Priya", "Kai", "Mara", "Tumi",
 ];
 
+const tradeDomain = (id, weight, workplaceLearningRate, learningRule) => Object.freeze({
+  id,
+  label: KNOWLEDGE_DOMAIN_LABELS[id],
+  weight,
+  workplaceLearningRate,
+  learningRule,
+});
+
+const tradeKnowledge = (domains, effectType, effectRule) => Object.freeze({
+  domains: Object.freeze(domains),
+  effectType,
+  maxBonus: TRADE_KNOWLEDGE_MAX_BONUS,
+  effectRule,
+});
+
+const retailKnowledge = () => tradeKnowledge([
+  tradeDomain("retailOperations", 0.5, RETAIL_WORK_LEARNING_RATE, "attended-grocery-shift-retail-v1"),
+  tradeDomain("inventoryHandling", 0.5, INVENTORY_WORK_LEARNING_RATE, "attended-grocery-shift-inventory-v1"),
+], "transaction-capacity", "grocery-knowledge-capacity-v1");
+
+const singleDomainKnowledge = (id, effectType, effectRule) => tradeKnowledge([
+  tradeDomain(id, 1, DEFAULT_TRADE_WORK_LEARNING_RATE, `attended-${id.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}-shift-v1`),
+], effectType, effectRule);
+
+export const FIRM_KNOWLEDGE_CONFIGS = Object.freeze({
+  "everyday-grocer": retailKnowledge(),
+  "premium-grocer": retailKnowledge(),
+  "housing-provider": singleDomainKnowledge("propertyOperations", "transaction-capacity", "trade-transaction-capacity-v1"),
+  toolmaker: singleDomainKnowledge("fabrication", "direct-yield", "trade-direct-yield-v1"),
+  cafe: singleDomainKnowledge("foodService", "transaction-capacity", "trade-transaction-capacity-v1"),
+  apothecary: singleDomainKnowledge("compounding", "transaction-capacity", "trade-transaction-capacity-v1"),
+  school: singleDomainKnowledge("teaching", "direct-yield", "trade-direct-yield-v1"),
+  "materials-yard": singleDomainKnowledge("fabrication", "processing-capacity", "trade-processing-capacity-v1"),
+  clinic: singleDomainKnowledge("clinicalCare", "transaction-capacity", "trade-transaction-capacity-v1"),
+  builder: singleDomainKnowledge("construction", "processing-capacity", "trade-processing-capacity-v1"),
+  haulage: singleDomainKnowledge("logistics", "haulage-capacity", "trade-haulage-capacity-v1"),
+  farm: singleDomainKnowledge("agriculture", "direct-yield", "trade-direct-yield-v1"),
+});
+
 export const FIRMS = [
-  { archetypeId: "everyday-grocer", name: "Harvest Foods", sector: "food", vital: true, sells: "budgetFood", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "retail staff turn farm produce into everyday meals", x: 0.17, y: 0.28, price: 2.15, quality: 0.55, wage: 6.2, productivity: 0, transactionsPerWorker: 14, inventory: 40, initialStaff: 3, maxStaff: 6 },
-  { archetypeId: "premium-grocer", name: "Green Basket", sector: "food", sells: "premiumFood", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "retail staff select higher-grade farm produce", x: 0.48, y: 0.22, price: 2.55, quality: 0.85, wage: 6.5, productivity: 0, transactionsPerWorker: 8, inventory: 14, initialStaff: 2, formationStaff: 1, maxStaff: 5 },
-  { archetypeId: "housing-provider", name: "HomeWorks", sector: "housing", vital: true, sells: "housing", input: null, source: null, production: "fixed-service", sourceDescription: "housing staff operate the town's current dwelling service", x: 0.80, y: 0.29, price: 6, wage: 7.2, productivity: 0, transactionsPerWorker: 10, inventory: 0, initialStaff: 4, maxStaff: 6 },
-  { archetypeId: "toolmaker", name: "Makers Guild", sector: "goods", sells: "learningGoods", input: null, source: null, production: "direct", sourceDescription: "guild workers make tools and repair kits locally", x: 0.25, y: 0.73, price: 6, wage: 7.8, productivity: 2.1, transactionsPerWorker: 3, inventory: 18, initialStaff: 3, maxStaff: 6 },
-  { archetypeId: "cafe", name: "Common Café", sector: "service", sells: "cafeService", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "café staff prepare visits using farm produce", x: 0.69, y: 0.73, price: 2.2, wage: 6.4, productivity: 0, transactionsPerWorker: 4, inventory: 6, initialStaff: 2, maxStaff: 4 },
-  { archetypeId: "apothecary", name: "Morrow Apothecary", sector: "health", sells: "medicine", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "apothecary workers compound farm produce into medicine", x: 0.35, y: 0.88, price: 3.6, wage: 6.8, productivity: 0, transactionsPerWorker: 6, inventory: 8, initialStaff: 2, formationStaff: 1, maxStaff: 4, defaultLatent: true },
-  { archetypeId: "school", name: "Morrow School", sector: "education", sells: "education", input: null, source: null, production: "direct", sourceDescription: "teachers provide finite lessons that gradually improve worker skill", x: 0.86, y: 0.46, price: 4.5, wage: 7, productivity: 4, transactionsPerWorker: 5, inventory: 8, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true },
-  { archetypeId: "materials-yard", name: "Morrow Materials", sector: "construction", sells: "constructionMaterials", input: "learningGoods", source: "Makers Guild", production: "sourced", sourceDescription: "yard workers assemble guild-made kits into construction bundles", x: 0.12, y: 0.12, price: 16, wage: 7.4, productivity: 0, processingPerWorker: 1, transactionsPerWorker: 4, inventory: 4, initialStaff: 2, formationStaff: 1, maxStaff: 4, defaultLatent: true },
-  { archetypeId: "clinic", name: "Morrow Clinic", sector: "health", sells: "clinicalCare", input: "medicine", source: "Morrow Apothecary", production: "sourced", sourceDescription: "clinical staff use apothecary medicine for stronger treatment", x: 0.82, y: 0.08, price: 7.5, wage: 8, productivity: 0, transactionsPerWorker: 4, inventory: 4, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true },
-  { archetypeId: "builder", name: "Morrow Builders", sector: "construction", sells: "constructionService", input: "constructionMaterials", source: "Morrow Materials", production: "sourced", sourceDescription: "builders turn material bundles into housing expansion and repair projects", x: 0.64, y: 0.88, price: 28, wage: 8, productivity: 0, processingPerWorker: 1, transactionsPerWorker: 3, inventory: 2, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true },
-  { archetypeId: "haulage", name: "Morrow Haulage", sector: "transport", vital: true, sells: "haulage", input: null, source: null, production: "fixed-service", sourceDescription: "transport workers carry physical goods between local firms", x: 0.45, y: 0.05, price: 0.45, wage: 5, productivity: 0, transactionsPerWorker: 1, inventory: 0, initialStaff: 2, scheduledInitialStaff: 3, maxStaff: 6, defaultLatent: true },
-  { archetypeId: "farm", name: "Morrow Fields", sector: "agriculture", vital: true, sells: "produce", input: null, source: null, production: "direct", sourceDescription: "farm workers grow produce locally", x: 0.08, y: 0.54, price: 1.1, wage: 5.8, productivity: 9, transactionsPerWorker: 8, inventory: 36, initialStaff: 7, maxStaff: 12 },
+  { archetypeId: "everyday-grocer", name: "Harvest Foods", sector: "food", vital: true, sells: "budgetFood", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "retail staff turn farm produce into everyday meals", x: 0.17, y: 0.28, price: 2.15, quality: 0.55, wage: 6.2, productivity: 0, transactionsPerWorker: 14, inventory: 40, initialStaff: 3, maxStaff: 6, knowledge: FIRM_KNOWLEDGE_CONFIGS["everyday-grocer"] },
+  { archetypeId: "premium-grocer", name: "Green Basket", sector: "food", sells: "premiumFood", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "retail staff select higher-grade farm produce", x: 0.48, y: 0.22, price: 2.55, quality: 0.85, wage: 6.5, productivity: 0, transactionsPerWorker: 8, inventory: 14, initialStaff: 2, formationStaff: 1, maxStaff: 5, knowledge: FIRM_KNOWLEDGE_CONFIGS["premium-grocer"] },
+  { archetypeId: "housing-provider", name: "HomeWorks", sector: "housing", vital: true, sells: "housing", input: null, source: null, production: "fixed-service", sourceDescription: "housing staff operate the town's current dwelling service", x: 0.80, y: 0.29, price: 6, wage: 7.2, productivity: 0, transactionsPerWorker: 10, inventory: 0, initialStaff: 4, maxStaff: 6, knowledge: FIRM_KNOWLEDGE_CONFIGS["housing-provider"] },
+  { archetypeId: "toolmaker", name: "Makers Guild", sector: "goods", sells: "learningGoods", input: null, source: null, production: "direct", sourceDescription: "guild workers make tools and repair kits locally", x: 0.25, y: 0.73, price: 6, wage: 7.8, productivity: 2.1, transactionsPerWorker: 3, inventory: 18, initialStaff: 3, maxStaff: 6, knowledge: FIRM_KNOWLEDGE_CONFIGS.toolmaker },
+  { archetypeId: "cafe", name: "Common Café", sector: "service", sells: "cafeService", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "café staff prepare visits using farm produce", x: 0.69, y: 0.73, price: 2.2, wage: 6.4, productivity: 0, transactionsPerWorker: 4, inventory: 6, initialStaff: 2, maxStaff: 4, knowledge: FIRM_KNOWLEDGE_CONFIGS.cafe },
+  { archetypeId: "apothecary", name: "Morrow Apothecary", sector: "health", sells: "medicine", input: "produce", source: "Morrow Fields", production: "sourced", sourceDescription: "apothecary workers compound farm produce into medicine", x: 0.35, y: 0.88, price: 3.6, wage: 6.8, productivity: 0, transactionsPerWorker: 6, inventory: 8, initialStaff: 2, formationStaff: 1, maxStaff: 4, defaultLatent: true, knowledge: FIRM_KNOWLEDGE_CONFIGS.apothecary },
+  { archetypeId: "school", name: "Morrow School", sector: "education", sells: "education", input: null, source: null, production: "direct", sourceDescription: "teachers provide finite lessons that gradually improve worker skill", x: 0.86, y: 0.46, price: 4.5, wage: 7, productivity: 4, transactionsPerWorker: 5, inventory: 8, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true, knowledge: FIRM_KNOWLEDGE_CONFIGS.school },
+  { archetypeId: "materials-yard", name: "Morrow Materials", sector: "construction", sells: "constructionMaterials", input: "learningGoods", source: "Makers Guild", production: "sourced", sourceDescription: "yard workers assemble guild-made kits into construction bundles", x: 0.12, y: 0.12, price: 16, wage: 7.4, productivity: 0, processingPerWorker: 1, transactionsPerWorker: 4, inventory: 4, initialStaff: 2, formationStaff: 1, maxStaff: 4, defaultLatent: true, knowledge: FIRM_KNOWLEDGE_CONFIGS["materials-yard"] },
+  { archetypeId: "clinic", name: "Morrow Clinic", sector: "health", sells: "clinicalCare", input: "medicine", source: "Morrow Apothecary", production: "sourced", sourceDescription: "clinical staff use apothecary medicine for stronger treatment", x: 0.82, y: 0.08, price: 7.5, wage: 8, productivity: 0, transactionsPerWorker: 4, inventory: 4, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true, knowledge: FIRM_KNOWLEDGE_CONFIGS.clinic },
+  { archetypeId: "builder", name: "Morrow Builders", sector: "construction", sells: "constructionService", input: "constructionMaterials", source: "Morrow Materials", production: "sourced", sourceDescription: "builders turn material bundles into housing expansion and repair projects", x: 0.64, y: 0.88, price: 28, wage: 8, productivity: 0, processingPerWorker: 1, transactionsPerWorker: 3, inventory: 2, initialStaff: 2, formationStaff: 1, maxStaff: 5, defaultLatent: true, knowledge: FIRM_KNOWLEDGE_CONFIGS.builder },
+  { archetypeId: "haulage", name: "Morrow Haulage", sector: "transport", vital: true, sells: "haulage", input: null, source: null, production: "fixed-service", sourceDescription: "transport workers carry physical goods between local firms", x: 0.45, y: 0.05, price: 0.45, wage: 5, productivity: 0, transactionsPerWorker: 1, inventory: 0, initialStaff: 2, scheduledInitialStaff: 3, maxStaff: 6, defaultLatent: true, knowledge: FIRM_KNOWLEDGE_CONFIGS.haulage },
+  { archetypeId: "farm", name: "Morrow Fields", sector: "agriculture", vital: true, sells: "produce", input: null, source: null, production: "direct", sourceDescription: "farm workers grow produce locally", x: 0.08, y: 0.54, price: 1.1, wage: 5.8, productivity: 9, transactionsPerWorker: 8, inventory: 36, initialStaff: 7, maxStaff: 12, knowledge: FIRM_KNOWLEDGE_CONFIGS.farm },
 ];
 
 export const SUPPLY_CONTRACTS = [

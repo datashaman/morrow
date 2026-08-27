@@ -75,7 +75,7 @@ test("events, transactions, decisions, and learning records carry temporal ident
     source: "test",
     sourceId: 0,
     sourceName: "Test",
-    domain: "retail",
+    domain: "retailOperations",
     rate: 0.1,
     rule: "test-temporal-v1",
     phase: "Production",

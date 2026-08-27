@@ -31,7 +31,6 @@ import {
   HOUSING_RECEIVERSHIP_GRACE_DAYS,
   HOUSING_REPLACEMENT_STAFF,
   HOUSING_RESTART_COST,
-  GROCERY_KNOWLEDGE_CAPACITY_BONUS,
   INITIAL_FRIENDSHIP_STRENGTH,
   INITIAL_DWELLING_CAPACITY,
   INVESTMENT_DEMAND_CAPTURE_RATE,
@@ -40,8 +39,6 @@ import {
   INVESTMENT_EVALUATION_DAYS,
   INVESTMENT_RECRUITMENT_DAYS,
   INVESTMENT_WAGE_RESERVE_DAYS,
-  INVENTORY_WORK_LEARNING_RATE,
-  KNOWLEDGE_SCHEMA_VERSION,
   LEGACY_OPPORTUNITY_OBSERVATION_DAYS,
   LEGACY_OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
   MAINTENANCE_INTERVAL_DAYS,
@@ -66,7 +63,6 @@ import {
   RENT_INTERVAL_DAYS,
   RETAIL_COURSE_INVENTORY_TRANSFER_RATE,
   RETAIL_COURSE_LEARNING_RATE,
-  RETAIL_WORK_LEARNING_RATE,
   SCHEDULED_MAINTENANCE_UNIT_PRICE,
   SCHEDULED_TRANSPORT_CAPACITY_PER_WORKER,
   STAFFING_REVENUE_BUFFER,
@@ -87,12 +83,14 @@ import { createDefaultCitizenPolicy } from "./neural-runtime.ts";
 import { createRandom } from "./random.js";
 import { inferTownStage } from "./town-stage.js";
 import { calendarForDay, PHASE_BLOCKS, temporalMetadata } from "./civil-time.js";
+import { createKnowledgeProfile, validateFirmKnowledgeConfigs, weightedVocationalKnowledge } from "./knowledge.js";
 
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
   constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false } = {}) {
+    validateFirmKnowledgeConfigs(FIRMS);
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -285,12 +283,7 @@ export class TownSimulation {
         criticalHealthDays: 0,
         cash,
         skill,
-        knowledgeProfile: {
-          version: KNOWLEDGE_SCHEMA_VERSION,
-          general: skill,
-          retail: 0,
-          inventory: 0,
-        },
+        knowledgeProfile: createKnowledgeProfile(skill),
         learningHistory: [],
         learningSequence: 0,
         reliability: 0.55 + this.random() * 0.43,
@@ -1416,8 +1409,8 @@ export class TownSimulation {
     person.lastEducationDay = this.day;
     person.skill = clamp(person.skill + EDUCATION_SKILL_GAIN, 0, 0.95);
     this.syncGeneralKnowledge(person, { source: "education", sourceId: firm.id, sourceName: firm.name, rule: "paid-retail-course-general-skill-v1", phase: "Production" });
-    this.applyKnowledgeLearning(person, { source: "education", sourceId: firm.id, sourceName: firm.name, domain: "retail", rate: RETAIL_COURSE_LEARNING_RATE, rule: "paid-retail-course-retail-v1", phase: "Production" });
-    this.applyKnowledgeLearning(person, { source: "education", sourceId: firm.id, sourceName: firm.name, domain: "inventory", rate: RETAIL_COURSE_INVENTORY_TRANSFER_RATE, rule: "paid-retail-course-inventory-transfer-v1", phase: "Production" });
+    this.applyKnowledgeLearning(person, { source: "education", sourceId: firm.id, sourceName: firm.name, domain: "retailOperations", rate: RETAIL_COURSE_LEARNING_RATE, rule: "paid-retail-course-retail-v1", phase: "Production" });
+    this.applyKnowledgeLearning(person, { source: "education", sourceId: firm.id, sourceName: firm.name, domain: "inventoryHandling", rate: RETAIL_COURSE_INVENTORY_TRANSFER_RATE, rule: "paid-retail-course-inventory-transfer-v1", phase: "Production" });
     person.growth = clamp(person.growth + 0.015);
     this.note(person, `a retail operations course raised skill from ${Math.round(beforeSkill * 100)}% to ${Math.round(person.skill * 100)}% and added retail knowledge`, "good");
     return { completed: true };
@@ -1530,8 +1523,8 @@ export class TownSimulation {
     const contribution = firm.employees.reduce((total, id) => {
       const person = this.people[id];
       if (!person.attended) return total;
-      const vocationalKnowledge = (person.knowledgeProfile.retail + person.knowledgeProfile.inventory) / 2;
-      return total + firm.transactionsPerWorker * vocationalKnowledge * GROCERY_KNOWLEDGE_CAPACITY_BONUS;
+      const vocationalKnowledge = weightedVocationalKnowledge(person.knowledgeProfile, firm.knowledge);
+      return total + firm.transactionsPerWorker * vocationalKnowledge * firm.knowledge.maxBonus;
     }, 0);
     return Math.round(contribution * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier() * 1_000_000) / 1_000_000;
   }
@@ -1551,7 +1544,7 @@ export class TownSimulation {
   }
 
   applyKnowledgeLearning(person, { source, sourceId, sourceName, domain, rate = null, target = null, rule, phase = PHASES[this.phase] ?? "Production" }) {
-    if (!this.knowledgeEnabled || !person.alive || !["general", "retail", "inventory"].includes(domain)) return null;
+    if (!this.knowledgeEnabled || !person.alive || !(domain in person.knowledgeProfile) || domain === "version") return null;
     const before = person.knowledgeProfile[domain];
     const nextValue = target === null ? before + rate * (1 - before) : target;
     const after = Math.round(clamp(nextValue) * 1_000_000) / 1_000_000;
@@ -1576,27 +1569,18 @@ export class TownSimulation {
   }
 
   applyWorkplaceLearning(person, firm) {
-    if (!person.attended || firm.archetypeId !== "everyday-grocer") return [];
-    return [
+    if (!this.knowledgeEnabled || !person.alive || !person.attended || !firm.active || person.employer !== firm.id || !firm.employees.includes(person.id)) return [];
+    return firm.knowledge.domains.map((domain) => (
       this.applyKnowledgeLearning(person, {
         source: "workplace",
         sourceId: firm.id,
         sourceName: firm.name,
-        domain: "retail",
-        rate: RETAIL_WORK_LEARNING_RATE,
-        rule: "attended-grocery-shift-retail-v1",
+        domain: domain.id,
+        rate: domain.workplaceLearningRate,
+        rule: domain.learningRule,
         phase: "Production",
-      }),
-      this.applyKnowledgeLearning(person, {
-        source: "workplace",
-        sourceId: firm.id,
-        sourceName: firm.name,
-        domain: "inventory",
-        rate: INVENTORY_WORK_LEARNING_RATE,
-        rule: "attended-grocery-shift-inventory-v1",
-        phase: "Production",
-      }),
-    ].filter(Boolean);
+      })
+    )).filter(Boolean);
   }
 
   syncGeneralKnowledge(person, { source, sourceId, sourceName, rule, phase = "Personal time" }) {
@@ -2638,7 +2622,7 @@ export class TownSimulation {
       source: "education",
       sourceId: school.id,
       sourceName: school.name,
-      domain: "retail",
+      domain: "retailOperations",
       rate: RETAIL_COURSE_LEARNING_RATE,
       rule: "paid-retail-course-retail-v1",
       phase: "Personal time",
@@ -2647,7 +2631,7 @@ export class TownSimulation {
       source: "education",
       sourceId: school.id,
       sourceName: school.name,
-      domain: "inventory",
+      domain: "inventoryHandling",
       rate: RETAIL_COURSE_INVENTORY_TRANSFER_RATE,
       rule: "paid-retail-course-inventory-transfer-v1",
       phase: "Personal time",

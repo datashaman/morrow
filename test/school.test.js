@@ -99,11 +99,11 @@ test("a paid lesson transfers exact cash and gradually raises bounded skill", ()
   assert.equal(school.inventory, 1);
   assert.equal(student.skill, 0.3 + EDUCATION_SKILL_GAIN);
   assert.equal(student.knowledgeProfile.general, student.skill);
-  assert.equal(student.knowledgeProfile.retail, RETAIL_COURSE_LEARNING_RATE);
-  assert.equal(student.knowledgeProfile.inventory, RETAIL_COURSE_INVENTORY_TRANSFER_RATE);
+  assert.equal(student.knowledgeProfile.retailOperations, RETAIL_COURSE_LEARNING_RATE);
+  assert.equal(student.knowledgeProfile.inventoryHandling, RETAIL_COURSE_INVENTORY_TRANSFER_RATE);
   assert.deepEqual(student.learningHistory.map(({ source, sourceName, domain, rule }) => ({ source, sourceName, domain, rule })), [
-    { source: "education", sourceName: school.name, domain: "inventory", rule: "paid-retail-course-inventory-transfer-v1" },
-    { source: "education", sourceName: school.name, domain: "retail", rule: "paid-retail-course-retail-v1" },
+    { source: "education", sourceName: school.name, domain: "inventoryHandling", rule: "paid-retail-course-inventory-transfer-v1" },
+    { source: "education", sourceName: school.name, domain: "retailOperations", rule: "paid-retail-course-retail-v1" },
     { source: "education", sourceName: school.name, domain: "general", rule: "paid-retail-course-general-skill-v1" },
   ]);
   assert.ok(student.learningHistory.every((record) => record.phase === "Personal time" && record.after > record.before));

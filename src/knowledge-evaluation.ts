@@ -18,7 +18,7 @@ function groceryCapacity(town: any) {
       const attending = firm.employees.map((id: number) => town.people[id]).filter((person: any) => person.attended);
       const scalarGross = attending.length * firm.transactionsPerWorker;
       const knowledgeGross = attending.reduce((capacity: number, person: any) => {
-        const vocational = (person.knowledgeProfile.retail + person.knowledgeProfile.inventory) / 2;
+        const vocational = (person.knowledgeProfile.retailOperations + person.knowledgeProfile.inventoryHandling) / 2;
         return capacity + firm.transactionsPerWorker * (1 + vocational * GROCERY_KNOWLEDGE_CAPACITY_BONUS);
       }, 0);
       const readiness = firm.operationalReadiness;
@@ -65,15 +65,15 @@ function evaluateRun(seed: number, days: number, knowledgeEnabled: boolean) {
   const finalMoney = town.totalMoney();
   return {
     seed,
-    mode: knowledgeEnabled ? "knowledge-v1" : "scalar-skill-baseline",
+    mode: knowledgeEnabled ? "knowledge-v2" : "scalar-skill-baseline",
     requestedDays: days,
     completedDays: town.day - 1,
     learning: {
       records: learningRecords.length,
       sourceCounts,
       meanGeneral: domainMean("general"),
-      meanRetail: domainMean("retail"),
-      meanInventory: domainMean("inventory"),
+      meanRetail: domainMean("retailOperations"),
+      meanInventory: domainMean("inventoryHandling"),
     },
     grocery: {
       actualCapacityPointDays,
@@ -137,8 +137,8 @@ export function evaluateKnowledgeTracer(config: KnowledgeEvaluationConfig) {
       days: config.days,
       phasesPerDay: PHASES.length,
       baseline: "scalar skill with knowledge updates and effects disabled",
-      candidate: "knowledge-v1 workplace/course learning and grocery-capacity effect",
-      hypothesis: "Across the fixed run set, knowledge-v1 should create auditable learning, at least one gross grocery capacity-point-day, and at least one accumulated whole transaction slot without violating cash conservation.",
+      candidate: "knowledge-v2 workplace/course learning and grocery-capacity effect",
+      hypothesis: "Across the fixed run set, knowledge-v2 should create auditable learning, at least one gross grocery capacity-point-day, and at least one accumulated whole transaction slot without violating cash conservation.",
       interpretation: "Deterministic gameplay comparison only; not empirical evidence about learning, productivity, education, or labor markets.",
     },
     status: Object.values(checks).every(Boolean) ? "passed" : "failed",
