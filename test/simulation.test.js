@@ -2017,6 +2017,51 @@ test("free park visitors can form a traceable friendship", () => {
   assert.match(a.events[0].text, /park encounter became friendship/);
 });
 
+test("public Common Park access remains available through hunger, homelessness, unemployment, and café failure", () => {
+  const town = new TownSimulation({ seed: 42, cooperationMode: "public-social" });
+  const person = town.people.find((candidate) => candidate.employer < 0);
+  person.focus = "physiological";
+  person.hungryDays = 3;
+  person.housed = false;
+  person.relationships = {};
+  person.lastSocialDay = -20;
+  person.motivationProfile = { ...person.motivationProfile, connection: 1.3, security: 0.7 };
+
+  assert.equal(town.freePersonalActivity(person), "park-social");
+
+  const legacy = new TownSimulation({ seed: 42, cooperationMode: "legacy" });
+  const legacyPerson = legacy.people.find((candidate) => candidate.employer < 0);
+  legacyPerson.focus = "physiological";
+  legacyPerson.hungryDays = 3;
+  legacyPerson.relationships = {};
+  legacyPerson.lastSocialDay = -20;
+  legacyPerson.motivationProfile = { ...legacyPerson.motivationProfile, connection: 1.3, security: 0.7 };
+  assert.equal(legacy.freePersonalActivity(legacyPerson), "rest");
+});
+
+test("public social venues pair strongest existing friendships before deterministic stranger pairs", () => {
+  const setup = () => {
+    const town = new TownSimulation({ seed: 42, cooperationMode: "public-social" });
+    const visitors = town.people.slice(0, 6);
+    visitors.forEach((person) => { person.relationships = {}; });
+    town.formFriendship(visitors[0], visitors[1], 0.8);
+    town.formFriendship(visitors[0], visitors[2], 0.9);
+    town.formFriendship(visitors[1], visitors[3], 0.85);
+    return { town, visitors };
+  };
+  const first = setup();
+  const replay = setup();
+
+  const pairs = first.town.pairSocialVisitors(first.visitors, "park");
+  const replayPairs = replay.town.pairSocialVisitors(replay.visitors, "park");
+
+  assert.deepEqual(pairs.slice(0, 2), [[0, 2], [1, 3]]);
+  assert.deepEqual(pairs, replayPairs);
+  assert.equal(first.visitors[0].relationships[2].strength, 1);
+  assert.equal(first.visitors[1].relationships[3].strength, 1);
+  assert.ok(first.visitors[4].relationships[5]);
+});
+
 test("free self-study creates bounded growth without creating money", () => {
   const town = new TownSimulation({ seed: 42, policy: { discretionaryDemand: 0 } });
   const person = town.people[0];

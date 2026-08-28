@@ -27,6 +27,7 @@ export const FRIENDSHIP_CONTACT_GAIN = 0.18;
 export const FRIENDSHIP_DECAY_GRACE_DAYS = 5;
 export const FRIENDSHIP_DAILY_DECAY = 0.015;
 export const FRIENDSHIP_END_THRESHOLD = 0.2;
+export const COOPERATION_MODES = Object.freeze(["legacy", "public-social", "mutual-aid"]);
 export const STAFFING_REVENUE_BUFFER = 1.08;
 export const FIRM_DISTRESS_DAYS = 3;
 export const FIRM_INSOLVENCY_DAYS = 6;

@@ -2,6 +2,7 @@ import {
   CLINIC_TREATMENT_RECOVERY,
   CLINIC_TREATMENT_RESERVE_DAYS,
   CLINIC_TREATMENT_THRESHOLD,
+  COOPERATION_MODES,
   DEFAULT_POLICY,
   EDUCATION_RESERVE_DAYS,
   EDUCATION_SKILL_GAIN,
@@ -89,8 +90,9 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy" } = {}) {
     validateFirmKnowledgeConfigs(FIRMS);
+    if (!COOPERATION_MODES.includes(cooperationMode)) throw new Error(`Unknown cooperation mode: ${cooperationMode}`);
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -102,6 +104,7 @@ export class TownSimulation {
     this.employmentInterventionEnabled = employmentInterventionEnabled;
     this.schedulesEnabled = schedulesEnabled;
     this.sleepEnabled = sleepEnabled;
+    this.cooperationMode = cooperationMode;
     this.reset();
   }
 
@@ -2710,23 +2713,50 @@ export class TownSimulation {
   }
 
   pairSocialVisitors(visitors, venue) {
-    const social = [...visitors].sort(() => this.random() - 0.5);
-    for (let index = 0; index + 1 < social.length; index += 2) {
-      const a = social[index];
-      const b = social[index + 1];
+    const pairs = [];
+    if (this.cooperationMode === "legacy") {
+      const social = [...visitors].sort(() => this.random() - 0.5);
+      for (let index = 0; index + 1 < social.length; index += 2) pairs.push([social[index], social[index + 1]]);
+    } else {
+      const orderedVisitors = [...visitors].sort((a, b) => a.id - b.id);
+      const available = new Set(orderedVisitors.map((person) => person.id));
+      const friendEdges = orderedVisitors.flatMap((person, index) => orderedVisitors.slice(index + 1)
+        .filter((candidate) => person.relationships[candidate.id] && candidate.relationships[person.id])
+        .map((candidate) => ({
+          a: person,
+          b: candidate,
+          strength: Math.min(person.relationships[candidate.id].strength, candidate.relationships[person.id].strength),
+        })))
+        .sort((left, right) => right.strength - left.strength || left.a.id - right.a.id || left.b.id - right.b.id);
+      friendEdges.forEach(({ a, b }) => {
+        if (!available.has(a.id) || !available.has(b.id)) return;
+        pairs.push([a, b]);
+        available.delete(a.id);
+        available.delete(b.id);
+      });
+      const strangers = orderedVisitors.filter((person) => available.has(person.id));
+      for (let index = strangers.length - 1; index > 0; index -= 1) {
+        const selected = Math.floor(this.random() * (index + 1));
+        [strangers[index], strangers[selected]] = [strangers[selected], strangers[index]];
+      }
+      for (let index = 0; index + 1 < strangers.length; index += 2) pairs.push([strangers[index], strangers[index + 1]]);
+    }
+    pairs.forEach(([a, b]) => {
       const existingFriendship = Boolean(a.relationships[b.id]);
       if (this.recordSocialContact(a, b) && !existingFriendship) {
         this.note(a, `a ${venue} encounter became friendship with ${b.name}`, "good");
         this.note(b, `a ${venue} encounter became friendship with ${a.name}`, "good");
       }
-    }
+    });
+    return pairs.map(([a, b]) => [a.id, b.id]);
   }
 
   freePersonalActivity(person) {
     const relationships = this.relationshipStats(person);
     const sociallyDisconnected = relationships.count === 0 || this.day - person.lastSocialDay > 3;
     if (["esteem", "growth"].includes(person.focus)) return "self-study";
-    if (!person.hungryDays && sociallyDisconnected && person.motivationProfile.connection >= person.motivationProfile.security) return "park-social";
+    const hardshipAllowsPark = this.cooperationMode !== "legacy" || !person.hungryDays;
+    if (hardshipAllowsPark && sociallyDisconnected && person.motivationProfile.connection >= person.motivationProfile.security) return "park-social";
     return "rest";
   }
 
@@ -3638,6 +3668,7 @@ export class TownSimulation {
         };
       })(),
       schedulesEnabled: this.schedulesEnabled,
+      cooperationMode: this.cooperationMode,
       citizenPolicy: this.policyMetadata(),
       controlHistory: this.controlHistory.map((entry) => ({ ...entry })),
       townStage,
