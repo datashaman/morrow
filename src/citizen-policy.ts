@@ -18,8 +18,9 @@ export type HealthAction = "defer-treatment" | `buy-medicine:${number}`;
 export type EducationAction = "defer-education" | `buy-education:${number}`;
 export type ClinicalAction = "defer-clinical-care" | `buy-clinical-care:${number}`;
 export type MutualAidAction = "keep-meals" | "refuse-all-meal-gifts" | `offer-meal:${number}` | `accept-meal:${number}`;
+export type WelfareAction = "refuse-welfare" | "accept-welfare";
 export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
-export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | OwnerAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | WelfareAction | OwnerAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -311,6 +312,16 @@ export type MutualAidReceiveObservation = Readonly<{
   options: readonly MutualAidReceiveOption[];
 }>;
 
+export type WelfareObservation = Readonly<{
+  kind: "welfare";
+  programme: "food-assistance" | "rent-assistance" | "emergency-cash-relief";
+  citizenId: number;
+  citizenName: string;
+  stress: number;
+  urgency: number;
+  profile: MotivationProfile;
+}>;
+
 export type OwnerOption = Readonly<{
   action: OwnerAction;
   label: string;
@@ -340,7 +351,7 @@ export type OwnerObservation = Readonly<{
   options: readonly OwnerOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | OwnerObservation;
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | WelfareObservation | OwnerObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -457,6 +468,8 @@ export class RuleCitizenPolicy implements CitizenPolicy {
         ?? legalActions[0];
     } else if (observation.kind === "sleep") {
       action = "sleep";
+    } else if (observation.kind === "welfare") {
+      action = "refuse-welfare";
     } else if (observation.kind === "owner") {
       if (observation.domain === "wage") {
         const waive = observation.options.find((option) => option.action === "waive-owner-wage");
@@ -496,6 +509,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     if (input.observation.kind === "sleep") return this.decideSleep(input.observation, input.legalActions);
     if (input.observation.kind === "mutual-aid-offer") return this.decideMutualAidOffer(input.observation, input.legalActions);
     if (input.observation.kind === "mutual-aid-receive") return this.decideMutualAidReceive(input.observation, input.legalActions);
+    if (input.observation.kind === "welfare") return this.decideWelfare(input.observation, input.legalActions);
     if (input.observation.kind === "owner") return this.decideOwner(input.observation, input.legalActions);
 
     const { observation, legalActions } = input;
@@ -607,6 +621,14 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
         + observation.profile.planning * option.remainingLifeFraction * 0.15;
     });
     return this.highestScoringDecision(legalActions, scores, "mutual-aid response");
+  }
+
+  decideWelfare(observation: WelfareObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const scores: Record<string, number> = {
+      "refuse-welfare": 0.18 + observation.profile.avoidance * (0.25 + observation.stress * 0.55),
+      "accept-welfare": 0.25 + observation.profile.security * (0.3 + observation.urgency * 0.65) + observation.profile.planning * 0.25,
+    };
+    return this.highestScoringDecision(legalActions, scores, `${observation.programme} take-up`);
   }
 
   decideOwner(observation: OwnerObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {

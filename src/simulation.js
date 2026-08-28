@@ -1050,6 +1050,102 @@ export class TownSimulation {
     return record;
   }
 
+  directWelfareEnabled() {
+    return this.welfareMode === "direct-only" || this.welfareMode === "combined";
+  }
+
+  directAssistanceProviderFailure(recipient, provider, purpose) {
+    if (!provider) return "no eligible provider";
+    if (!provider.active) return "provider inactive";
+    if (!this.firmOpenOnDay(provider)) return "provider closed";
+    if (!this.firmServiceAvailable(provider, "Evening")) return purpose === "rent" ? "unavailable housing transaction" : "no eligible provider";
+    if (purpose === "food") {
+      this.reconcileInventoryBatches(provider);
+      if (provider.sector !== "food" || provider.sells !== "budgetFood") return "no eligible provider";
+      if (provider.inventory + 1e-9 < 1) return "no stock";
+    } else if (purpose === "rent") {
+      if (provider.sector !== "housing" || !recipient.housed || !this.rentDueToday()) return "unavailable housing transaction";
+    }
+    const attendedStaff = provider.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+    if (attendedStaff === 0) return "no attended staff";
+    if (provider.transactionsToday >= this.transactionCapacity(provider)) return "no transaction capacity";
+    return null;
+  }
+
+  assessWelfareOffer({ programme: programmeKey, recipient, provider, purpose, urgency }) {
+    const programme = WELFARE_PROGRAMMES[programmeKey];
+    if (!programme) throw new Error(`Unknown welfare programme: ${programmeKey}`);
+    this.welfareTransactionSequence += 1;
+    const welfareId = `welfare:${this.day}:${this.welfareTransactionSequence}`;
+    const completePrice = roundMoney(provider?.price ?? 0);
+    const privateCash = roundMoney(Math.min(recipient.cash, completePrice));
+    const shortfall = roundMoney(Math.max(0, completePrice - privateCash));
+    const envelopeBefore = this.remainingWelfareEnvelope();
+    const treasuryBefore = roundMoney(this.government.cash);
+    const providerFailure = this.directAssistanceProviderFailure(recipient, provider, purpose);
+    const eligible = recipient.alive && shortfall > 0 && !providerFailure;
+    const baseEvidence = {
+      welfareId,
+      programme: programme.id,
+      programmeName: programme.name,
+      ruleVersion: programme.ruleVersion,
+      recipientId: recipient.id,
+      recipientName: recipient.name,
+      decisionMakerId: recipient.id,
+      decisionMakerName: recipient.name,
+      providerId: provider?.id ?? null,
+      providerName: provider?.name ?? null,
+      purpose,
+      completePrice,
+      assessedPrivateCash: privateCash,
+      exactShortfall: shortfall,
+      envelopeBefore,
+      envelopeAfter: envelopeBefore,
+      treasuryBefore,
+      treasuryAfter: treasuryBefore,
+      eligibilityResult: eligible ? "eligible" : "ineligible",
+      eligibilityReason: eligible ? "otherwise legal essential purchase exceeds private cash" : providerFailure ?? "no exact shortfall",
+      offered: eligible,
+      decision: null,
+      motivationScores: null,
+      privateContribution: 0,
+      treasuryContribution: 0,
+      linkedTransactionIds: [],
+      outcome: eligible ? "offered" : "ineligible",
+      reason: eligible ? "immediate voluntary welfare offer" : providerFailure ?? "no exact shortfall",
+    };
+    if (!eligible) {
+      this.recordWelfare(recipient, baseEvidence);
+      this.recordWelfare(this.government, baseEvidence);
+      return Object.freeze({ welfareId, eligible: false, accepted: false, evidence: Object.freeze(baseEvidence) });
+    }
+
+    const observation = Object.freeze({
+      kind: "welfare",
+      programme: programme.id,
+      citizenId: recipient.id,
+      citizenName: recipient.name,
+      stress: recipient.stress,
+      urgency: clamp(urgency),
+      profile: { ...recipient.motivationProfile },
+    });
+    const legalActions = Object.freeze(["refuse-welfare", "accept-welfare"]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal welfare action`);
+    this.recordDecision(recipient, observation, legalActions, decision, PHASES[this.phase]);
+    const accepted = decision.action === "accept-welfare";
+    const evidence = {
+      ...baseEvidence,
+      decision: decision.action,
+      motivationScores: structuredClone(decision.scores ?? {}),
+      outcome: accepted ? "accepted" : "refused",
+      reason: accepted ? "citizen accepted immediate assistance" : "citizen refused immediate assistance",
+    };
+    this.recordWelfare(recipient, evidence);
+    this.recordWelfare(this.government, evidence);
+    return Object.freeze({ welfareId, eligible: true, accepted, evidence: Object.freeze(evidence) });
+  }
+
   directAssistanceFailure({ programme, recipient, decisionMaker, provider, purpose, completePrice, privateCash, shortfall, reason, welfareId, envelopeBefore, treasuryBefore }) {
     const evidence = {
       welfareId,
@@ -1082,11 +1178,11 @@ export class TownSimulation {
     return Object.freeze({ completed: false, reason, evidence: Object.freeze(evidence) });
   }
 
-  settleDirectAssistance({ programme: programmeKey, recipient, decisionMaker = recipient, provider, purpose, completePrice = provider?.price }) {
+  settleDirectAssistance({ programme: programmeKey, recipient, decisionMaker = recipient, provider, purpose, completePrice = provider?.price, welfareId: offeredWelfareId = null }) {
     const programme = WELFARE_PROGRAMMES[programmeKey];
     if (!programme) throw new Error(`Unknown welfare programme: ${programmeKey}`);
-    this.welfareTransactionSequence += 1;
-    const welfareId = `welfare:${this.day}:${this.welfareTransactionSequence}`;
+    if (!offeredWelfareId) this.welfareTransactionSequence += 1;
+    const welfareId = offeredWelfareId ?? `welfare:${this.day}:${this.welfareTransactionSequence}`;
     const price = roundMoney(completePrice ?? 0);
     const privateCash = roundMoney(Math.min(Math.max(0, recipient?.cash ?? 0), price));
     const shortfall = roundMoney(Math.max(0, price - privateCash));
@@ -1109,23 +1205,12 @@ export class TownSimulation {
     });
 
     if (!recipient?.alive || !decisionMaker?.alive) return fail("recipient ineligible");
-    if (!provider) return fail("no eligible provider");
-    if (!provider.active) return fail("provider inactive");
-    if (!this.firmOpenOnDay(provider)) return fail("provider closed");
-    if (!this.firmServiceAvailable(provider, "Evening")) return fail(purpose === "rent" ? "unavailable housing transaction" : "no eligible provider");
+    const providerFailure = this.directAssistanceProviderFailure(recipient, provider, purpose);
+    if (providerFailure) return fail(providerFailure);
     if (!(price > 0) || Math.abs(price - roundMoney(provider.price)) > 1e-9) {
       return fail(purpose === "rent" ? "unavailable housing transaction" : "no eligible provider");
     }
-    if (purpose === "food") {
-      this.reconcileInventoryBatches(provider);
-      if (provider.sector !== "food" || provider.sells !== "budgetFood") return fail("no eligible provider");
-      if (provider.inventory + 1e-9 < 1) return fail("no stock");
-    } else if (purpose === "rent") {
-      if (provider.sector !== "housing" || !recipient.housed || !this.rentDueToday()) return fail("unavailable housing transaction");
-    } else throw new Error(`Unsupported direct-assistance purpose: ${purpose}`);
-    const attendedStaff = provider.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
-    if (attendedStaff === 0) return fail("no attended staff");
-    if (provider.transactionsToday >= this.transactionCapacity(provider)) return fail("no transaction capacity");
+    if (purpose !== "food" && purpose !== "rent") throw new Error(`Unsupported direct-assistance purpose: ${purpose}`);
     if (!(shortfall > 0)) return fail("no exact shortfall");
     if (shortfall > envelopeBefore + 1e-9) return fail("exhausted daily envelope");
     if (shortfall > this.government.cash + 1e-9) return fail("insufficient treasury cash");
@@ -2816,10 +2901,12 @@ export class TownSimulation {
 
   foodAccessOrder() {
     const populationSize = this.people.length;
-    const rotatingRank = (person) => (person.id - this.day + populationSize) % populationSize;
+    const rotation = this.directWelfareEnabled() ? Math.floor((this.day - 1) / 7) : this.day;
+    const rotatingRank = (person) => (person.id - rotation + populationSize) % populationSize;
     return this.people.filter((person) => person.alive).sort((a, b) => (
       b.hungryDays - a.hungryDays
       || a.health - b.health
+      || (this.directWelfareEnabled() ? this.runwayDays(a) - this.runwayDays(b) : 0)
       || rotatingRank(a) - rotatingRank(b)
     ));
   }
@@ -2849,6 +2936,27 @@ export class TownSimulation {
         capacityAvailable: true,
       }))
       : [];
+    let welfareAssessment = null;
+    if (this.directWelfareEnabled() && !person.foodStock.length) {
+      const everydayProviders = this.firms
+        .filter((firm) => firm.archetypeId === "everyday-grocer")
+        .sort((a, b) => a.price - b.price || a.id - b.id);
+      const eligibleProvider = everydayProviders.find((firm) => !this.directAssistanceProviderFailure(person, firm, "food"));
+      const provider = eligibleProvider ?? everydayProviders[0] ?? null;
+      if (provider && person.cash + 1e-9 < provider.price) {
+        const urgency = 0.55 * clamp((person.hungryDays + 1) / 3) + 0.45 * (1 - person.health);
+        welfareAssessment = this.assessWelfareOffer({ programme: "food", recipient: person, provider, purpose: "food", urgency });
+        if (welfareAssessment.accepted) {
+          const settlement = this.settleDirectAssistance({ programme: "food", recipient: person, provider, purpose: "food", welfareId: welfareAssessment.welfareId });
+          if (settlement.completed) {
+            const meal = person.foodStock.shift();
+            if (!meal) throw new Error("Delivered Food Assistance did not create the purchased meal");
+            this.consumeFood(person, meal);
+            return true;
+          }
+        }
+      }
+    }
     const purchaseOptions = foodFirms.flatMap((firm) => {
         const topUpUnits = !this.schedulesEnabled && person.foodStock.length
           ? 0
@@ -2875,7 +2983,7 @@ export class TownSimulation {
         });
       });
     const options = [...storedOptions, ...purchaseOptions];
-    if (!person.foodStock.length && !options.length && foodFirms.length) {
+    if (!person.foodStock.length && !options.length && foodFirms.length && !welfareAssessment) {
       const stockedFirms = foodFirms.filter((firm) => firm.inventory >= 1);
       if (stockedFirms.length) stockedFirms[0].priceRejectionsToday += 1;
       else this.note(person, "no food stock was available to purchase", "bad");

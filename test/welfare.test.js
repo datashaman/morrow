@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { MotivationCitizenPolicy } from "../src/citizen-policy.ts";
 import { TownSimulation } from "../src/simulation.js";
 
 test("welfare mode is explicit, validated, retained by reset, and exposed by snapshot", () => {
@@ -180,4 +181,87 @@ test("Rent Assistance rejects a non-current housing transaction without moving m
 
   assert.equal(result.reason, "unavailable housing transaction");
   assert.deepEqual([recipient.cash, housing.cash, town.government.cash], balancesBefore);
+});
+
+test("motivation-v3 applies the specified welfare scores and refuses exact ties", () => {
+  const policy = new MotivationCitizenPolicy();
+  const profile = { comfort: 1, connection: 1, mastery: 1, security: 1, foodQuality: 1, planning: 1, avoidance: 0.775 };
+  const observation = {
+    kind: "welfare",
+    programme: "food-assistance",
+    citizenId: 1,
+    citizenName: "Tie",
+    stress: 1,
+    urgency: 0,
+    profile,
+  };
+
+  const decision = policy.decide({ observation, legalActions: ["refuse-welfare", "accept-welfare"], random: () => 0 });
+
+  assert.equal(decision.scores["accept-welfare"], 0.8);
+  assert.equal(decision.scores["refuse-welfare"], 0.8);
+  assert.equal(decision.action, "refuse-welfare");
+});
+
+test("an eligible citizen may accept Food Assistance and immediately eat the ordinary purchased meal", () => {
+  const town = new TownSimulation({ seed: 65, welfareMode: "combined", policy: { supportRate: 100 } });
+  town.phase = 4;
+  const recipient = town.people.at(-1);
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  recipient.cash = 1;
+  recipient.health = 0.5;
+  recipient.stress = 0;
+  recipient.motivationProfile = { ...recipient.motivationProfile, security: 1.3, planning: 1.3, avoidance: 0.7 };
+  const inventoryBefore = grocer.inventory;
+  const healthBefore = recipient.health;
+
+  const ate = town.considerFood(recipient, [grocer]);
+
+  assert.equal(ate, true);
+  assert.equal(recipient.foodStock.length, 0);
+  assert.equal(recipient.foodConsumedToday, 1);
+  assert.equal(recipient.health > healthBefore, true);
+  assert.equal(grocer.inventory, inventoryBefore - 1);
+  assert.equal(recipient.welfareHistory.some((record) => record.outcome === "accepted"), true);
+  assert.equal(recipient.welfareHistory.some((record) => record.outcome === "delivered"), true);
+  assert.equal(recipient.decisions[0].observation.kind, "welfare");
+});
+
+test("refused Food Assistance spends nothing and ordinary hunger consequences continue", () => {
+  const town = new TownSimulation({ seed: 66, welfareMode: "combined", policy: { supportRate: 100 } });
+  town.phase = 4;
+  const recipient = town.people.at(-1);
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  recipient.cash = 1;
+  recipient.health = 0.9;
+  recipient.stress = 1;
+  recipient.motivationProfile = { ...recipient.motivationProfile, security: 0.7, planning: 0.7, avoidance: 1.3 };
+  const balancesBefore = [recipient.cash, grocer.cash, town.government.cash];
+  const inventoryBefore = grocer.inventory;
+
+  const ate = town.considerFood(recipient, [grocer]);
+
+  assert.equal(ate, false);
+  assert.equal(recipient.hungryDays, 1);
+  assert.equal(recipient.welfareHistory[0].outcome, "refused");
+  assert.deepEqual([recipient.cash, grocer.cash, town.government.cash], balancesBefore);
+  assert.equal(grocer.inventory, inventoryBefore);
+  assert.equal(grocer.priceRejectionsToday, 0);
+});
+
+test("an unavailable direct provider records ineligibility rather than claimant refusal", () => {
+  const town = new TownSimulation({ seed: 68, welfareMode: "combined", policy: { supportRate: 100 } });
+  town.phase = 4;
+  const recipient = town.people.at(-1);
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  recipient.cash = 0;
+  grocer.inventory = 0;
+  grocer.inventoryBatches = [];
+
+  town.considerFood(recipient, [grocer]);
+
+  assert.equal(recipient.welfareHistory[0].outcome, "ineligible");
+  assert.equal(recipient.welfareHistory[0].reason, "no stock");
+  assert.equal(recipient.welfareHistory[0].decision, null);
+  assert.equal(grocer.priceRejectionsToday, 0);
 });
