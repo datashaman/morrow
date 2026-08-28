@@ -8,6 +8,7 @@ The experience should answer questions such as:
 
 - Who employs this person, and where does the wage come from?
 - Who sold the food or service they bought?
+- Did a close friend give them this meal, and where did it originally come from?
 - Who received their rent?
 - What happens when their money runs out?
 - Can they become hungry, unhealthy, unemployed, or unhoused?
@@ -34,7 +35,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Hunger, bounded self-care and clinical treatment, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Paid, finite retail education plus transferable workplace knowledge across every current trade, with bounded operation-specific effects that never guarantee employment, demand, or success
 - Explicit labor-gated fabrication, construction-material supply, finite dwellings, and paid building projects
-- Friendships and social encounters
+- Public and commercial social encounters, maintained friendships, and voluntary close-friend meal sharing with preserved provenance
 - An explicitly staged citizen lifecycle with age, guardianship, family relationships, and endogenous births; these are accepted future scope and must not be presented as implemented until their tracer slices land
 - Maslow-inspired needs and current behavioural focus
 - Auditable cash transfers and deterministic replay

@@ -15,6 +15,7 @@
     "evaluate:activation": "tsx scripts/evaluate-neural-activation.ts",
     "evaluate:knowledge": "tsx scripts/evaluate-knowledge.ts",
     "evaluate:personalization": "tsx scripts/evaluate-personalization.ts",
+    "evaluate:cooperation": "tsx scripts/evaluate-cooperation.ts",
     "export:trajectories": "tsx scripts/export-trajectories.ts",
     "preview": "vite preview",
     "test": "tsx --test",

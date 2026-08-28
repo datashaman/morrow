@@ -15,12 +15,12 @@ class ForcedMutualAidPolicy extends MotivationCitizenPolicy {
   decide(input) {
     if (input.observation.kind === "mutual-aid-offer") {
       const option = input.observation.options.find(this.offer);
-      return { action: option?.action ?? "keep-meal", reasons: ["forced test offer"] };
+      return { action: option?.action ?? "keep-meals", reasons: ["forced test offer"] };
     }
     if (input.observation.kind === "mutual-aid-receive") {
       this.beforeAccept?.(input.observation);
       const option = input.observation.options.find(this.accept);
-      return { action: option?.action ?? "refuse-mutual-aid", reasons: ["forced test response"] };
+      return { action: option?.action ?? "refuse-all-meal-gifts", reasons: ["forced test response"] };
     }
     return super.decide(input);
   }
@@ -60,6 +60,19 @@ function mutualAidTown(policy = new ForcedMutualAidPolicy()) {
 function closeFriends(town, leftId, rightId, strength = 0.9) {
   town.formFriendship(town.people[leftId], town.people[rightId], strength, town.day);
 }
+
+test("one renewed initial friendship crosses the exact close threshold", () => {
+  const town = mutualAidTown();
+  const left = town.people[0];
+  const right = town.people[1];
+  town.formFriendship(left, right, 0.6, town.day);
+
+  town.pairSocialVisitors([left, right], "park");
+
+  assert.equal(left.relationships[right.id].strength, 0.78);
+  assert.equal(right.relationships[left.id].strength, 0.78);
+  assert.equal(town.closeFriendshipStrength(left, right), 0.78);
+});
 
 test("an accepted mutual-aid gift moves the exact meal without moving money", () => {
   const town = mutualAidTown();
@@ -102,6 +115,24 @@ test("closure-aware protected meals cannot be offered", () => {
   assert.equal(giver.foodStock.length, 2);
   assert.equal(recipient.foodStock.length, 0);
   assert.equal(giver.decisions.some((decision) => decision.kind === "mutual-aid-offer"), false);
+});
+
+test("weak friendships and expired surplus never create legal offers", () => {
+  for (const blockedBy of ["friendship", "expiry"]) {
+    const town = mutualAidTown();
+    const giver = town.people[0];
+    const recipient = town.people[1];
+    closeFriends(town, giver.id, recipient.id, blockedBy === "friendship" ? 0.74 : 0.9);
+    giver.foodStock = [
+      meal(town, giver, 1),
+      meal(town, giver, 2, blockedBy === "expiry" ? { processedDay: -3, shelfLife: 3 } : {}),
+    ];
+
+    town.runMutualAidExchange();
+
+    assert.equal(recipient.foodStock.length, 0);
+    assert.equal(giver.decisions.some((decision) => decision.kind === "mutual-aid-offer"), false);
+  }
 });
 
 test("kept and refused offers leave food and custody unchanged", () => {
@@ -222,13 +253,31 @@ test("motivation-v3 applies the specified offer and refusal tie preferences", ()
     kind: "mutual-aid-offer", citizenId: 0, citizenName: "A", stress: 0.2, runwayDays: 12, protectedReserve: 1, profile,
     options: [{ action: "offer-meal:1", offerId: 1, mealId: 1, recipientId: 1, recipientName: "B", relationshipStrength: 0.9, recipientNeed: 0.8, reserveHeadroom: 1, spoilagePressure: 0.5 }],
   };
-  const offer = policy.decide({ observation: offerObservation, legalActions: ["keep-meal", "offer-meal:1"], random: () => 0 });
+  const offer = policy.decide({ observation: offerObservation, legalActions: ["keep-meals", "offer-meal:1"], random: () => 0 });
   assert.equal(offer.action, "offer-meal:1");
 
   const refusalObservation = {
     kind: "mutual-aid-receive", citizenId: 1, citizenName: "B", stress: 0, pantryFill: 1, profile: { ...profile, planning: 3, foodQuality: 3 },
     options: [{ action: "accept-meal:1", offerId: 1, mealId: 1, giverId: 0, giverName: "A", relationshipStrength: 0.75, recipientNeed: 0, mealQuality: 0.2, remainingLifeFraction: 0 }],
   };
-  const refusal = policy.decide({ observation: refusalObservation, legalActions: ["refuse-mutual-aid", "accept-meal:1"], random: () => 0 });
-  assert.equal(refusal.action, "refuse-mutual-aid");
+  const refusal = policy.decide({ observation: refusalObservation, legalActions: ["refuse-all-meal-gifts", "accept-meal:1"], random: () => 0 });
+  assert.equal(refusal.action, "refuse-all-meal-gifts");
+});
+
+test("reset clears cooperation and custody state while retaining the configured mode", () => {
+  const town = mutualAidTown();
+  const giver = town.people[0];
+  const recipient = town.people[1];
+  closeFriends(town, giver.id, recipient.id);
+  giver.foodStock = [meal(town, giver, 1), meal(town, giver, 2)];
+  town.runMutualAidExchange();
+  assert.equal(recipient.mutualAidHistory.length, 1);
+
+  town.reset();
+
+  assert.equal(town.cooperationMode, "mutual-aid");
+  assert.equal(town.mutualAidOfferSequence, 0);
+  assert.equal(town.mutualAidTransferSequence, 0);
+  assert.deepEqual(town.foodItems, {});
+  assert.ok(town.people.every((person) => person.mutualAidHistory.length === 0 && person.foodStock.length === 0));
 });

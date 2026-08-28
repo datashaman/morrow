@@ -240,8 +240,8 @@ const staticActionNames = {
   "skip-food": "Skipped food",
   "defer-housing": "Deferred housing payment",
   "remain-unhoused": "Remained unhoused",
-  "keep-meal": "Kept surplus food",
-  "refuse-mutual-aid": "Refused all offered meals",
+  "keep-meals": "Kept surplus food",
+  "refuse-all-meal-gifts": "Refused all offered meals",
 };
 
 function actionName(decision, action) {

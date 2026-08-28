@@ -10,6 +10,7 @@ src/random.js ─────────┤
 src/civil-time.js ───────┤──> src/simulation.js ──> state snapshots
 src/citizen-policy.ts ─┘              │
 src/schedule-evaluation.ts <──────────┤
+src/cooperation-evaluation.ts <───────┤
                                       v
                                src/main.js
                                  │     │
@@ -52,7 +53,7 @@ The class currently combines initialization, accounting, decision rules, phase o
 
 ### `src/citizen-policy.ts`
 
-Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among legal actions and explains that choice. `RuleCitizenPolicy` is the complete deterministic `rule-v2` evaluation baseline. `MotivationCitizenPolicy` scores Workday plans, sleep, attendance, job search and offers, food, housing, personal time, and owner decisions from stable seed-derived weights plus current needs and constraints. Tests inject alternative policies to protect substitutability.
+Defines the typed, injectable citizen-policy boundary. The simulation owns observations, legal actions, validation, and consequences; a policy only chooses among legal actions and explains that choice. `RuleCitizenPolicy` is the complete deterministic `rule-v2` evaluation baseline. `MotivationCitizenPolicy` scores Workday plans, sleep, attendance, job search and offers, food, mutual-aid offers and responses, housing, personal time, and owner decisions from stable seed-derived weights plus current needs and constraints. Tests inject alternative policies to protect substitutability.
 
 ### `src/neural-policy.ts`
 
@@ -101,6 +102,10 @@ Formats a selected citizen's current primary activity, today's rota state, next 
 ### `src/schedule-evaluation.ts`
 
 Runs the same fixed seeds in compatibility-calendar-only, schedules-without-sleep, and schedules-plus-sleep modes. It records daily trajectories plus access failures, work and wages, leisure and learning, sleep, food waste and hunger, population, business lifecycle, and conservation. `scripts/evaluate-schedules.ts` is the concise text or complete JSON adapter. The report deliberately has no directional acceptance gate.
+
+### `src/cooperation-evaluation.ts`
+
+Runs fixed seeds through `legacy`, `public-social`, and `mutual-aid` modes. It records venue attendance and contact, friendship formation, concrete aid decisions and outcomes, meal custody and disposition, hunger, support, survival, and giving/receiving concentration. It replays every mode and treats custody, ownership, pantry, expiry, simulation, and cash invariants as hard checks while leaving welfare directions observational. `scripts/evaluate-cooperation.ts` is the text or JSON adapter.
 
 ### `src/employment-evaluation.ts`
 

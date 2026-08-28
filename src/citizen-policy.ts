@@ -17,7 +17,7 @@ export type HousingAction = "defer-housing" | "remain-unhoused" | `pay-housing:$
 export type HealthAction = "defer-treatment" | `buy-medicine:${number}`;
 export type EducationAction = "defer-education" | `buy-education:${number}`;
 export type ClinicalAction = "defer-clinical-care" | `buy-clinical-care:${number}`;
-export type MutualAidAction = "keep-meal" | "refuse-mutual-aid" | `offer-meal:${number}` | `accept-meal:${number}`;
+export type MutualAidAction = "keep-meals" | "refuse-all-meal-gifts" | `offer-meal:${number}` | `accept-meal:${number}`;
 export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
 export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | OwnerAction;
 
@@ -578,7 +578,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     const scarcity = clamp(1 - observation.runwayDays / 12);
     const minimumHeadroom = observation.options.reduce((minimum, option) => Math.min(minimum, option.reserveHeadroom), 1);
     const scores: Record<string, number> = {
-      "keep-meal": 0.25
+      "keep-meals": 0.25
         + observation.profile.security * (0.45 + scarcity * 0.45)
         + observation.profile.planning * (1 - minimumHeadroom) * 0.25,
     };
@@ -597,7 +597,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
       + observation.profile.planning * observation.pantryFill * 0.45
       + observation.profile.foodQuality * (1 - option.mealQuality) * 0.4);
     const scores: Record<string, number> = {
-      "refuse-mutual-aid": refusalScores.length ? Math.max(...refusalScores) : 0.18,
+      "refuse-all-meal-gifts": refusalScores.length ? Math.max(...refusalScores) : 0.18,
     };
     observation.options.forEach((option) => {
       scores[option.action] = 0.2

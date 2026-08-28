@@ -2,7 +2,7 @@
 
 Morrow can let its bundled shared neural network control one reversible domain: personal-time choices. The browser starts with this control disabled. The user can enable or disable it during a run; the next decision changes controller without resetting people, firms, money, time, or randomness.
 
-Food, housing, attendance, job search, job offers, and owner choices always remain under `motivation-v3`. `TownSimulation` still creates the concrete legal actions, rejects an action outside that set, and alone applies transactions and consequences. The network cannot invent a purchase, counterparty, price, job, or transfer.
+Food, mutual-aid offers and responses, housing, attendance, job search, job offers, and owner choices always remain under `motivation-v3`. Mutual aid does not enter neural shadowing, action schemas, artifacts, probabilities, or gate evidence. `TownSimulation` still creates the concrete legal actions, rejects an action outside that set, and alone applies transactions and consequences. The network cannot invent a purchase, counterparty, price, job, or transfer.
 
 Workday-plan choices and Overnight sleep versus late study also remain under `motivation-v3`. They are not schema-v2 personal-time actions and are excluded from the activation certificate's controlled-decision counts.
 

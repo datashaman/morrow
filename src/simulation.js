@@ -243,8 +243,16 @@ export class TownSimulation {
     this.controlHistory = [];
     this.opportunitySequence = 0;
     this.foodItemSequence = 0;
+    this.foodItems = {};
     this.mutualAidOfferSequence = 0;
     this.mutualAidTransferSequence = 0;
+    this.cooperationMetrics = {
+      parkAttendance: 0,
+      cafeAttendance: 0,
+      contacts: 0,
+      newFriendships: 0,
+      closeFriendshipsReached: 0,
+    };
     this.opportunityHistory = [];
     this.pendingFormations = {};
     this.opportunityWindows = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, []]));
@@ -927,6 +935,10 @@ export class TownSimulation {
         const shelfLife = food.shelfLife ?? PERISHABLE_SHELF_LIFE[this.firms[food.seller]?.sells] ?? 3;
         const age = this.day - batchDay;
         if (age < shelfLife) return void viable.push(food);
+        food.spoiledDay = this.day;
+        food.ownerKind = null;
+        food.ownerId = null;
+        food.ownerName = null;
         const product = food.product ?? this.firms[food.seller]?.sells ?? "budgetFood";
         this.recordWaste(person, { product, quantity: 1, batchDay, age, reason: "expired in citizen pantry" });
         this.note(person, `a stored meal from ${this.firms[food.seller]?.name ?? "an unknown seller"} expired`, "bad");
@@ -1908,20 +1920,26 @@ export class TownSimulation {
     if (purpose === "food") {
       person.foodSeller = firm.id;
       inventoryTaken.forEach((batch) => {
-        for (let unit = 0; unit < batch.quantity; unit += 1) person.foodStock.push({
-          mealId: ++this.foodItemSequence,
-          product: firm.sells,
-          processedDay: batch.batchDay,
-          purchasedDay: this.day,
-          quality: batch.qualityBasis ?? firm.quality,
-          qualityAtPurchase: this.effectiveFoodQuality({ quality: batch.qualityBasis ?? firm.quality, processedDay: batch.batchDay }),
-          shelfLife: batch.shelfLife,
-          seller: firm.id,
-          ownerKind: person.kind,
-          ownerId: person.id,
-          ownerName: person.name,
-          custody: [],
-        });
+        for (let unit = 0; unit < batch.quantity; unit += 1) {
+          const food = {
+            mealId: ++this.foodItemSequence,
+            product: firm.sells,
+            processedDay: batch.batchDay,
+            purchasedDay: this.day,
+            quality: batch.qualityBasis ?? firm.quality,
+            qualityAtPurchase: this.effectiveFoodQuality({ quality: batch.qualityBasis ?? firm.quality, processedDay: batch.batchDay }),
+            shelfLife: batch.shelfLife,
+            seller: firm.id,
+            ownerKind: person.kind,
+            ownerId: person.id,
+            ownerName: person.name,
+            custody: [],
+            consumedDay: null,
+            spoiledDay: null,
+          };
+          this.foodItems[food.mealId] = food;
+          person.foodStock.push(food);
+        }
       });
     } else person.personalSeller = firm.id;
     const description = purpose === "food"
@@ -1947,6 +1965,10 @@ export class TownSimulation {
     person.foodConsumedTotal += 1;
     person.hungryDays = Math.max(0, person.hungryDays - 1);
     person.health = clamp(person.health + quality * FOOD_HEALTH_RECOVERY);
+    food.consumedDay = this.day;
+    food.ownerKind = null;
+    food.ownerId = null;
+    food.ownerName = null;
     return quality;
   }
 
@@ -2416,6 +2438,7 @@ export class TownSimulation {
       })).filter(({ recipient, strength }) => strength && snapshots.get(recipient.id).viableMealCount < FOOD_PANTRY_CAPACITY);
       const options = [];
       giverSnapshot.foodStock.forEach((meal) => {
+        if (this.foodExpiryDay(meal) <= this.day) return;
         const remaining = giverSnapshot.foodStock.filter((candidate) => candidate.mealId !== meal.mealId);
         if (!this.foodReserveRemainsViable(giver, remaining)) return;
         const reserveHeadroom = clamp(remaining.length / Math.max(1, protectedReserve) - 1);
@@ -2437,7 +2460,7 @@ export class TownSimulation {
         });
       });
       if (!options.length) return;
-      const legalActions = Object.freeze(["keep-meal", ...options.map((option) => option.action)]);
+      const legalActions = Object.freeze(["keep-meals", ...options.map((option) => option.action)]);
       const observation = Object.freeze({
         kind: "mutual-aid-offer",
         citizenId: giver.id,
@@ -2481,7 +2504,7 @@ export class TownSimulation {
           remainingLifeFraction: clamp((shelfLife - age) / shelfLife),
         });
       });
-      const legalActions = Object.freeze(["refuse-mutual-aid", ...options.map((option) => option.action)]);
+      const legalActions = Object.freeze(["refuse-all-meal-gifts", ...options.map((option) => option.action)]);
       const observation = Object.freeze({
         kind: "mutual-aid-receive",
         citizenId: recipient.id,
@@ -2964,12 +2987,19 @@ export class TownSimulation {
       }
       for (let index = 0; index + 1 < strangers.length; index += 2) pairs.push([strangers[index], strangers[index + 1]]);
     }
+    if (venue === "park") this.cooperationMetrics.parkAttendance += visitors.length;
+    if (venue === "café") this.cooperationMetrics.cafeAttendance += visitors.length;
+    this.cooperationMetrics.contacts += pairs.length;
     pairs.forEach(([a, b]) => {
       const existingFriendship = Boolean(a.relationships[b.id]);
-      if (this.recordSocialContact(a, b) && !existingFriendship) {
+      const previousStrength = existingFriendship ? this.closeFriendshipStrength(a, b) || Math.min(a.relationships[b.id].strength, b.relationships[a.id].strength) : 0;
+      const contacted = this.recordSocialContact(a, b);
+      if (contacted && !existingFriendship) {
+        this.cooperationMetrics.newFriendships += 1;
         this.note(a, `a ${venue} encounter became friendship with ${b.name}`, "good");
         this.note(b, `a ${venue} encounter became friendship with ${a.name}`, "good");
       }
+      if (contacted && previousStrength < CLOSE_FRIENDSHIP_THRESHOLD && this.closeFriendshipStrength(a, b)) this.cooperationMetrics.closeFriendshipsReached += 1;
     });
     return pairs.map(([a, b]) => [a.id, b.id]);
   }
@@ -3770,6 +3800,36 @@ export class TownSimulation {
     return !this.people.some((person) => person.alive);
   }
 
+  foodCustodyChecks() {
+    const pantryMeals = this.people.flatMap((person) => person.foodStock.map((meal) => ({ person, meal })));
+    const occurrences = pantryMeals.reduce((counts, { meal }) => counts.set(meal.mealId, (counts.get(meal.mealId) ?? 0) + 1), new Map());
+    const offerIds = new Set();
+    let validChains = true;
+    let noExpiredGifts = true;
+    Object.values(this.foodItems).forEach((meal) => {
+      const custody = meal.custody ?? [];
+      custody.forEach((entry, index) => {
+        if (offerIds.has(entry.offerId)) validChains = false;
+        offerIds.add(entry.offerId);
+        if (index && custody[index - 1].recipientId !== entry.giverId) validChains = false;
+        if (index && custody[index - 1].sequence >= entry.sequence) validChains = false;
+        if (this.foodExpiryDay(meal) <= entry.day) noExpiredGifts = false;
+      });
+    });
+    const ownershipReconciled = Object.values(this.foodItems).every((meal) => {
+      const count = occurrences.get(meal.mealId) ?? 0;
+      if (meal.consumedDay !== null || meal.spoiledDay !== null) return count === 0;
+      const owner = pantryMeals.find((entry) => entry.meal.mealId === meal.mealId)?.person;
+      return count === 1 && owner?.id === meal.ownerId;
+    });
+    return Object.freeze({
+      pantryWithinCapacity: this.people.every((person) => person.foodStock.length <= FOOD_PANTRY_CAPACITY),
+      validChains,
+      noExpiredGifts,
+      ownershipReconciled,
+    });
+  }
+
   step() {
     if (this.isExtinct()) return this.snapshot();
     this.flows = [];
@@ -3801,6 +3861,8 @@ export class TownSimulation {
     ))) throw new Error("An employed citizen must have a valid five-shift rota");
     if (this.people.some((person) => person.employer < 0 && person.rota !== null)) throw new Error("An unemployed citizen cannot retain an active rota");
     if (this.people.some((person) => !Number.isFinite(person.sleepDebt) || person.sleepDebt < 0 || person.sleepDebt > 1)) throw new Error("Sleep debt must remain bounded");
+    const foodCustody = this.foodCustodyChecks();
+    if (this.cooperationMode === "mutual-aid" && Object.values(foodCustody).some((passed) => !passed)) throw new Error("Mutual-aid food custody invariant failed");
     this.firms.filter((firm) => this.isPerishable(firm.sells)).forEach((firm) => {
       const batchTotal = firm.inventoryBatches.reduce((total, batch) => total + batch.quantity, 0);
       if (Math.abs(batchTotal - firm.inventory) > 1e-6) throw new Error(`Perishable inventory batches do not reconcile for ${firm.name}`);
