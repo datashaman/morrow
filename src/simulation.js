@@ -353,6 +353,8 @@ export class TownSimulation {
         restrictedInheritance: 0,
         studyDomain: null,
         studyDomainSelectionDay: null,
+        schoolHistory: [],
+        schoolSequence: 0,
         lifecycleSequence: 0,
         lifecycleHistory: [],
         partnerId: null,
@@ -1730,7 +1732,7 @@ export class TownSimulation {
     const newborn = {
       kind: "person", id, name, lifecycleStage: "infant", birthDay: this.day, ageDays: 0, isDependent: true,
       parentIds: [...parentIds].sort((a, b) => a - b), guardianIds: guardians.map((guardian) => guardian.id), formerGuardianIds: [],
-      residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, transitionHostId: null, transitionResidenceEndDay: null, restrictedInheritance: 0, studyDomain: null, studyDomainSelectionDay: null, lifecycleSequence: 1,
+      residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, transitionHostId: null, transitionResidenceEndDay: null, restrictedInheritance: 0, studyDomain: null, studyDomainSelectionDay: null, schoolHistory: [], schoolSequence: 0, lifecycleSequence: 1,
       lifecycleHistory: [{ day: this.day, ...temporalMetadata(this.day, "Planning"), sequence: 1, type: "birth", text: `born to ${parentIds.map((parentId) => this.people[parentId].name).join(" and ")}`, counterpartId: null, counterpartName: null, reason: "completed gestation" }],
       partnerId: null, partnershipStartDay: null, lastPartnershipEndDay: null,
       alive: true, deathDay: null, estateTransferred: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
@@ -1893,6 +1895,52 @@ export class TownSimulation {
     person.studyDomainSelectionDay = this.day;
     this.recordLifecycle(person, "study-domain-selected", `selected ${selected.domain} for student study`, null, "vacancy opportunity, motivation, and stable affinity");
     return selected.domain;
+  }
+
+  recentScheduledSchoolRecords(dependent) {
+    return dependent.schoolHistory.filter((record) => record.scheduled).slice(0, 5);
+  }
+
+  dependentEducationNeed(dependent) {
+    const records = this.recentScheduledSchoolRecords(dependent);
+    const missed = records.filter((record) => record.outcome !== "attended").length;
+    return 0.55 * (1 - dependent.knowledgeProfile.general) + 0.45 * clamp(missed / 5);
+  }
+
+  guardianAllocatedMealCost(guardian) {
+    const cheapestMeal = this.firms.filter((firm) => firm.active && firm.sector === "food")
+      .reduce((price, firm) => Math.min(price, firm.price), this.essentialCost());
+    return this.people.filter((dependent) => dependent.alive && dependent.isDependent && dependent.guardianIds.includes(guardian.id))
+      .reduce((total, dependent) => total + cheapestMeal / Math.max(1, dependent.guardianIds.length), 0);
+  }
+
+  guardianSchoolProtectedReserve(guardian) {
+    return roundMoney(3 * (this.essentialCost() + this.guardianAllocatedMealCost(guardian)));
+  }
+
+  guardianCanFundSchool(guardian, dependent, school) {
+    if (!guardian?.alive || !dependent?.alive || !dependent.isDependent || !school?.active) return false;
+    const restrictedContribution = Math.min(dependent.restrictedInheritance, school.price);
+    const guardianContribution = roundMoney(school.price - restrictedContribution);
+    return guardian.cash - guardianContribution + 1e-9 >= this.guardianSchoolProtectedReserve(guardian);
+  }
+
+  recordDependentSchool(dependent, outcome, { school = null, guardian = null, scheduled = true, reason = null } = {}) {
+    dependent.schoolSequence += 1;
+    const record = Object.freeze({
+      day: this.day,
+      ...temporalMetadata(this.day, PHASES[this.phase]),
+      sequence: dependent.schoolSequence,
+      scheduled,
+      outcome,
+      schoolId: school?.id ?? null,
+      schoolName: school?.name ?? null,
+      guardianId: guardian?.id ?? null,
+      guardianName: guardian?.name ?? null,
+      reason,
+    });
+    dependent.schoolHistory.unshift(record);
+    return record;
   }
 
   resolveGestations() {

@@ -84,3 +84,31 @@ test("entering the student stage selects one stable canonical trade domain witho
   assert.equal(a.studyDomain, selected);
   assert.equal(a.lifecycleHistory.filter((entry) => entry.type === "study-domain-selected").length, 1);
 });
+
+test("school funding protects three days of guardian essentials and allocated dependent meals", () => {
+  const town = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const dependent = town.createNewborn([0]);
+  const guardian = town.people[0];
+  const school = { active: true, price: 4.5 };
+  const reserve = town.guardianSchoolProtectedReserve(guardian);
+  dependent.restrictedInheritance = 1.5;
+  guardian.cash = reserve + 3;
+
+  assert.equal(town.guardianCanFundSchool(guardian, dependent, school), true);
+  guardian.cash = reserve + 2.99;
+  assert.equal(town.guardianCanFundSchool(guardian, dependent, school), false);
+  assert.equal(town.guardianSchoolProtectedReserve(guardian), reserve);
+});
+
+test("education need uses general skill and only the latest five scheduled lessons", () => {
+  const town = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const dependent = town.createNewborn([0]);
+  dependent.knowledgeProfile.general = 0.4;
+  ["missed", "attended", "missed", "missed", "attended", "missed"].forEach((outcome) => {
+    town.recordDependentSchool(dependent, outcome, { scheduled: true });
+  });
+  town.recordDependentSchool(dependent, "park", { scheduled: false });
+
+  assert.equal(town.recentScheduledSchoolRecords(dependent).length, 5);
+  assert.equal(town.dependentEducationNeed(dependent), 0.55 * 0.6 + 0.45 * 0.6);
+});
