@@ -16,6 +16,7 @@
 - [Employment intervention evaluation](./employment-evaluation.md): paired staffing/formation control and treatment trajectories with explicit early-work and mortality gates.
 - [Schedule evaluation](./schedule-evaluation.md): three-mode calendar, activity-budget, sleep, access, work, food, population, and business comparison.
 - [Cooperation evaluation](./cooperation-evaluation.md): three-mode public-social and mutual-aid comparison with custody, hardship, concentration, and conservation checks.
+- [Welfare evaluation](./welfare-evaluation.md): four-mode Food Assistance, Rent Assistance, Emergency Cash Relief, legacy cash, treasury, provider, hardship, and conservation comparison.
 - [Decision record](./decisions/0001-closed-individual-economy.md): foundational modeling decisions and their consequences.
 - [Personalization decision](./decisions/0002-retain-profile-only-personalization.md): research evidence for retaining stable profiles without embeddings or online adaptation.
 

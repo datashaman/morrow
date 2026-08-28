@@ -16,6 +16,7 @@
     "evaluate:knowledge": "tsx scripts/evaluate-knowledge.ts",
     "evaluate:personalization": "tsx scripts/evaluate-personalization.ts",
     "evaluate:cooperation": "tsx scripts/evaluate-cooperation.ts",
+    "evaluate:welfare": "tsx scripts/evaluate-welfare.ts",
     "export:trajectories": "tsx scripts/export-trajectories.ts",
     "preview": "vite preview",
     "test": "tsx --test",

@@ -62,7 +62,7 @@ Every night records action, quality inputs, debt before accrual, debt after accr
 
 A closed firm retains its cash, inventory, contracts, and obligations but performs no production, procurement, delivery, public transaction, scheduled shift, payroll, workplace learning, or ordinary firm settlement. A blocked contract records the closed limiting firm and next shared opening rather than misclassifying closure as missing stock, staffing, or affordability. Latent-firm observations and formation occur only on that archetype's open days.
 
-Recurrence bases are explicit. Perishable ageing, health, support, relationships, mortality, receivership, essential re-entry, and housing deterioration use calendar days. Demand and staffing evidence, vacancy maturity, recruitment, pricing evidence, distress, financing, distributions, and ordinary solvency advance only on firm open days. Worker evaluation advances by scheduled shifts. Rent remains due Monday evening, and owner price review occurs Sunday night. Maintenance wear advances only on an open day with attended capacity or a completed transaction or delivery.
+Recurrence bases are explicit. Perishable ageing, health, welfare, relationships, mortality, receivership, essential re-entry, and housing deterioration use calendar days. Demand and staffing evidence, vacancy maturity, recruitment, pricing evidence, distress, financing, distributions, and ordinary solvency advance only on firm open days. Worker evaluation advances by scheduled shifts. Rent remains due Monday evening, and owner price review occurs Sunday night. Maintenance wear advances only on an open day with attended capacity or a completed transaction or delivery.
 
 Policy sliders commit on release, and neural personal-time control changes immediately. Every value change records the current day and phase, setting, and before/after value in a complete newest-first run history. Repeating the current value creates no duplicate. Reset begins a fresh history while retaining the currently selected policy configuration and controller mode as the new run's starting state.
 
@@ -182,7 +182,7 @@ Only a customer who can cover the exact price and reaches an active firm with th
 
 ### Treasury
 
-The town treasury begins with 120 cash. It receives employer taxes, intestate estates, and shock transfers, then pays targeted citizen support, eligible one-time vital-business rescues, and an eligible housing-receivership restart during settlement.
+The town treasury begins with 120 cash. It receives employer taxes, intestate estates, and shock transfers, then pays Food Assistance, Rent Assistance, Emergency Cash Relief, eligible one-time vital-business rescues, housing-receivership restarts, and essential-sector re-entry. These programmes spend ordinary treasury cash; there is no separate welfare fund.
 
 ## Money and accounting
 
@@ -195,7 +195,7 @@ Money is rounded to cents when transferred. After every phase, `assertInvariants
 - Every cash balance is finite and non-negative.
 - Total current cash differs from initial cash by no more than 0.1.
 
-Individual ledger records store the day, per-person activity sequence, direction, amount, purpose, and cash balance before and after. Life events and accepted mutual-aid gifts carry the same temporal identity so the interface can combine them into one newest-first activity stream. Firm streams also merge structured knowledge-effect records. The stream defaults to all activity and can be filtered to transactions, life events, mutual aid, or knowledge effects where applicable. Mutual-aid rows link giver and recipient and show original seller, current quality and age, and pantry before/after. The model retains the complete history for the current in-memory run; the interface renders all matching entries inside a scrollable region and preserves the reader's position while new activity arrives.
+Individual ledger records store the day, per-person activity sequence, direction, amount, purpose, and cash balance before and after. Life events, accepted mutual-aid gifts, and structured welfare evidence carry the same temporal identity so the interface can combine them into one newest-first activity stream. Firm streams also merge structured knowledge-effect and provider-side welfare records. The stream defaults to all activity and can be filtered to transactions, life events, mutual aid, welfare, or knowledge effects where applicable. Mutual-aid rows link giver and recipient and show original seller, current quality and age, and pantry before/after. The model retains the complete history for the current in-memory run; the interface renders all matching entries inside a scrollable region and preserves the reader's position while new activity arrives.
 
 Firms and the treasury use the same sequenced ledger and event shape. One selected-firm dossier itemizes the chosen firm's output, production or sourcing method, upstream producer, cash, inventory, staffing evidence, smoothed net income, vital status, rescue history, and current lifecycle state. It also shows configured knowledge domains, weights and rules, presentation-only workforce averages, and today's scalar, gross, released, carry, and used effect values. Its dropdown retains closed historical instances and stays synchronized with map selection. Construction processors additionally show awaiting input stock, stocked output, scalar processing capacity, units processed today, and labor-limited shortfall; their activity history records processed quantities and whether absence or exhausted capacity retained inputs. Supply buyers also show today's requested and delivered contract quantities. The dossier exposes complete combined transaction, lifecycle-event, and knowledge-effect history with retained filtering and scrolling.
 
@@ -372,13 +372,23 @@ After five days without contact, friendship strength declines by 0.015 per day. 
 
 ### 7. Settlement
 
-#### Treasury support
+#### Welfare programmes
 
-The daily support budget is:
+The browser uses the combined welfare model. Headless tests and evaluators can explicitly select no welfare, legacy cash only, direct assistance only, or combined welfare. The Welfare budget control scales one daily spending ceiling:
 
 `treasury cash × supportRate × 0.18`
 
-People are sorted by hunger, housing status, and then cash. Hunger and housing affect priority, but payment eligibility and size are means-tested against four days of the town's current essential food-and-housing cost. Payments fill only that cash shortfall, are capped at 5 per person, and stop when the budget or treasury is exhausted. Four days is a gameplay hypothesis chosen to preserve emergency liquidity without making unemployment or homelessness a permanent unconditional income source; it is not a calibrated welfare threshold.
+The treasury cash value is snapshotted once at the start of Evening Food, after payroll and employer tax. The ceiling is not a reserved account and unused capacity does not roll over. Food Assistance spends first, Rent Assistance second, housing receivership and essential-sector re-entry then use ordinary treasury cash, Emergency Cash Relief uses the remaining ceiling and treasury cash, and eligible vital-business rescue remains later in firm settlement. A zero Welfare budget disables all three programmes.
+
+Food Assistance is assessed only for a living citizen with no usable stored meal who cannot privately afford one complete cheapest everyday-food portion. The citizen contributes all available cash and the treasury may pay only the exact shortfall. Premium food and advance stockpiling are excluded. The ordinary seller price, lifecycle, opening, dated stock, attended staff, transaction capacity, quality, shelf life, delivery, and consumption rules remain binding. Scarce access sorts by hunger duration, health, cash runway, and a week-rotating citizen ID.
+
+Rent Assistance is assessed only for a living, housed citizen facing the current Monday-evening rent who cannot pay its complete price. It cannot fund a new tenancy, rehousing deposit, historical debt, or an abstract arrears balance. Exact co-payment completes one ordinary housing transaction and resets current arrears; refusal or failed delivery retains ordinary rent consequences. Scarce access sorts by existing missed-rent count, cash runway, and weekly rotation.
+
+Both direct programmes use one atomic settlement. It validates the recipient, programme, purpose, provider, opening, resource, attendance, capacity, complete price, private cash, remaining ceiling, and treasury cash before moving anything. Every private contribution and treasury contribution then reaches the provider with the complete unit or rent payment. Any missing condition or cent moves no cash, inventory, service, or tenancy consequence. Provider sales equal the complete price.
+
+Emergency Cash Relief remains an unrestricted fallback after direct programmes and structural recovery. A living adult below four days of current essential runway may receive at most 5, reduced dollar for dollar by treasury-funded direct aid received that day. Its amount is also bounded by the exact four-day shortfall, remaining welfare ceiling, and treasury cash. The citizen may later spend it on any otherwise legal action. Cash candidates sort by hunger, homelessness, runway, and weekly rotation.
+
+Every eligible offer is an immediate `motivation-v3` accept/refuse choice. Security, planning, programme urgency, avoidance, and stress determine the documented scores; exact ties refuse. There is no application, waiting period, retained entitlement, random take-up, sanction, or neural control. Assessments, choices, failures, deliveries, contributions, balances, and linked transaction IDs are retained in citizen, provider, and treasury welfare histories. The Welfare ledger exposes today's ceiling and outcomes through one programme selector. All thresholds and weights are gameplay hypotheses, not descriptions of real eligibility or claimant behavior.
 
 #### Firm settlement
 
@@ -502,7 +512,7 @@ The person focuses on the first of physiological, safety, belonging, or esteem b
 |---|---:|---|
 | Minimum wage | 5 | Floors the wage used in payroll and staffing decisions |
 | Employer tax | 12% | Moves part of gross payroll from firms to the treasury |
-| Support budget | 35% | Scales the treasury’s daily support budget |
+| Welfare budget | 35% | Scales the shared daily ceiling for Food Assistance, Rent Assistance, and Emergency Cash Relief |
 | Discretionary demand | 50% | Probability that an eligible optional café or goods purchase proceeds |
 | Economic shocks | 20% | Scales firm-to-treasury shock probability |
 
