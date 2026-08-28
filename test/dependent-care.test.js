@@ -43,6 +43,29 @@ test("motivation-v3 can provide a meal or defer a capacity-blocked purchase", ()
   assert.equal(policy.decide({ observation: { ...base, dependentNeed: 0, options: [blocked] }, legalActions: ["defer-dependent-food", blocked.action], random: () => 0 }).action, "defer-dependent-food");
 });
 
+test("motivation-v3 weighs dependent medicine against clinic cost and a guardian's lost wage", () => {
+  const policy = new MotivationCitizenPolicy();
+  const base = {
+    kind: "dependent-health-care",
+    citizenId: 0,
+    citizenName: "Guardian",
+    dependentId: 40,
+    dependentName: "Child",
+    stress: 0.2,
+    healthNeed: 0.9,
+    careScarcity: 0.1,
+    lostWagePressure: 0.8,
+    profile: { comfort: 1, connection: 1, mastery: 1, security: 1, foodQuality: 1, planning: 1, avoidance: 1 },
+  };
+  const medicine = { action: "buy-dependent-medicine:5", source: "medicine", expectedRecovery: 0.12, costPressure: 0.1, capacityAvailable: true };
+  const clinic = { action: "buy-dependent-clinic:6", source: "clinic", expectedRecovery: 0.3, costPressure: 0.1, capacityAvailable: true };
+  const actions = ["defer-dependent-health", medicine.action, clinic.action];
+
+  assert.equal(policy.decide({ observation: { ...base, options: [medicine, clinic] }, legalActions: actions, random: () => 0 }).action, clinic.action);
+  assert.equal(policy.decide({ observation: { ...base, healthNeed: 0.2, options: [medicine, { ...clinic, capacityAvailable: false }] }, legalActions: actions, random: () => 0 }).action, medicine.action);
+  assert.equal(policy.decide({ observation: { ...base, healthNeed: 0, careScarcity: 1, stress: 1, options: [{ ...medicine, capacityAvailable: false }] }, legalActions: ["defer-dependent-health", medicine.action], random: () => 0 }).action, "defer-dependent-health");
+});
+
 test("a dependent follows a housed living guardian and enters treasury guardianship only when none remain", () => {
   const { town, dependent, first, second } = careTown();
   first.housed = false;
