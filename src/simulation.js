@@ -4120,6 +4120,19 @@ export class TownSimulation {
     return true;
   }
 
+  foodPurchasePortionSchedule(batches) {
+    const schedule = [];
+    let intendedOffset = 0;
+    for (const batch of batches) {
+      const expiryDay = batch.batchDay + batch.shelfLife;
+      for (let portion = 0; portion < batch.quantity; portion += 1) {
+        schedule.push({ batchDay: batch.batchDay, intendedDay: this.day + intendedOffset, expiryDay });
+        intendedOffset += 1;
+      }
+    }
+    return schedule;
+  }
+
   closeFriendshipStrength(a, b) {
     const forward = a.relationships[b.id]?.strength;
     const reciprocal = b.relationships[a.id]?.strength;
@@ -4381,6 +4394,8 @@ export class TownSimulation {
         return Array.from({ length: maxUnits }, (_, index) => {
           const units = index + 1;
           const batches = this.peekFirmInventory(firm, units);
+          const portionSchedule = this.foodPurchasePortionSchedule(batches);
+          if (!batches.length || portionSchedule.some((portion) => portion.expiryDay <= portion.intendedDay)) return null;
           const effectiveQuality = batches.reduce((total, batch) => total + this.effectiveFoodQuality({ quality: batch.qualityBasis ?? firm.quality, processedDay: batch.batchDay }) * batch.quantity, 0) / units;
           const remainingShelfLife = Math.min(...batches.map((batch) => batch.shelfLife - (this.day - batch.batchDay)));
           return {
@@ -4394,9 +4409,10 @@ export class TownSimulation {
             effectiveQuality,
             age: Math.max(...batches.map((batch) => this.day - batch.batchDay)),
             remainingShelfLife,
+            portionSchedule,
             capacityAvailable: firm.transactionsToday < this.transactionCapacity(firm),
           };
-        });
+        }).filter(Boolean);
       });
     const options = [...storedOptions, ...purchaseOptions];
     if (!person.foodStock.length && !options.length && foodFirms.length && !welfareAssessment) {

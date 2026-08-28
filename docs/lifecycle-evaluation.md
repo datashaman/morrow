@@ -20,23 +20,23 @@ These are bounded deterministic gameplay observations under Morrow's compressed 
 
 ## Accepted 2026-08-28 diagnostic run
 
-The required five-seed, 504-requested-day replay completed with exact cash conservation in every primary and replay run. Its technical-integrity gate passes. Its lifecycle-reach and dependent-essentials gates fail, so the overall activation result is `FAILED`. Extinction stopped every run early, between day 80 and day 100, no maturation or workforce entry occurred, only 59% of dependent meals were delivered, and none of 124 attempted dependent health episodes completed.
+The required five-seed, 504-requested-day replay was rerun after advance food purchases began rejecting FIFO portions that would expire by their intended meal day. It completed with exact cash conservation and identical replay in every run. Its technical-integrity gate passes. Its lifecycle-reach and dependent-essentials gates fail, so the overall activation result is `FAILED`. Extinction stopped every run early, between day 79 and day 107, no maturation or workforce entry occurred, only 52.8% of dependent meals were delivered, and none of 101 attempted dependent health episodes completed.
 
 | Seed | Mode | Days | Opportunities / attempts / conceptions / births | Dependent meals | Health care | Lessons | Firm failures |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 101 | full | 100 | 22 / 34 / 11 / 6 | 138 / 228 | 0 / 54 | 0 / 0 | 3 |
-| 101 | disabled | 80 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 |
-| 202 | full | 89 | 22 / 23 / 7 / 5 | 96 / 174 | 0 / 34 | 0 / 0 | 3 |
-| 202 | disabled | 87 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 |
-| 303 | full | 98 | 19 / 25 / 10 / 10 | 252 / 401 | 0 / 24 | 58 / 88 | 2 |
-| 303 | disabled | 97 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 |
-| 404 | full | 91 | 34 / 33 / 4 / 1 | 19 / 34 | 0 / 12 | 0 / 0 | 4 |
-| 404 | disabled | 92 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 |
-| 505 | full | 100 | 24 / 32 / 13 / 12 | 236 / 419 | 0 / 0 | 48 / 95 | 0 |
-| 505 | disabled | 92 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 1 |
+| 101 | full | 107 | 27 / 36 / 9 / 6 | 146 / 237 | 0 / 49 | 0 / 0 | 4 |
+| 101 | disabled | 82 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 |
+| 202 | full | 86 | 22 / 25 / 7 / 5 | 83 / 160 | 0 / 32 | 0 / 0 | 3 |
+| 202 | disabled | 86 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 4 |
+| 303 | full | 86 | 17 / 24 / 10 / 9 | 165 / 304 | 0 / 11 | 28 / 46 | 2 |
+| 303 | disabled | 104 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 |
+| 404 | full | 87 | 34 / 28 / 3 / 1 | 13 / 28 | 0 / 9 | 0 / 0 | 3 |
+| 404 | disabled | 86 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 |
+| 505 | full | 79 | 22 / 31 / 13 / 10 | 128 / 285 | 0 / 0 | 8 / 35 | 1 |
+| 505 | disabled | 91 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 |
 
-Across the full-lifecycle runs, 34 births occurred, 741 of 1,256 dependent meals were delivered, none of 124 planned dependent health episodes completed, and 106 of 183 scheduled lessons were attended. Births extended survival in four seeds by 1–20 days and shortened it in seed 404 by one day. No run exceeded the initial peak of 40 living citizens because deaths outpaced births.
+Across the full-lifecycle runs, 31 births occurred, 535 of 1,014 dependent meals were delivered, none of 101 planned dependent health episodes completed, and 36 of 81 scheduled lessons were attended. Compared with births-disabled controls, full lifecycle extended survival by 25 days in seed 101 and one day in seed 404, matched seed 202, and shortened survival by 18 and 12 days in seeds 303 and 505. These are coupled gameplay outcomes, not an isolated estimate of the birth system or the expiry fix.
 
 These observations do not constitute a demographic acceptance threshold. They do show that the current economy prevents the evaluation from exercising maturation and workforce entry and repeatedly fails dependent essentials. The browser birth gate therefore remains off while the underlying town-survival and dependent-care constraints are investigated; the implemented lifecycle remains available to deterministic tests and explicit headless configurations.
 
-The same accepted run includes public haulage re-entry after its finite cooldown. This reduces the final failed-firm count in several seeds, but does not change births, survival, dependent care, schooling, or workforce outcomes: restarted transport still lacks sufficiently reliable attended capacity to restore the late farm-to-apothecary pipeline before extinction.
+The changed trajectories confirm that preventing impossible stockpiling does not solve the separately observed upstream stock, affordability, provider-closure, capacity, and dependent-care constraints. Browser births therefore remain disabled.

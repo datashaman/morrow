@@ -1,10 +1,10 @@
 import { DEFAULT_LATENT_FIRM_NAMES, PHASES } from "./config.js";
 import { TownSimulation } from "./simulation.js";
 
-export const EMPLOYMENT_EVALUATION_SCHEMA_VERSION = 3;
+export const EMPLOYMENT_EVALUATION_SCHEMA_VERSION = 4;
 export const DEFAULT_EMPLOYMENT_EVALUATION_SEEDS = Object.freeze([20260823, 101, 202, 303, 404, 505]);
-const CONTROL_FIRST_WAGES = Object.freeze([1, 1, 1, 1, 1, 2]);
-const CONTROL_DEATHS = Object.freeze([22, 20, 21, 22, 40, 21]);
+const CONTROL_FIRST_WAGES = Object.freeze([1, 1, 1, 1, 1, 0]);
+const CONTROL_DEATHS = Object.freeze([40, 40, 22, 25, 22, 22]);
 
 type EvaluationConfig = Readonly<{ seeds: readonly number[]; days: number }>;
 
@@ -95,9 +95,10 @@ function runArm(seed: number, days: number, enabled: boolean) {
     trajectory.push({
       day: completedDay,
       alive: snapshot.alive,
+      workforceAdults: snapshot.workforceAdults,
       dead: snapshot.dead,
       employed: snapshot.employed,
-      unemployed: snapshot.alive - snapshot.employed,
+      unemployed: snapshot.workforceAdults - snapshot.employed,
       vacancies: snapshot.positionsAvailable,
       fundedSlots: slots.length,
       matureFundedSlots: matureSlotIdsByDay(slots, completedDay).length,

@@ -114,6 +114,34 @@ test("food purchase options expose FIFO effective quality and remaining shelf li
   assert.ok(Math.abs(observation.options[0].effectiveQuality - 0.43) < 1e-9);
 });
 
+test("advance food purchases stop before a FIFO portion expires on its intended meal day", () => {
+  let observation;
+  const citizenPolicy = {
+    id: "inspect-advance-food-test",
+    decide(context) {
+      observation = context.observation;
+      return { action: "skip-food", reasons: [], scores: {} };
+    },
+  };
+  const town = new TownSimulation({ seed: 42, citizenPolicy });
+  const person = town.people[0];
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  replacePerishableStock(town, grocer, 2, 4);
+  town.addFirmInventory(grocer, 1, { batchDay: 6 });
+  town.day = 6;
+  person.foodReserveTarget = 3;
+  person.foodStock = [];
+  person.cash = 100;
+
+  town.considerFood(person, [grocer]);
+
+  const quantities = observation.options
+    .filter((option) => option.source === "seller")
+    .map((option) => option.units);
+  assert.deepEqual(quantities, [1]);
+  assert.deepEqual(observation.options[0].portionSchedule, [{ batchDay: 4, intendedDay: 6, expiryDay: 7 }]);
+});
+
 test("café service stock expires at the next morning Planning phase", () => {
   const town = new TownSimulation({ seed: 42, latentFirmNames: [] });
   const archetype = town.firmArchetype("cafe");

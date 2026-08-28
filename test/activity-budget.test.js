@@ -103,6 +103,10 @@ test("food planning can top up a nonempty pantry before a closure day", () => {
   person.foodReserveTarget = 1;
   person.foodStock = [{ product: grocer.sells, processedDay: 5, purchasedDay: 5, quality: grocer.quality, shelfLife: 3, seller: grocer.id }];
   person.cash = 100;
+  grocer.inventory = 0;
+  grocer.inventoryBatches = [];
+  grocer.inventoryBatchSequence = 0;
+  town.addFirmInventory(grocer, 3, { batchDay: town.day });
   grocer.employees.forEach((id) => { town.people[id].attended = true; });
 
   town.considerFood(person, [grocer]);

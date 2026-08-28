@@ -14,21 +14,21 @@ test("the paired employment evaluator is deterministic, serializable, and cash-c
   assert.deepEqual(first, replay);
   assert.doesNotThrow(() => JSON.parse(JSON.stringify(first)));
   assert.ok(first.runs.every((run) => run.control.cash.conserved && run.treatment.cash.conserved));
-  assert.ok(first.runs.every((run) => run.control.trajectory.length === 60 && run.treatment.trajectory.length === 60));
-  assert.ok(first.runs.every((run) => run.control.trajectory.every((day) => day.employed + day.unemployed === day.alive)));
+  assert.ok(first.runs.every((run) => [run.control, run.treatment].every((arm) => arm.trajectory.length > 0 && arm.trajectory.length <= 60)));
+  assert.ok(first.runs.every((run) => run.control.trajectory.every((day) => day.employed + day.unemployed === day.workforceAdults)));
 });
 
 test("the disabled control locks the reproducible wage and completed-day mortality baselines", () => {
   const report = evaluateEmploymentIntervention({ seeds: DEFAULT_EMPLOYMENT_EVALUATION_SEEDS, days: 60 });
 
-  assert.deepEqual(report.runs.map((run) => run.control.firstWagesByDay30), [1, 1, 1, 1, 1, 2]);
-  assert.deepEqual(report.runs.map((run) => run.control.deathsByDay60), [22, 20, 21, 22, 40, 21]);
+  assert.deepEqual(report.runs.map((run) => run.control.firstWagesByDay30), [1, 1, 1, 1, 1, 0]);
+  assert.deepEqual(report.runs.map((run) => run.control.deathsByDay60), [40, 40, 22, 25, 22, 22]);
   assert.equal(report.controlBaseline.firstWages.matches, true);
   assert.equal(report.controlBaseline.deaths.matches, true);
   assert.deepEqual(report.gates.fundedOpportunitiesByDay7.observed, [5, 3, 2, 4, 1, 2]);
   assert.equal(report.gates.fundedOpportunitiesByDay7.passed, true);
   assert.equal(report.gates.firstWagesByDay30.passed, false);
-  assert.equal(report.gates.mortality.passed, true);
+  assert.equal(report.gates.mortality.passed, false);
   assert.equal(report.status, "failed");
 });
 

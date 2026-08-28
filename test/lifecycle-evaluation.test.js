@@ -35,7 +35,7 @@ test("activation readiness fails when full lifecycle runs never reach maturation
   assert.equal(report.gates.lifecycleReach.minimumCompletedDays, 168);
   assert.equal(report.gates.lifecycleReach.runsReachingMinimum, 0);
   assert.equal(report.gates.lifecycleReach.maturations, 0);
-  assert.equal(report.gates.dependentEssentials.healthAttempts, 54);
+  assert.equal(report.gates.dependentEssentials.healthAttempts, 49);
   assert.equal(report.gates.dependentEssentials.healthFunded, 0);
   assert.equal(report.gates.dependentEssentials.passed, false);
   assert.equal(report.status, "failed");
