@@ -30,28 +30,29 @@ test("existing citizens begin as non-ageing adults with empty family state", () 
     assert.equal(person.isDependent, false);
     assert.deepEqual(person.parentIds, []);
     assert.deepEqual(person.guardianIds, []);
+    assert.deepEqual(person.formerGuardianIds, []);
     assert.equal(person.residentialGuardianId, null);
     assert.equal(person.restrictedInheritance, 0);
     assert.equal(person.lifecycleSequence, 0);
     assert.deepEqual(person.lifecycleHistory, []);
+    assert.equal(person.partnerId, null);
+    assert.equal(person.partnershipStartDay, null);
+    assert.equal(person.lastPartnershipEndDay, null);
   });
   assert.deepEqual(town.snapshot().lifecycleCounts, { infant: 0, child: 0, student: 0, adult: 40 });
 });
 
 test("the disabled lifecycle gate preserves existing adult behaviour and replay", () => {
   const control = new TownSimulation({ seed: 2026, lifecycleEnabled: false });
-  const staged = new TownSimulation({ seed: 2026, lifecycleEnabled: true });
+  const replay = new TownSimulation({ seed: 2026, lifecycleEnabled: false });
 
   for (let step = 0; step < 80; step += 1) {
     control.step();
-    staged.step();
+    replay.step();
   }
 
-  const { lifecycleEnabled: controlGate, ...controlSnapshot } = control.snapshot();
-  const { lifecycleEnabled: stagedGate, ...stagedSnapshot } = staged.snapshot();
-  assert.equal(controlGate, false);
-  assert.equal(stagedGate, true);
-  assert.deepEqual(stagedSnapshot, controlSnapshot);
-  assert.deepEqual(staged.people, control.people);
-  assert.ok(staged.people.every((person) => person.lifecycleHistory.length === 0));
+  assert.equal(control.snapshot().lifecycleEnabled, false);
+  assert.deepEqual(replay.snapshot(), control.snapshot());
+  assert.deepEqual(replay.people, control.people);
+  assert.ok(replay.people.every((person) => person.lifecycleHistory.length === 0));
 });

@@ -85,7 +85,15 @@ There are 40 named people. Each person carries:
 
 Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.58 to 0.94; stress ranges from 0.12 to 0.37. These are design values, not calibrated distributions.
 
-Calendar-age stage boundaries are fixed gameplay hypotheses: infant from day 0 through 27, child from day 28 through 83, student from day 84 through 167, and adult from day 168. Existing adults keep `null` birth day and age because this tracer does not introduce general adult ageing. Citizen IDs remain append-only array references; the next available ID begins after the initial population. No birth, maturation, guardianship, partnership, or dependent behavior is active in this foundation slice.
+Calendar-age stage boundaries are fixed gameplay hypotheses: infant from day 0 through 27, child from day 28 through 83, student from day 84 through 167, and adult from day 168. Existing adults keep `null` birth day and age because this tracer does not introduce general adult ageing. Citizen IDs remain append-only array references; the next available ID begins after the initial population. Birth, maturation, guardianship, and dependent behavior remain inactive.
+
+### Romantic partnerships
+
+The browser enables lifecycle behavior; headless callers retain a disabled compatibility default. On Monday Planning, existing partnerships resolve before new proposals. A partnership is distinct from friendship, adds no pooled cash or household, and is legal only between two living adults with reciprocal friendship strength of at least `0.75`. Each citizen may have at most one active partner. Parent/descendant pairs, full or half siblings, and current or former guardian/dependent pairs are excluded.
+
+Either partner may choose separation through `motivation-v3`; death and friendship strength below `0.20` also end the partnership. Ordinary separation preserves friendship and starts a 28-calendar-day re-partnering cooldown. A partner's death adds no new survivor cooldown. Separation scoring uses friendship strength and contact staleness, while proposal and acceptance scoring use closeness, material security, stress, and the stable connection, planning, security, and avoidance weights. Ties retain the current partnership, remain single, or decline.
+
+Unpartnered eligible adults snapshot their legal close friends and may propose to one. Recipients snapshot the resulting proposals and may accept at most one. Formations apply afterward in immutable-ID order and revalidate exclusivity and every eligibility rule. A declined proposal does not alter friendship. Formation and ending produce paired structured lifecycle records; proposals, responses, and separation choices remain in the ordinary decision history. No partnership automatically causes a birth, shared residence, shared pantry, shared wallet, or inheritance in this slice.
 
 #### Trade-knowledge tracer
 

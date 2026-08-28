@@ -56,6 +56,9 @@ import {
   OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
   OPPORTUNITY_REQUIRED_VIABLE_DAYS,
   OPPORTUNITY_STARTUP_CAPITAL,
+  PARTNERSHIP_COOLDOWN_DAYS,
+  PARTNERSHIP_END_FRIENDSHIP_THRESHOLD,
+  PARTNERSHIP_FRIENDSHIP_THRESHOLD,
   PERISHABLE_SHELF_LIFE,
   PHASES,
   PRIVATE_FORMATION_ARCHETYPE_IDS,
@@ -331,10 +334,14 @@ export class TownSimulation {
         isDependent: false,
         parentIds: [],
         guardianIds: [],
+        formerGuardianIds: [],
         residentialGuardianId: null,
         restrictedInheritance: 0,
         lifecycleSequence: 0,
         lifecycleHistory: [],
+        partnerId: null,
+        partnershipStartDay: null,
+        lastPartnershipEndDay: null,
         alive: true,
         deathDay: null,
         estateTransferred: 0,
@@ -1541,6 +1548,168 @@ export class TownSimulation {
     };
   }
 
+  recordLifecycle(person, type, text, counterpart = null, reason = null) {
+    person.lifecycleSequence += 1;
+    const record = {
+      day: this.day,
+      ...temporalMetadata(this.day, "Planning"),
+      sequence: person.lifecycleSequence,
+      type,
+      text,
+      counterpartId: counterpart?.id ?? null,
+      counterpartName: counterpart?.name ?? null,
+      reason,
+    };
+    person.lifecycleHistory.unshift(record);
+    return record;
+  }
+
+  materialSecurity(person) {
+    return clamp(0.4 * Number(person.housed) + 0.3 * Number(person.employer >= 0) + 0.3 * clamp(this.runwayDays(person) / 12));
+  }
+
+  partnershipCooldownActive(person) {
+    return person.lastPartnershipEndDay !== null && this.day - person.lastPartnershipEndDay < PARTNERSHIP_COOLDOWN_DAYS;
+  }
+
+  partnershipKinExcluded(a, b) {
+    const aParents = new Set(a.parentIds ?? []);
+    const bParents = new Set(b.parentIds ?? []);
+    const isAncestor = (ancestorId, descendant) => {
+      const pending = [...(descendant.parentIds ?? [])];
+      const visited = new Set();
+      while (pending.length) {
+        const parentId = pending.shift();
+        if (parentId === ancestorId) return true;
+        if (visited.has(parentId)) continue;
+        visited.add(parentId);
+        pending.push(...(this.people[parentId]?.parentIds ?? []));
+      }
+      return false;
+    };
+    const parentOrDescendant = isAncestor(a.id, b) || isAncestor(b.id, a);
+    const siblings = [...aParents].some((parentId) => bParents.has(parentId));
+    const guardianRelation = [...(a.guardianIds ?? []), ...(a.formerGuardianIds ?? [])].includes(b.id)
+      || [...(b.guardianIds ?? []), ...(b.formerGuardianIds ?? [])].includes(a.id);
+    return parentOrDescendant || siblings || guardianRelation;
+  }
+
+  legalPartnershipPair(a, b, { requireUnpartnered = true } = {}) {
+    if (!a || !b || a === b || !a.alive || !b.alive || a.lifecycleStage !== "adult" || b.lifecycleStage !== "adult") return false;
+    if (requireUnpartnered && (a.partnerId !== null || b.partnerId !== null)) return false;
+    if (this.partnershipCooldownActive(a) || this.partnershipCooldownActive(b) || this.partnershipKinExcluded(a, b)) return false;
+    const strength = Math.min(a.relationships[b.id]?.strength ?? 0, b.relationships[a.id]?.strength ?? 0);
+    return strength + 1e-9 >= PARTNERSHIP_FRIENDSHIP_THRESHOLD;
+  }
+
+  partnershipObservation(person, domain, options = [], partner = null) {
+    const relationship = partner ? person.relationships[partner.id] : null;
+    return Object.freeze({
+      kind: "partnership",
+      domain,
+      citizenId: person.id,
+      citizenName: person.name,
+      stress: person.stress,
+      materialSecurity: this.materialSecurity(person),
+      friendshipStrength: relationship?.strength ?? 0,
+      contactStaleness: relationship ? clamp((this.day - relationship.lastContactDay - FRIENDSHIP_DECAY_GRACE_DAYS) / 10) : 0,
+      profile: { ...person.motivationProfile },
+      options: Object.freeze(options.map((option) => Object.freeze({ ...option }))),
+    });
+  }
+
+  decidePartnership(person, domain, legalActions, options = [], partner = null) {
+    const observation = this.partnershipObservation(person, domain, options, partner);
+    const frozenActions = Object.freeze([...legalActions]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions: frozenActions, random: this.random });
+    if (!decision || !frozenActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal partnership action`);
+    this.recordDecision(person, observation, frozenActions, decision, "Planning");
+    return decision;
+  }
+
+  formPartnership(a, b) {
+    if (!this.legalPartnershipPair(a, b)) return false;
+    a.partnerId = b.id;
+    b.partnerId = a.id;
+    a.partnershipStartDay = b.partnershipStartDay = this.day;
+    this.recordLifecycle(a, "partnership-formed", `formed a romantic partnership with ${b.name}`, b, "mutual acceptance");
+    this.recordLifecycle(b, "partnership-formed", `formed a romantic partnership with ${a.name}`, a, "mutual acceptance");
+    return true;
+  }
+
+  endPartnership(person, reason, { cooldown = true } = {}) {
+    if (person.partnerId === null) return false;
+    const partner = this.people[person.partnerId];
+    if (!partner || partner.partnerId !== person.id) throw new Error("Partnership references must be reciprocal");
+    person.partnerId = null;
+    partner.partnerId = null;
+    person.partnershipStartDay = null;
+    partner.partnershipStartDay = null;
+    if (cooldown) person.lastPartnershipEndDay = partner.lastPartnershipEndDay = this.day;
+    this.recordLifecycle(person, "partnership-ended", `romantic partnership with ${partner.name} ended`, partner, reason);
+    this.recordLifecycle(partner, "partnership-ended", `romantic partnership with ${person.name} ended`, person, reason);
+    return true;
+  }
+
+  runPartnerships() {
+    if (!this.lifecycleEnabled || calendarForDay(this.day).weekdayIndex !== 0) return;
+    const pairs = this.people.filter((person) => person.alive && person.partnerId !== null && person.id < person.partnerId)
+      .map((person) => [person, this.people[person.partnerId]]);
+    const separations = [];
+    pairs.forEach(([a, b]) => {
+      if (!b?.alive) {
+        separations.push({ person: a, reason: "partner died", cooldown: false });
+        return;
+      }
+      const strength = Math.min(a.relationships[b.id]?.strength ?? 0, b.relationships[a.id]?.strength ?? 0);
+      if (strength < PARTNERSHIP_END_FRIENDSHIP_THRESHOLD) {
+        separations.push({ person: a, reason: "friendship strength fell below the partnership floor", cooldown: true });
+        return;
+      }
+      const decisions = [a, b].map((person) => this.decidePartnership(person, "separation", ["continue-partnership", "separate-partnership"], [], person === a ? b : a));
+      if (decisions.some((decision) => decision.action === "separate-partnership")) separations.push({ person: a, reason: "one partner chose separation", cooldown: true });
+    });
+    separations.forEach(({ person, reason, cooldown }) => {
+      if (person.partnerId !== null) this.endPartnership(person, reason, { cooldown });
+    });
+
+    const adults = this.people.filter((person) => person.alive && person.lifecycleStage === "adult" && person.partnerId === null && !this.partnershipCooldownActive(person)).sort((a, b) => a.id - b.id);
+    const proposals = [];
+    adults.forEach((proposer) => {
+      const options = adults.filter((candidate) => this.legalPartnershipPair(proposer, candidate)).map((candidate) => ({
+        action: `propose-partnership:${candidate.id}`,
+        citizenId: candidate.id,
+        citizenName: candidate.name,
+        friendshipStrength: Math.min(proposer.relationships[candidate.id].strength, candidate.relationships[proposer.id].strength),
+      }));
+      if (!options.length) return;
+      const decision = this.decidePartnership(proposer, "proposal", ["remain-single", ...options.map((option) => option.action)], options);
+      const option = options.find((candidate) => candidate.action === decision.action);
+      if (option) proposals.push({ proposerId: proposer.id, recipientId: option.citizenId, friendshipStrength: option.friendshipStrength });
+    });
+
+    const accepted = [];
+    const byRecipient = proposals.reduce((groups, proposal) => {
+      const group = groups.get(proposal.recipientId) ?? [];
+      group.push(proposal);
+      groups.set(proposal.recipientId, group);
+      return groups;
+    }, new Map());
+    [...byRecipient.entries()].sort(([a], [b]) => a - b).forEach(([recipientId, offers]) => {
+      const recipient = this.people[recipientId];
+      const options = offers.sort((a, b) => a.proposerId - b.proposerId).map((offer) => ({
+        action: `accept-partnership:${offer.proposerId}`,
+        citizenId: offer.proposerId,
+        citizenName: this.people[offer.proposerId].name,
+        friendshipStrength: offer.friendshipStrength,
+      }));
+      const decision = this.decidePartnership(recipient, "response", ["decline-partnership", ...options.map((option) => option.action)], options);
+      const option = options.find((candidate) => candidate.action === decision.action);
+      if (option) accepted.push([this.people[option.citizenId], recipient]);
+    });
+    accepted.sort(([a1, b1], [a2, b2]) => a1.id - a2.id || b1.id - b2.id).forEach(([a, b]) => this.formPartnership(a, b));
+  }
+
   formFriendship(a, b, strength = INITIAL_FRIENDSHIP_STRENGTH, contactDay = this.day) {
     if (a === b || !a.alive || !b.alive || a.relationships[b.id] || this.friendIds(a).length >= a.socialCapacity || this.friendIds(b).length >= b.socialCapacity) return false;
     const relationship = { strength: clamp(strength), lastContactDay: contactDay, lastDecayDay: contactDay };
@@ -1569,6 +1738,7 @@ export class TownSimulation {
         if (!elapsed) return;
         const strength = clamp(relationship.strength - elapsed * FRIENDSHIP_DAILY_DECAY);
         if (strength < FRIENDSHIP_END_THRESHOLD) {
+          if (person.partnerId === friend.id) this.endPartnership(person, "friendship faded below the partnership floor");
           delete person.relationships[friendId];
           delete friend.relationships[person.id];
           this.note(person, `friendship with ${friend.name} faded after prolonged distance`, "bad");
@@ -2027,6 +2197,7 @@ export class TownSimulation {
 
   die(person, reason = "died after health reached a critical level") {
     if (!person.alive) return false;
+    if (person.partnerId !== null) this.endPartnership(person, "partner died", { cooldown: false });
     if (person.employer >= 0) {
       const firm = this.firms[person.employer];
       firm.employees = firm.employees.filter((id) => id !== person.id);
@@ -4343,6 +4514,7 @@ export class TownSimulation {
 
   planningPhase() {
     this.expirePerishableInventory();
+    this.runPartnerships();
     if (this.schedulesEnabled) Object.entries(this.pendingFormations).forEach(([archetypeId, pending]) => {
       const archetype = this.firmArchetype(archetypeId);
       if (!archetype || !this.archetypeOpenOnDay(archetype)) return;
@@ -4427,6 +4599,7 @@ export class TownSimulation {
       || (person.ageDays !== null && lifecycleStageForAge(person.ageDays) !== person.lifecycleStage))) {
       throw new Error("Invalid citizen lifecycle state");
     }
+    if (this.people.some((person) => person.partnerId !== null && (this.people[person.partnerId]?.partnerId !== person.id || person.lifecycleStage !== "adult" || !person.alive))) throw new Error("Partnership references must be reciprocal living adults");
     if (new Set(this.firms.map((firm) => firm.instanceId)).size !== this.firms.length) throw new Error("Firm instance identities must remain unique");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
     if (this.schedulesEnabled && this.people.some((person) => person.employer >= 0 && (

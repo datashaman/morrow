@@ -19,8 +19,9 @@ export type EducationAction = "defer-education" | `buy-education:${number}`;
 export type ClinicalAction = "defer-clinical-care" | `buy-clinical-care:${number}`;
 export type MutualAidAction = "keep-meals" | "refuse-all-meal-gifts" | `offer-meal:${number}` | `accept-meal:${number}`;
 export type WelfareAction = "refuse-welfare" | "accept-welfare";
+export type PartnershipAction = "remain-single" | "continue-partnership" | "separate-partnership" | "decline-partnership" | `propose-partnership:${number}` | `accept-partnership:${number}`;
 export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
-export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | WelfareAction | OwnerAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | WelfareAction | PartnershipAction | OwnerAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -322,6 +323,26 @@ export type WelfareObservation = Readonly<{
   profile: MotivationProfile;
 }>;
 
+export type PartnershipOption = Readonly<{
+  action: `propose-partnership:${number}` | `accept-partnership:${number}`;
+  citizenId: number;
+  citizenName: string;
+  friendshipStrength: number;
+}>;
+
+export type PartnershipObservation = Readonly<{
+  kind: "partnership";
+  domain: "separation" | "proposal" | "response";
+  citizenId: number;
+  citizenName: string;
+  stress: number;
+  materialSecurity: number;
+  friendshipStrength: number;
+  contactStaleness: number;
+  profile: MotivationProfile;
+  options: readonly PartnershipOption[];
+}>;
+
 export type OwnerOption = Readonly<{
   action: OwnerAction;
   label: string;
@@ -351,7 +372,7 @@ export type OwnerObservation = Readonly<{
   options: readonly OwnerOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | WelfareObservation | OwnerObservation;
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | WelfareObservation | PartnershipObservation | OwnerObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -470,6 +491,12 @@ export class RuleCitizenPolicy implements CitizenPolicy {
       action = "sleep";
     } else if (observation.kind === "welfare") {
       action = "refuse-welfare";
+    } else if (observation.kind === "partnership") {
+      action = observation.domain === "separation"
+        ? "continue-partnership"
+        : observation.domain === "proposal"
+          ? "remain-single"
+          : "decline-partnership";
     } else if (observation.kind === "owner") {
       if (observation.domain === "wage") {
         const waive = observation.options.find((option) => option.action === "waive-owner-wage");
@@ -510,6 +537,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     if (input.observation.kind === "mutual-aid-offer") return this.decideMutualAidOffer(input.observation, input.legalActions);
     if (input.observation.kind === "mutual-aid-receive") return this.decideMutualAidReceive(input.observation, input.legalActions);
     if (input.observation.kind === "welfare") return this.decideWelfare(input.observation, input.legalActions);
+    if (input.observation.kind === "partnership") return this.decidePartnership(input.observation, input.legalActions);
     if (input.observation.kind === "owner") return this.decideOwner(input.observation, input.legalActions);
 
     const { observation, legalActions } = input;
@@ -629,6 +657,25 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
       "accept-welfare": 0.25 + observation.profile.security * (0.3 + observation.urgency * 0.65) + observation.profile.planning * 0.25,
     };
     return this.highestScoringDecision(legalActions, scores, `${observation.programme} take-up`);
+  }
+
+  decidePartnership(observation: PartnershipObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const { profile } = observation;
+    const scores: Record<string, number> = {};
+    if (observation.domain === "separation") {
+      const relationshipStrain = clamp(0.6 * (1 - observation.friendshipStrength) + 0.4 * observation.contactStaleness);
+      scores["continue-partnership"] = profile.connection * (0.25 + observation.friendshipStrength * 0.65) + profile.planning * 0.15;
+      scores["separate-partnership"] = 0.15 + profile.security * relationshipStrain * 0.55 + profile.avoidance * observation.stress * 0.2;
+    } else {
+      const remainAction = observation.domain === "proposal" ? "remain-single" : "decline-partnership";
+      scores[remainAction] = 0.25 + profile.security * (1 - observation.materialSecurity) * 0.35 + profile.avoidance * observation.stress * 0.25;
+      observation.options.forEach((option) => {
+        scores[option.action] = profile.connection * (0.3 + option.friendshipStrength * 0.55)
+          + profile.planning * (0.15 + observation.materialSecurity * 0.2)
+          - profile.avoidance * observation.stress * 0.2;
+      });
+    }
+    return this.highestScoringDecision(legalActions, scores, `partnership ${observation.domain}`);
   }
 
   decideOwner(observation: OwnerObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
