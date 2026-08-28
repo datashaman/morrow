@@ -5,6 +5,7 @@ export function activityItems(person, filter = "all") {
   const events = person.events.map((entry) => ({ ...entry, type: "event" }));
   const knowledgeEffects = (person.knowledgeEffectHistory ?? []).map((entry) => ({ ...entry, type: "knowledge-effect" }));
   const mutualAid = (person.mutualAidHistory ?? []).map((entry) => ({ ...entry, type: "mutual-aid" }));
+  const welfare = (person.welfareHistory ?? []).map((entry) => ({ ...entry, type: "welfare" }));
   const entries = filter === "transactions"
     ? transactions
     : filter === "events"
@@ -13,7 +14,9 @@ export function activityItems(person, filter = "all") {
         ? knowledgeEffects
         : filter === "mutual-aid"
           ? mutualAid
-          : [...transactions, ...events, ...knowledgeEffects, ...mutualAid];
+          : filter === "welfare"
+            ? welfare
+            : [...transactions, ...events, ...knowledgeEffects, ...mutualAid, ...welfare];
 
   return entries.sort(compareTemporalNewest);
 }

@@ -24,6 +24,7 @@ import {
   firmKnowledgeEvidence,
   knowledgeEffectDescription,
 } from "./knowledge-presentation.js";
+import { WELFARE_PROGRAMME_OPTIONS, welfareDescription, welfareInspectorEvidence } from "./welfare-presentation.js";
 
 const app = document.querySelector("#app");
 app.innerHTML = `
@@ -80,10 +81,26 @@ app.innerHTML = `
             <option value="transactions">Transactions</option>
             <option value="events">Life events</option>
             <option value="mutual-aid">Mutual aid</option>
+            <option value="welfare">Welfare</option>
           </select>
         </label>
       </div>
       <ol class="activity-stream" id="activity-stream" tabindex="0" aria-label="Citizen activity, newest first"></ol>
+    </section>
+
+    <section class="welfare-panel" aria-labelledby="welfare-title">
+      <div class="welfare-heading">
+        <div><p class="eyebrow">Public provision</p><h2 id="welfare-title">Welfare ledger</h2></div>
+        <label>Programme
+          <select id="welfare-programme"></select>
+        </label>
+      </div>
+      <div class="welfare-appropriation" aria-label="Today's welfare envelope">
+        <div class="welfare-totals"><span>Envelope <b id="welfare-envelope"></b></span><span>Spent <b id="welfare-spent"></b></span><span>Remaining <b id="welfare-remaining"></b></span></div>
+        <div class="welfare-rail" role="progressbar" aria-label="Welfare envelope spent" aria-valuemin="0" aria-valuemax="100" id="welfare-rail"><i id="welfare-rail-fill"></i></div>
+      </div>
+      <dl class="welfare-counts" id="welfare-counts"></dl>
+      <div class="welfare-detail"><p id="welfare-citizen"></p><p id="welfare-failures"></p></div>
     </section>
 
     <section class="firm-panel" aria-labelledby="firm-pipelines-title">
@@ -119,6 +136,7 @@ app.innerHTML = `
             <option value="transactions">Transactions</option>
             <option value="events">Life events</option>
             <option value="knowledge-effects">Knowledge effects</option>
+            <option value="welfare">Welfare</option>
           </select>
         </label>
       </div>
@@ -164,7 +182,7 @@ let firmLandmarks = new Map();
 const elements = Object.fromEntries([
   "clock", "money", "money-detail", "employment", "employment-detail", "hardship", "hardship-detail",
   "population", "population-detail", "neural-control", "policy-status", "town-stage",
-  "person-select", "focus", "person-summary", "person-schedule", "needs", "knowledge-profile", "learning-stream", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "firm-select", "firm-selection-state", "firm-empty", "firm-detail", "firm-opportunities", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
+  "person-select", "focus", "person-summary", "person-schedule", "needs", "knowledge-profile", "learning-stream", "motivation-profile", "decision-stream", "activity-filter", "activity-stream", "welfare-programme", "welfare-envelope", "welfare-spent", "welfare-remaining", "welfare-rail", "welfare-rail-fill", "welfare-counts", "welfare-citizen", "welfare-failures", "firm-select", "firm-selection-state", "firm-empty", "firm-detail", "firm-opportunities", "firm-decision-title", "firm-decision-stream", "firm-activity-title", "firm-activity-filter", "firm-activity-stream", "pause", "step", "reset", "speed", "policy-grid", "control-history",
 ].map((id) => [id, document.querySelector(`#${id}`)]));
 
 const policyControls = [
@@ -184,6 +202,13 @@ function buildControls() {
     return option;
   }));
   elements["person-select"].value = String(selected);
+
+  elements["welfare-programme"].replaceChildren(...WELFARE_PROGRAMME_OPTIONS.map(({ value, label }) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
 
   elements["policy-grid"].replaceChildren(...policyControls.map(([name, label, min, max, step, format]) => {
     const wrapper = document.createElement("label");
@@ -242,6 +267,8 @@ const staticActionNames = {
   "remain-unhoused": "Remained unhoused",
   "keep-meals": "Kept surplus food",
   "refuse-all-meal-gifts": "Refused all offered meals",
+  "accept-welfare": "Accepted welfare assistance",
+  "refuse-welfare": "Refused welfare assistance",
 };
 
 function actionName(decision, action) {
@@ -277,6 +304,8 @@ function renderActivity(entity, filter, stream) {
         ? `mutual-aid ${entry.direction}`
         : entry.type === "knowledge-effect"
           ? "knowledge-effect"
+          : entry.type === "welfare"
+            ? `welfare ${entry.outcome}`
           : `event ${entry.kind}`;
     item.innerHTML = entry.type === "transaction"
       ? `<time>${formatTemporalRecord(entry)}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
@@ -284,6 +313,8 @@ function renderActivity(entity, filter, stream) {
         ? `<time>${formatTemporalRecord(entry)}</time><span>${mutualAidDescription(entry)}</span><b>Mutual aid</b>`
       : entry.type === "knowledge-effect"
         ? `<time>${formatTemporalRecord(entry)}</time><span>${knowledgeEffectDescription(entry)}</span><b>Knowledge effect</b>`
+      : entry.type === "welfare"
+        ? `<time>${formatTemporalRecord(entry)}</time><span>${welfareDescription(entry)}</span><b>Welfare</b>`
         : `<time>${formatTemporalRecord(entry)}</time><span>${entry.text}</span><b>Life event</b>`;
     return item;
   }));
@@ -298,10 +329,39 @@ function renderActivity(entity, filter, stream) {
           ? "No mutual-aid activity yet."
         : filter === "knowledge-effects"
           ? "No knowledge effects have been recorded for this firm."
+        : filter === "welfare"
+          ? "No welfare activity yet."
           : "No activity yet";
     stream.append(item);
   }
   if (!followingNewest) stream.scrollTop = previousScrollTop + stream.scrollHeight - previousScrollHeight;
+}
+
+function renderWelfareInspector(person) {
+  const evidence = welfareInspectorEvidence({
+    day: simulation.day,
+    welfareState: simulation.welfareState,
+    people: simulation.people,
+    programme: elements["welfare-programme"].value,
+    selectedCitizenId: person.id,
+  });
+  elements["welfare-envelope"].textContent = money(evidence.envelope);
+  elements["welfare-spent"].textContent = money(evidence.spent);
+  elements["welfare-remaining"].textContent = money(evidence.remaining);
+  elements["welfare-rail"].setAttribute("aria-valuenow", String(Math.round(evidence.utilization * 100)));
+  elements["welfare-rail-fill"].style.width = percent(evidence.utilization);
+  elements["welfare-counts"].replaceChildren(...Object.entries(evidence.counts).map(([label, value]) => {
+    const item = document.createElement("div");
+    item.innerHTML = `<dt>${label}</dt><dd>${value}</dd>`;
+    return item;
+  }));
+  elements["welfare-citizen"].textContent = evidence.latest
+    ? `${evidence.selectedCitizenName}: ${welfareDescription(evidence.latest)}`
+    : `${evidence.selectedCitizenName}: No welfare activity yet.`;
+  const failures = Object.entries(evidence.failures);
+  elements["welfare-failures"].textContent = failures.length
+    ? `Failures today: ${failures.map(([reason, count]) => `${reason} ×${count}`).join(" · ")}`
+    : "Failures today: none.";
 }
 
 function renderDecisions(entity, stream) {
@@ -449,6 +509,7 @@ function updateInterface() {
   renderKnowledge(person);
   renderMotivations(person);
   renderActivity(person, elements["activity-filter"].value, elements["activity-stream"]);
+  renderWelfareInspector(person);
 
   selectedFirm = resolveSelectedFirmId(simulation.firms, selectedFirm);
   const selectorOptions = firmSelectorOptions(simulation.firms).map((item) => {
@@ -722,6 +783,7 @@ function step() {
 elements["person-select"].addEventListener("change", (event) => { selected = Number(event.target.value); updateInterface(); elements["activity-stream"].scrollTop = 0; drawTown(); });
 elements["neural-control"].addEventListener("change", (event) => { simulation.setNeuralControl(event.target.checked); updateInterface(); });
 elements["activity-filter"].addEventListener("change", () => { updateInterface(); elements["activity-stream"].scrollTop = 0; });
+elements["welfare-programme"].addEventListener("change", updateInterface);
 elements["firm-activity-filter"].addEventListener("change", () => { updateInterface(); elements["firm-activity-stream"].scrollTop = 0; });
 elements["firm-select"].addEventListener("change", (event) => {
   selectedFirm = Number(event.target.value);
@@ -742,7 +804,7 @@ canvas.addEventListener("click", (event) => {
 });
 elements.pause.addEventListener("click", () => { paused = !paused; elements.pause.textContent = paused ? "Resume" : "Pause"; });
 elements.step.addEventListener("click", () => { paused = true; elements.pause.textContent = "Resume"; step(); });
-elements.reset.addEventListener("click", () => { simulation.reset(); paused = false; lastStep = performance.now(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); selectedFirm = 0; elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; elements["firm-activity-filter"].value = "all"; updateInterface(); elements["activity-stream"].scrollTop = 0; elements["firm-activity-stream"].scrollTop = 0; drawTown(); });
+elements.reset.addEventListener("click", () => { simulation.reset(); paused = false; lastStep = performance.now(); selected = simulation.people.findIndex((person) => person.name === "Sizwe"); selectedFirm = 0; elements["person-select"].value = String(selected); elements["activity-filter"].value = "all"; elements["welfare-programme"].value = "all"; elements["firm-activity-filter"].value = "all"; updateInterface(); elements["activity-stream"].scrollTop = 0; elements["firm-activity-stream"].scrollTop = 0; drawTown(); });
 
 function animate(now) {
   if (!paused && now - lastStep >= Number(elements.speed.value)) { step(); lastStep = now; }
