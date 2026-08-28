@@ -17,6 +17,7 @@
 - [Schedule evaluation](./schedule-evaluation.md): three-mode calendar, activity-budget, sleep, access, work, food, population, and business comparison.
 - [Cooperation evaluation](./cooperation-evaluation.md): three-mode public-social and mutual-aid comparison with custody, hardship, concentration, and conservation checks.
 - [Welfare evaluation](./welfare-evaluation.md): four-mode Food Assistance, Rent Assistance, Emergency Cash Relief, legacy cash, treasury, provider, hardship, and conservation comparison.
+- [Lifecycle evaluation](./lifecycle-evaluation.md): paired births-enabled and births-disabled population, care, school, workforce, treasury, failure, extinction, replay, and conservation evidence.
 - [Decision record](./decisions/0001-closed-individual-economy.md): foundational modeling decisions and their consequences.
 - [Personalization decision](./decisions/0002-retain-profile-only-personalization.md): research evidence for retaining stable profiles without embeddings or online adaptation.
 

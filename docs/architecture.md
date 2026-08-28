@@ -107,6 +107,10 @@ Runs the same fixed seeds in compatibility-calendar-only, schedules-without-slee
 
 Runs fixed seeds through `legacy`, `public-social`, and `mutual-aid` modes. It records venue attendance and contact, friendship formation, concrete aid decisions and outcomes, meal custody and disposition, hunger, support, survival, and giving/receiving concentration. It replays every mode and treats custody, ownership, pantry, expiry, simulation, and cash invariants as hard checks while leaving welfare directions observational. `scripts/evaluate-cooperation.ts` is the text or JSON adapter.
 
+### `src/lifecycle-evaluation.ts`
+
+Runs the paired, deterministic births-enabled activation evaluation against a births-disabled control. It gathers lifecycle, care, education, workforce, treasury, firm, extinction, and cash-conservation evidence without adding economic rules outside the simulation.
+
 ### `src/employment-evaluation.ts`
 
 Runs paired fixed-seed towns with the shared employment intervention disabled and enabled. It reports completed-day work, hiring, business, assistance, hardship, health, mortality, first-wage, slot, and conservation evidence and applies explicit gameplay acceptance gates. `scripts/evaluate-employment.ts` is the concise text and JSON command-line adapter.

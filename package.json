@@ -14,6 +14,7 @@
     "evaluate:sectors": "tsx scripts/evaluate-sector-balance.ts",
     "evaluate:activation": "tsx scripts/evaluate-neural-activation.ts",
     "evaluate:knowledge": "tsx scripts/evaluate-knowledge.ts",
+    "evaluate:lifecycle": "tsx scripts/evaluate-lifecycle.ts",
     "evaluate:personalization": "tsx scripts/evaluate-personalization.ts",
     "evaluate:cooperation": "tsx scripts/evaluate-cooperation.ts",
     "evaluate:welfare": "tsx scripts/evaluate-welfare.ts",
