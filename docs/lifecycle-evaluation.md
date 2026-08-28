@@ -14,13 +14,13 @@ Metric boundaries are deliberately explicit:
 - school demand counts scheduled lesson records, with attendance funded and every other outcome missed;
 - employment rate is employed adult citizen-days divided by adult workforce citizen-days.
 
-Simulation invariants run after every completed day. Lost or created cash fails immediately, as does unequal seeded replay. Outcome values themselves are observations, not pass thresholds.
+Simulation invariants run after every completed day. Lost or created cash fails immediately, as does unequal seeded replay. The report separates that technical integrity from browser activation readiness. Activation requires every full-lifecycle seed to reach the 168-day adult threshold, at least one observed maturation across those runs, at least 75% aggregate dependent meal delivery, and at least one completed dependent health episode whenever care is attempted. These thresholds are gameplay hypotheses chosen to ensure the enabled model actually exercises maturation and basic care; they are not demographic or policy claims.
 
 These are bounded deterministic gameplay observations under Morrow's compressed time scale and numerical hypotheses. They are not empirical or demographic validation, calibration, forecasts, causal estimates, or claims about real families, fertility, care, education, welfare, or population dynamics.
 
-## Accepted 2026-08-28 run
+## Accepted 2026-08-28 diagnostic run
 
-The required five-seed, 504-requested-day replay completed with exact cash conservation in every primary and replay run. Extinction stopped every run early, between day 80 and day 100, so the evaluation did not observe maturation or workforce entry.
+The required five-seed, 504-requested-day replay completed with exact cash conservation in every primary and replay run. Its technical-integrity gate passes. Its lifecycle-reach and dependent-essentials gates fail, so the overall activation result is `FAILED`. Extinction stopped every run early, between day 80 and day 100, no maturation or workforce entry occurred, only 59% of dependent meals were delivered, and none of 124 attempted dependent health episodes completed.
 
 | Seed | Mode | Days | Opportunities / attempts / conceptions / births | Dependent meals | Health care | Lessons | Firm failures |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |

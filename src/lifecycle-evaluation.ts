@@ -1,9 +1,9 @@
-import { DEFAULT_LATENT_FIRM_NAMES, LIFECYCLE_STAGES, PHASES } from "./config.js";
+import { DEFAULT_LATENT_FIRM_NAMES, LIFECYCLE_STAGES, LIFECYCLE_STAGE_START_DAYS, PHASES } from "./config.js";
 import { calendarForDay } from "./civil-time.js";
 import { MotivationCitizenPolicy } from "./citizen-policy.js";
 import { TownSimulation } from "./simulation.js";
 
-export const LIFECYCLE_EVALUATION_SCHEMA_VERSION = 1;
+export const LIFECYCLE_EVALUATION_SCHEMA_VERSION = 2;
 export const DEFAULT_LIFECYCLE_EVALUATION_SEEDS = Object.freeze([101, 202, 303, 404, 505]);
 export const DEFAULT_LIFECYCLE_EVALUATION_DAYS = 504;
 export const LIFECYCLE_EVALUATION_MODES = Object.freeze([
@@ -167,6 +167,40 @@ export function evaluateLifecycle(config: LifecycleEvaluationConfig = { seeds: D
     }
     return { seed, deterministicReplay: config.replay !== false, modes };
   });
+  const fullLifecycleModes = runs.map((run) => run.modes.find((mode) => mode.mode === "full-lifecycle")!);
+  const minimumCompletedDays = LIFECYCLE_STAGE_START_DAYS.adult;
+  const foodDemand = fullLifecycleModes.reduce((total, mode) => total + mode.care.foodDemand, 0);
+  const foodDelivered = fullLifecycleModes.reduce((total, mode) => total + mode.care.foodDelivered, 0);
+  const healthAttempts = fullLifecycleModes.reduce((total, mode) => total + mode.care.healthAttempts, 0);
+  const healthFunded = fullLifecycleModes.reduce((total, mode) => total + mode.care.healthFunded, 0);
+  const technicalIntegrity = {
+    deterministicReplayRequired: config.replay !== false,
+    deterministicRuns: runs.filter((run) => run.deterministicReplay).length,
+    cashConservedRuns: runs.flatMap((run) => run.modes).filter((mode) => mode.cash.conserved).length,
+    totalModeRuns: runs.length * LIFECYCLE_EVALUATION_MODES.length,
+    passed: config.replay !== false
+      && runs.every((run) => run.deterministicReplay)
+      && runs.flatMap((run) => run.modes).every((mode) => mode.cash.conserved),
+  };
+  const lifecycleReach = {
+    minimumCompletedDays,
+    runsReachingMinimum: fullLifecycleModes.filter((mode) => mode.completedDays >= minimumCompletedDays).length,
+    requiredRuns: fullLifecycleModes.length,
+    maturations: fullLifecycleModes.reduce((total, mode) => total + mode.workforce.maturations, 0),
+    passed: fullLifecycleModes.every((mode) => mode.completedDays >= minimumCompletedDays)
+      && fullLifecycleModes.reduce((total, mode) => total + mode.workforce.maturations, 0) > 0,
+  };
+  const dependentEssentials = {
+    minimumFoodDeliveryRate: 0.75,
+    foodDemand,
+    foodDelivered,
+    foodDeliveryRate: foodDemand ? round(foodDelivered / foodDemand) : 1,
+    healthAttempts,
+    healthFunded,
+    passed: (!foodDemand || foodDelivered / foodDemand >= 0.75)
+      && (!healthAttempts || healthFunded > 0),
+  };
+  const gates = { technicalIntegrity, lifecycleReach, dependentEssentials };
   return {
     metadata: {
       schemaVersion: LIFECYCLE_EVALUATION_SCHEMA_VERSION,
@@ -184,9 +218,11 @@ export function evaluateLifecycle(config: LifecycleEvaluationConfig = { seeds: D
         schoolDemand: "Scheduled dependent lesson records, split by attended versus every non-attended outcome.",
       },
       invariantChecks: "Simulation invariants run after every completed day; any lost or created cash is a hard failure.",
+      activationCriteria: "Activation additionally requires deterministic replay, conserved cash, every full-lifecycle seed to reach the 168-day adult threshold, at least one observed maturation, at least 75% aggregate dependent meal delivery, and at least one completed dependent health episode when care is attempted.",
       interpretation: "Bounded deterministic gameplay observations for the configured 504-day horizon. They are not empirical or demographic validation, calibration, forecasts, or claims about real families, fertility, care, education, welfare, or population dynamics.",
     },
-    status: "passed",
+    status: Object.values(gates).every((gate) => gate.passed) ? "passed" : "failed",
+    gates,
     runs,
   } as const;
 }
@@ -196,6 +232,7 @@ export function formatLifecycleEvaluation(report: ReturnType<typeof evaluateLife
   report.runs.forEach((run) => {
     lines.push(`seed ${run.seed}: ${run.modes.map((mode) => `${mode.mode} ${mode.completedDays}d, ${mode.reproduction.births} births, ${mode.population.final} alive, dependency ${mode.population.dependencyRatio ?? "∞"}, ${mode.school.fundedLessons}/${mode.school.demand} lessons, ${mode.firms.failures} firm failures`).join(" → ")}`);
   });
+  lines.push(`gates: integrity ${report.gates.technicalIntegrity.passed ? "PASS" : "FAIL"} · lifecycle reach ${report.gates.lifecycleReach.passed ? "PASS" : "FAIL"} · dependent essentials ${report.gates.dependentEssentials.passed ? "PASS" : "FAIL"}`);
   lines.push(report.metadata.interpretation);
   return lines.join("\n");
 }
