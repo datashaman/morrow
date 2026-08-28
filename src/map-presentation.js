@@ -10,8 +10,8 @@ export function firmLandmarkLayout(firm, { width, height = 1, nameWidth = 0, met
     label: firm.name,
     width: landmarkWidth,
     height: landmarkHeight,
-    centerX: clamp(firm.x * width, landmarkWidth / 2 + margin, width - landmarkWidth / 2 - margin),
-    centerY: firm.y * height,
+    centerX: clamp((firm.mapX ?? firm.x) * width, landmarkWidth / 2 + margin, width - landmarkWidth / 2 - margin),
+    centerY: (firm.mapY ?? firm.y) * height,
   };
 }
 

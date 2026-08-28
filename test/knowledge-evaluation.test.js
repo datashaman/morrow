@@ -56,7 +56,7 @@ test("whole-town pairs report formation, domain learning, effects, sales, welfar
   ["sales", "employed", "hungry", "unhoused", "alive", "dead", "insolventFirms", "cash"].forEach((field) => {
     assert.equal(Number.isFinite(pair.deltas[field]), true, field);
   });
-  assert.match(formatKnowledgeEvaluation(report), /Sector fixtures: 12\/12 archetypes/);
+  assert.match(formatKnowledgeEvaluation(report), new RegExp(`Sector fixtures: ${FIRMS.length}/${FIRMS.length} archetypes`));
   assert.match(report.metadata.interpretation, /not directional targets or empirical claims/);
 });
 

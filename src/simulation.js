@@ -73,6 +73,10 @@ import {
   PRICE_FLOOR_MULTIPLIER,
   PRICE_REVIEW_DAYS,
   PRODUCTS,
+  PUBLIC_WORKS_CONTRACT_QUANTITY,
+  PUBLIC_WORKS_STARTUP_CAPITAL,
+  PUBLIC_WORKS_TREASURY_RESERVE,
+  PUBLIC_WORKS_UNEMPLOYMENT_RATE,
   RENT_INTERVAL_DAYS,
   RETAIL_COURSE_INVENTORY_TRANSFER_RATE,
   RETAIL_COURSE_LEARNING_RATE,
@@ -112,7 +116,7 @@ export const lifecycleStageForAge = (ageDays) => {
 };
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy", welfareMode = "legacy-cash", lifecycleEnabled = false, birthsEnabled = false } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, publicWorksEnabled = false, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy", welfareMode = "legacy-cash", lifecycleEnabled = false, birthsEnabled = false } = {}) {
     validateFirmKnowledgeConfigs(FIRMS);
     if (!COOPERATION_MODES.includes(cooperationMode)) throw new Error(`Unknown cooperation mode: ${cooperationMode}`);
     if (!WELFARE_MODES.includes(welfareMode)) throw new Error(`Unknown welfare mode: ${welfareMode}`);
@@ -125,6 +129,7 @@ export class TownSimulation {
     this.transportEnabled = transportEnabled;
     this.knowledgeEnabled = knowledgeEnabled;
     this.employmentInterventionEnabled = employmentInterventionEnabled;
+    this.publicWorksEnabled = publicWorksEnabled;
     this.schedulesEnabled = schedulesEnabled;
     this.sleepEnabled = sleepEnabled;
     this.cooperationMode = cooperationMode;
@@ -256,6 +261,11 @@ export class TownSimulation {
       events: [],
       welfareSequence: 0,
       welfareHistory: [],
+      publicServiceSequence: 0,
+      publicServiceHistory: [],
+      publicServiceRequestedToday: 0,
+      publicServiceDeliveredToday: 0,
+      publicServicePaidToday: 0,
     };
   }
 
@@ -3616,6 +3626,7 @@ export class TownSimulation {
       const cause = attendingWorkers === 0 ? "no attending workers" : "labor capacity";
       this.note(firm, `${cause} left ${firm.processingShortfallToday} ${inputUnit}${firm.processingShortfallToday === 1 ? "" : "s"} unprocessed`, "bad");
     });
+    this.settlePublicWorksContract();
   }
 
   payrollPhase() {
@@ -4956,6 +4967,7 @@ export class TownSimulation {
   settlementPhase() {
     this.resolveHousingReceivership();
     this.resolveEssentialSectorReentry();
+    this.resolvePublicWorksFormation();
     this.resolveHousingCapacity();
     this.runLegacyCashSupport();
     this.runEmergencyCashRelief();
@@ -5145,6 +5157,112 @@ export class TownSimulation {
       .filter((person) => person.alive && person.employer < 0)
       .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25) || a.id - b.id)
       .slice(0, count);
+  }
+
+  resolvePublicWorksFormation() {
+    if (!this.publicWorksEnabled || this.firms.some((firm) => firm.archetypeId === "public-works")) return false;
+    const workforce = this.people.filter((person) => person.alive && !person.isDependent);
+    const unemployed = workforce.filter((person) => person.employer < 0);
+    const unemploymentRate = workforce.length ? unemployed.length / workforce.length : 0;
+    const archetype = this.firmArchetype("public-works");
+    const workers = this.replacementWorkers(archetype?.initialStaff ?? 0);
+    if (!archetype
+      || unemploymentRate + 1e-9 < PUBLIC_WORKS_UNEMPLOYMENT_RATE
+      || workers.length < archetype.initialStaff
+      || this.government.cash + 1e-9 < PUBLIC_WORKS_STARTUP_CAPITAL + PUBLIC_WORKS_TREASURY_RESERVE) return false;
+    const averageOpenDayWage = this.schedulesEnabled
+      ? Math.max(this.policy.minimumWage, archetype.wage) * 7 / FIRM_OPEN_WEEKDAYS[archetype.archetypeId].length
+      : Math.max(this.policy.minimumWage, archetype.wage);
+    const instanceNumber = (this.firmInstanceCounts[archetype.archetypeId] ?? 0) + 1;
+    const firm = this.createFirmInstance(archetype, this.firms.length, {
+      owner: workers[0].id,
+      cash: 0,
+      founderCapital: 0,
+      inventory: 0,
+      revenueEMA: archetype.initialStaff * averageOpenDayWage * STAFFING_REVENUE_BUFFER,
+      targetStaff: archetype.initialStaff,
+      instanceNumber,
+      foundingDay: this.day,
+    });
+    firm.publicContracted = true;
+    firm.publicStartupCapital = PUBLIC_WORKS_STARTUP_CAPITAL;
+    this.firms.push(firm);
+    this.firmInstanceCounts[archetype.archetypeId] = instanceNumber;
+    const treasuryBefore = this.government.cash;
+    const transactionId = `public-works:${this.day}:startup`;
+    const paid = this.transfer(this.government, firm, PUBLIC_WORKS_STARTUP_CAPITAL, { exact: true });
+    if (paid !== PUBLIC_WORKS_STARTUP_CAPITAL) {
+      this.firms.pop();
+      this.firmInstanceCounts[archetype.archetypeId] = instanceNumber - 1;
+      return false;
+    }
+    this.ledger(this.government, { direction: "out", amount: paid, text: `public-realm startup to ${firm.name}`, before: treasuryBefore, transactionId });
+    this.ledger(firm, { direction: "in", amount: paid, text: "public-realm startup from treasury", before: 0, transactionId });
+    workers.forEach((person) => this.hire(firm, person));
+    this.addContractsForFirm(firm);
+    this.note(firm, `treasury contracted ${firm.name} with ${paid.toFixed(1)} startup cash and ${workers.length} funded jobs`, "good");
+    this.validateProductGraph();
+    return true;
+  }
+
+  settlePublicWorksContract() {
+    if (!this.publicWorksEnabled) return null;
+    const firm = this.firms.find((candidate) => candidate.active && candidate.archetypeId === "public-works");
+    if (!firm) return null;
+    firm.publicServiceRequestedToday = PUBLIC_WORKS_CONTRACT_QUANTITY;
+    firm.publicServiceDeliveredToday = 0;
+    firm.publicServicePaidToday = 0;
+    const attending = firm.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+    const scalarCapacity = this.firmOpenOnDay(firm)
+      ? Math.floor(attending * firm.operationalReadiness * this.scheduledShiftCapacityMultiplier())
+      : 0;
+    const knowledgeCapacity = this.knowledgeEnabled && firm.knowledge.effectType === "transaction-capacity"
+      ? firm.knowledgeCapacitySlotsToday
+      : 0;
+    const capacity = Math.min(PUBLIC_WORKS_CONTRACT_QUANTITY, scalarCapacity + knowledgeCapacity);
+    const cost = roundMoney(capacity * firm.price);
+    let failureReason = null;
+    if (!this.firmOpenOnDay(firm)) failureReason = `${firm.name} closed`;
+    else if (!capacity) failureReason = "no attended public-realm capacity";
+    else if (this.government.cash + 1e-9 < cost) failureReason = "insufficient treasury cash for the complete service batch";
+    let paid = 0;
+    let transactionId = null;
+    if (!failureReason) {
+      const treasuryBefore = this.government.cash;
+      const firmBefore = firm.cash;
+      transactionId = `public-works:${this.day}:service:${firm.publicServiceSequence + 1}`;
+      paid = this.transfer(this.government, firm, cost, { exact: true });
+      if (paid === cost) {
+        firm.sales += paid;
+        firm.unitsSold += capacity;
+        firm.transactionsToday += 1;
+        firm.publicServiceDeliveredToday = capacity;
+        firm.publicServicePaidToday = paid;
+        this.markKnowledgeEffectUsed(firm, Math.max(0, capacity - scalarCapacity));
+        this.markFirmUse(firm);
+        if (this.schedulesEnabled) this.maintainFirm(firm);
+        this.ledger(this.government, { direction: "out", amount: paid, text: `${capacity} public-realm service unit${capacity === 1 ? "" : "s"} from ${firm.name}`, before: treasuryBefore, transactionId });
+        this.ledger(firm, { direction: "in", amount: paid, text: `${capacity} public-realm service unit${capacity === 1 ? "" : "s"} to treasury`, before: firmBefore, transactionId });
+      } else failureReason = "public-realm service transfer failed";
+    }
+    firm.publicServiceSequence += 1;
+    const record = Object.freeze({
+      day: this.day,
+      ...temporalMetadata(this.day, "Procurement"),
+      sequence: firm.publicServiceSequence,
+      requestedUnits: PUBLIC_WORKS_CONTRACT_QUANTITY,
+      deliveredUnits: firm.publicServiceDeliveredToday,
+      unitPrice: firm.price,
+      paid,
+      transactionId,
+      failureReason,
+      treasuryAfter: roundMoney(this.government.cash),
+      firmAfter: roundMoney(firm.cash),
+      rule: "finite-public-realm-contract-v1",
+    });
+    firm.publicServiceHistory.unshift(record);
+    if (failureReason) this.note(firm, `public-realm contract failed: ${failureReason}`, "bad");
+    return record;
   }
 
   restartEssentialFirm(firm) {

@@ -49,7 +49,9 @@ function ensureFixtureFirm(town: any, archetype: any, workerCount: number) {
 
 function runSectorFixture(archetype: any, knowledgeEnabled: boolean) {
   const town: any = new TownSimulation({ seed: 6200 + FIRMS.indexOf(archetype), knowledgeEnabled, transportEnabled: true } as any);
-  const workerCount = archetype.knowledge.effectType === "processing-capacity"
+  const workerCount = archetype.archetypeId === "public-works"
+    ? 6
+    : archetype.knowledge.effectType === "processing-capacity"
     ? 6
     : archetype.knowledge.effectType === "transaction-capacity" ? 2 : 1;
   const firm = ensureFixtureFirm(town, archetype, workerCount);
