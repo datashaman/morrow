@@ -56,3 +56,116 @@ test("the disabled lifecycle gate preserves existing adult behaviour and replay"
   assert.deepEqual(replay.people, control.people);
   assert.ok(replay.people.every((person) => person.lifecycleHistory.length === 0));
 });
+
+test("a born citizen crosses every calendar stage and matures without creating money", () => {
+  const town = new TownSimulation({ seed: 81, lifecycleEnabled: true });
+  const citizen = town.createNewborn([0, 1]);
+  citizen.restrictedInheritance = 7.35;
+  town.initialMoney = town.totalMoney();
+  const moneyBefore = town.totalMoney();
+
+  town.day = 29;
+  assert.deepEqual(town.resolveLifecycleStages(), [{ citizenId: citizen.id, previousStage: "infant", stage: "child", ageDays: 28 }]);
+  assert.equal(citizen.isDependent, true);
+
+  town.day = 85;
+  assert.deepEqual(town.resolveLifecycleStages(), [{ citizenId: citizen.id, previousStage: "child", stage: "student", ageDays: 84 }]);
+
+  town.day = 169;
+  assert.deepEqual(town.resolveLifecycleStages(), [{ citizenId: citizen.id, previousStage: "student", stage: "adult", ageDays: 168 }]);
+  assert.equal(citizen.isDependent, false);
+  assert.deepEqual(citizen.guardianIds, []);
+  assert.deepEqual(citizen.formerGuardianIds, [0, 1]);
+  assert.equal(citizen.restrictedInheritance, 0);
+  assert.equal(citizen.cash, 7.35);
+  assert.equal(citizen.transitionHostId, citizen.formerGuardianIds[0]);
+  assert.equal(citizen.transitionResidenceEndDay, 197);
+  assert.equal(citizen.housed, true);
+  assert.equal(town.totalMoney(), moneyBefore);
+  assert.equal(citizen.lifecycleHistory[0].type, "maturation");
+  assert.equal(citizen.ledger[0].text, "restricted inheritance released at adulthood");
+  town.assertInvariants();
+});
+
+test("transition residence consumes no dwelling and ends after 28 days or host housing loss", () => {
+  const town = new TownSimulation({ seed: 82, lifecycleEnabled: true, housingCapacityEnabled: true });
+  const citizen = town.createNewborn([0, 1]);
+  const occupancyBefore = town.housingOccupancy();
+  town.day = 169;
+  town.resolveLifecycleStages();
+  assert.equal(town.housingOccupancy(), occupancyBefore);
+
+  town.day = 197;
+  assert.equal(town.reconcileTransitionResidence(citizen), false);
+  assert.equal(citizen.housed, false);
+  assert.equal(citizen.transitionHostId, null);
+  assert.equal(citizen.transitionResidenceEndDay, null);
+  assert.equal(citizen.lifecycleHistory[0].type, "transition-residence-ended");
+
+  const hostLoss = new TownSimulation({ seed: 83, lifecycleEnabled: true });
+  const secondCitizen = hostLoss.createNewborn([0, 1]);
+  hostLoss.day = 169;
+  hostLoss.resolveLifecycleStages();
+  hostLoss.people[secondCitizen.transitionHostId].housed = false;
+  assert.equal(hostLoss.reconcileTransitionResidence(secondCitizen), false);
+  assert.equal(secondCitizen.housed, false);
+  assert.match(secondCitizen.events[0].text, /transition host lost housing/);
+});
+
+test("an exact independent tenancy ends transition residence early", () => {
+  const policy = {
+    id: "independent-housing-test",
+    decide: ({ observation, legalActions }) => ({
+      action: observation.kind === "housing"
+        ? legalActions.find((action) => action.startsWith("secure-housing:")) ?? legalActions[0]
+        : legalActions[0],
+      reasons: ["housing fixture"],
+    }),
+  };
+  const town = new TownSimulation({ seed: 85, lifecycleEnabled: true, housingCapacityEnabled: true, citizenPolicy: policy });
+  const citizen = town.createNewborn([0, 1]);
+  const housing = town.firms.find((firm) => firm.sector === "housing");
+  housing.dwellingCapacity = town.housingOccupancy() + 1;
+  citizen.cash = housing.price * 3;
+  town.initialMoney = town.totalMoney();
+  town.day = 169;
+  town.resolveLifecycleStages();
+  const occupancyBefore = town.housingOccupancy();
+
+  assert.equal(town.considerHousing(citizen, housing), true);
+
+  assert.equal(citizen.transitionHostId, null);
+  assert.equal(citizen.transitionResidenceEndDay, null);
+  assert.equal(citizen.housed, true);
+  assert.equal(town.housingOccupancy(), occupancyBefore + 1);
+  assert.equal(citizen.lifecycleHistory[0].type, "transition-residence-ended");
+  assert.match(citizen.ledger[0].text, /deposit and rent/);
+  town.assertInvariants();
+});
+
+test("a citizen reaching adulthood can enter the same Monday job market", () => {
+  const policy = {
+    id: "maturation-job-test",
+    decide: ({ observation, legalActions }) => {
+      if (observation.kind === "job-search") return { action: legalActions.find((action) => action.startsWith("apply-job:")) ?? legalActions[0], reasons: ["apply fixture"] };
+      if (observation.kind === "job-offer") return { action: "accept-job-offer", reasons: ["accept fixture"] };
+      return { action: legalActions[0], reasons: ["fixture default"] };
+    },
+  };
+  const town = new TownSimulation({ seed: 84, lifecycleEnabled: true, schedulesEnabled: true, citizenPolicy: policy });
+  const citizen = town.createNewborn([0, 1]);
+  citizen.skill = 0.99;
+  citizen.reliability = 0.99;
+  const firm = town.firms[0];
+  firm.targetStaff = firm.employees.length + 1;
+  firm.vacancyAge = 2;
+  town.firms.slice(1).forEach((other) => { other.targetStaff = other.employees.length; });
+  town.day = 169;
+
+  town.planningPhase();
+
+  assert.equal(citizen.lifecycleStage, "adult");
+  assert.equal(citizen.employer, firm.id);
+  assert.equal(citizen.decisions.some((decision) => decision.kind === "job-search"), true);
+  assert.equal(citizen.decisions.some((decision) => decision.kind === "job-offer"), true);
+});

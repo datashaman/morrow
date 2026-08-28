@@ -347,6 +347,8 @@ export class TownSimulation {
         formerGuardianIds: [],
         residentialGuardianId: null,
         treasuryGuardian: false,
+        transitionHostId: null,
+        transitionResidenceEndDay: null,
         restrictedInheritance: 0,
         lifecycleSequence: 0,
         lifecycleHistory: [],
@@ -573,7 +575,7 @@ export class TownSimulation {
   }
 
   housingOccupancy() {
-    return this.people.filter((person) => person.alive && !person.isDependent && person.housed).length;
+    return this.people.filter((person) => person.alive && !person.isDependent && person.housed && !this.transitionResidenceActive(person)).length;
   }
 
   housingProjectDemand(housing = this.firms.find((firm) => firm.active && firm.sector === "housing")) {
@@ -1712,7 +1714,7 @@ export class TownSimulation {
     const newborn = {
       kind: "person", id, name, lifecycleStage: "infant", birthDay: this.day, ageDays: 0, isDependent: true,
       parentIds: [...parentIds].sort((a, b) => a - b), guardianIds: guardians.map((guardian) => guardian.id), formerGuardianIds: [],
-      residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, restrictedInheritance: 0, lifecycleSequence: 1,
+      residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, transitionHostId: null, transitionResidenceEndDay: null, restrictedInheritance: 0, lifecycleSequence: 1,
       lifecycleHistory: [{ day: this.day, ...temporalMetadata(this.day, "Planning"), sequence: 1, type: "birth", text: `born to ${parentIds.map((parentId) => this.people[parentId].name).join(" and ")}`, counterpartId: null, counterpartName: null, reason: "completed gestation" }],
       partnerId: null, partnershipStartDay: null, lastPartnershipEndDay: null,
       alive: true, deathDay: null, estateTransferred: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
@@ -1769,6 +1771,86 @@ export class TownSimulation {
 
   reconcileAllDependentCare() {
     this.people.filter((person) => person.alive && person.isDependent).forEach((dependent) => this.reconcileDependentCare(dependent));
+  }
+
+  transitionResidenceActive(person) {
+    const host = this.people[person?.transitionHostId];
+    return Boolean(person?.alive && !person.isDependent && person.transitionResidenceEndDay !== null
+      && this.day < person.transitionResidenceEndDay && host?.alive && host.housed);
+  }
+
+  reconcileTransitionResidence(person) {
+    if (!person?.alive || person.transitionResidenceEndDay === null) return false;
+    const active = this.transitionResidenceActive(person);
+    if (active) {
+      const host = this.people[person.transitionHostId];
+      person.housed = true;
+      person.homeX = host.homeX;
+      person.homeY = host.homeY;
+      return true;
+    }
+    const host = this.people[person.transitionHostId];
+    const reason = this.day >= person.transitionResidenceEndDay
+      ? "28-day transition residence ended"
+      : !host?.alive
+        ? "transition host died"
+        : "transition host lost housing";
+    person.transitionHostId = null;
+    person.transitionResidenceEndDay = null;
+    person.housed = false;
+    person.rentArrears = 0;
+    this.recordLifecycle(person, "transition-residence-ended", "became independently unhoused", host, reason);
+    this.note(person, reason, "bad");
+    return false;
+  }
+
+  reconcileAllTransitionResidences() {
+    this.people.filter((person) => person.alive && person.transitionResidenceEndDay !== null)
+      .forEach((person) => this.reconcileTransitionResidence(person));
+  }
+
+  resolveLifecycleStages() {
+    if (!this.lifecycleEnabled) return [];
+    const transitions = [];
+    this.people.filter((person) => person.alive && person.birthDay !== null).sort((a, b) => a.id - b.id).forEach((person) => {
+      person.ageDays = this.day - person.birthDay;
+      const nextStage = lifecycleStageForAge(person.ageDays);
+      if (nextStage === person.lifecycleStage) return;
+      const previousStage = person.lifecycleStage;
+      person.lifecycleStage = nextStage;
+      person.isDependent = nextStage !== "adult";
+      this.recordLifecycle(person, "stage-changed", `entered the ${nextStage} stage`, null, `calendar age reached ${person.ageDays} days`);
+      if (nextStage === "adult") {
+        const formerResidentialGuardian = this.people[person.residentialGuardianId];
+        const formerGuardians = person.guardianIds.map((id) => this.people[id]).filter(Boolean).sort((a, b) => a.id - b.id);
+        person.formerGuardianIds = [...new Set([...person.formerGuardianIds, ...person.guardianIds])].sort((a, b) => a - b);
+        person.guardianIds = [];
+        person.residentialGuardianId = null;
+        person.treasuryGuardian = false;
+        const host = formerResidentialGuardian?.alive && formerResidentialGuardian.housed
+          ? formerResidentialGuardian
+          : formerGuardians.find((guardian) => guardian.alive && guardian.housed) ?? null;
+        person.transitionHostId = host?.id ?? null;
+        person.transitionResidenceEndDay = host ? this.day + 28 : null;
+        person.housed = Boolean(host);
+        if (host) {
+          person.homeX = host.homeX;
+          person.homeY = host.homeY;
+        }
+        if (person.restrictedInheritance > 0) {
+          const released = person.restrictedInheritance;
+          const before = person.cash;
+          person.restrictedInheritance = 0;
+          person.cash = roundMoney(person.cash + released);
+          this.ledger(person, { direction: "in", amount: released, text: "restricted inheritance released at adulthood", before, transactionId: `maturation:${this.day}:${person.id}` });
+        }
+        const capacityRandom = createRandom((this.seed ^ Math.imul(person.id + 1, 0x165667b1)) >>> 0);
+        person.socialCapacity = 3 + Math.floor(capacityRandom() * 4);
+        this.recordLifecycle(person, "maturation", "adult economic actions became available", host, host ? `28-day transition residence with ${host.name}` : "no housed former guardian was available");
+      }
+      transitions.push(Object.freeze({ citizenId: person.id, previousStage, stage: nextStage, ageDays: person.ageDays }));
+    });
+    return transitions;
   }
 
   resolveGestations() {
@@ -3819,7 +3901,7 @@ export class TownSimulation {
         const provider = this.firms.find((firm) => firm.active && firm.sector === "housing");
         if (provider) {
           const nextOpening = this.nextOpeningDay(provider);
-          this.people.filter((person) => person.alive && !person.isDependent && (!person.housed || this.rentDueToday())).forEach((person) => {
+          this.people.filter((person) => person.alive && !person.isDependent && (this.transitionResidenceActive(person) || !person.housed || this.rentDueToday())).forEach((person) => {
             this.note(person, `${provider.name} was closed for housing payments${nextOpening ? `; next opening D${nextOpening}` : ""}`, "neutral");
           });
         }
@@ -3828,8 +3910,9 @@ export class TownSimulation {
     }
     this.housingAccessOrder().forEach((person) => {
       if (!person.alive) return;
+      const inTransition = this.transitionResidenceActive(person);
       if (!person.housed) person.rentArrears = 0;
-      if (person.housed && !this.rentDueToday()) return;
+      if (person.housed && !inTransition && !this.rentDueToday()) return;
       this.considerHousing(person, housing);
     });
   }
@@ -3848,7 +3931,8 @@ export class TownSimulation {
 
   considerHousing(person, housing) {
     if (!person.alive || person.isDependent || !housing?.active) return false;
-    const wasHoused = person.housed;
+    const inTransition = this.transitionResidenceActive(person);
+    const wasHoused = person.housed && !inTransition;
     const due = roundMoney(wasHoused ? housing.price : housing.price * 3);
     const canPay = person.cash + 1e-9 >= due;
     const occupancy = this.housingOccupancy();
@@ -3903,6 +3987,11 @@ export class TownSimulation {
         person.rentSeller = housing.id;
         person.rentArrears = 0;
         person.housed = true;
+        if (inTransition) {
+          person.transitionHostId = null;
+          person.transitionResidenceEndDay = null;
+          this.recordLifecycle(person, "transition-residence-ended", "secured an independent tenancy", null, "independent housing ended the maturation transition early");
+        }
         this.ledger(person, { direction: "out", amount: paid, text: `${due > housing.price ? "deposit and rent" : "rent"} to ${housing.name}`, before });
         if (due > housing.price) this.note(person, "secured housing again", "good");
         return true;
@@ -4368,7 +4457,7 @@ export class TownSimulation {
     housing.dwellingCapacity = Math.max(0, housing.dwellingCapacity - 1);
     this.note(housing, `deferred repairs reduced dwelling capacity to ${housing.dwellingCapacity}`, "bad");
     const overflow = Math.max(0, this.housingOccupancy() - housing.dwellingCapacity);
-    this.people.filter((person) => person.alive && person.housed)
+    this.people.filter((person) => person.alive && !person.isDependent && person.housed && !this.transitionResidenceActive(person))
       .sort((a, b) => a.cash - b.cash || a.id - b.id)
       .slice(0, overflow)
       .forEach((person) => {
@@ -4482,7 +4571,7 @@ export class TownSimulation {
     }
 
     if (housing.lastDisplacementDay === this.day) return false;
-    const housed = this.people.filter((person) => person.alive && person.housed).sort((a, b) => a.id - b.id);
+    const housed = this.people.filter((person) => person.alive && !person.isDependent && person.housed && !this.transitionResidenceActive(person)).sort((a, b) => a.id - b.id);
     const displaced = housed.slice(0, Math.max(1, Math.ceil(housed.length * HOUSING_DISPLACEMENT_RATE)));
     displaced.forEach((person) => {
       person.housed = false;
@@ -4903,7 +4992,9 @@ export class TownSimulation {
   planningPhase() {
     this.expirePerishableInventory();
     this.resolveGestations();
+    this.resolveLifecycleStages();
     this.reconcileAllDependentCare();
+    this.reconcileAllTransitionResidences();
     this.runPartnerships();
     this.runBirthAttempts();
     if (this.schedulesEnabled) Object.entries(this.pendingFormations).forEach(([archetypeId, pending]) => {
@@ -4974,6 +5065,10 @@ export class TownSimulation {
       () => this.personalPhase(),
       () => this.settlementPhase(),
     ][this.phase]();
+    if (this.lifecycleEnabled && this.phase !== 7) {
+      this.reconcileAllDependentCare();
+      this.reconcileAllTransitionResidences();
+    }
     this.phase = (this.phase + 1) % PHASES.length;
     this.assertInvariants();
     return this.snapshot();

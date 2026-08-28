@@ -36,7 +36,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Paid, finite retail education plus transferable workplace knowledge across every current trade, with bounded operation-specific effects that never guarantee employment, demand, or success
 - Explicit labor-gated fabrication, construction-material supply, finite dwellings, and paid building projects
 - Public and commercial social encounters, maintained friendships, and voluntary close-friend meal sharing with preserved provenance
-- An explicitly staged citizen lifecycle with age, guardianship, family relationships, and endogenous births. Adult lifecycle state, romantic partnerships, deterministic conception, gestation, newborn identity, guardian residence, and dependent food care are implemented; births remain gated until stage progression, schooling, health care, and maturation land
+- An explicitly staged citizen lifecycle with age, guardianship, family relationships, and endogenous births. Adult lifecycle state, romantic partnerships, deterministic conception, gestation, newborn identity, guardian residence, dependent food care, stage progression, and maturation are implemented; births remain gated until dependent schooling, sleep, and health care land
 - Maslow-inspired needs and current behavioural focus
 - Auditable cash transfers and deterministic replay
 
