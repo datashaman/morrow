@@ -150,7 +150,7 @@ app.innerHTML = `
   </section>
 `;
 
-const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true, transportEnabled: true, schedulesEnabled: true, sleepEnabled: true, cooperationMode: "mutual-aid" });
+const simulation = new TownSimulation({ latentFirmNames: DEFAULT_LATENT_FIRM_NAMES, housingCapacityEnabled: true, transportEnabled: true, schedulesEnabled: true, sleepEnabled: true, cooperationMode: "mutual-aid", welfareMode: "combined" });
 let selected = simulation.people.findIndex((person) => person.name === "Sizwe");
 let selectedFirm = 0;
 let paused = false;
@@ -170,7 +170,7 @@ const elements = Object.fromEntries([
 const policyControls = [
   ["minimumWage", "Minimum wage", 3, 10, 0.2, (value) => value.toFixed(1)],
   ["taxRate", "Employer tax", 0, 35, 1, (value) => `${value}%`],
-  ["supportRate", "Support budget", 0, 100, 1, (value) => `${value}%`],
+  ["supportRate", "Welfare budget", 0, 100, 1, (value) => `${value}%`],
   ["discretionaryDemand", "Discretionary demand", 0, 100, 1, (value) => `${value}%`],
   ["shockRisk", "Economic shocks", 0, 100, 1, (value) => `${value}%`],
 ];

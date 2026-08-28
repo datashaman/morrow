@@ -28,6 +28,12 @@ export const FRIENDSHIP_DECAY_GRACE_DAYS = 5;
 export const FRIENDSHIP_DAILY_DECAY = 0.015;
 export const FRIENDSHIP_END_THRESHOLD = 0.2;
 export const COOPERATION_MODES = Object.freeze(["legacy", "public-social", "mutual-aid"]);
+export const WELFARE_MODES = Object.freeze(["none", "legacy-cash", "direct-only", "combined"]);
+export const WELFARE_PROGRAMMES = Object.freeze({
+  food: Object.freeze({ id: "food-assistance", name: "Food Assistance", ruleVersion: "food-assistance-v1" }),
+  rent: Object.freeze({ id: "rent-assistance", name: "Rent Assistance", ruleVersion: "rent-assistance-v1" }),
+  cash: Object.freeze({ id: "emergency-cash-relief", name: "Emergency Cash Relief", ruleVersion: "emergency-cash-relief-v1" }),
+});
 export const CLOSE_FRIENDSHIP_THRESHOLD = 0.75;
 export const FOOD_PANTRY_CAPACITY = 3;
 export const STAFFING_REVENUE_BUFFER = 1.08;

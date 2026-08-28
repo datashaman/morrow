@@ -75,6 +75,7 @@ import {
   TRANSPORT_LOAD_BY_PRODUCT,
   VITAL_RESCUE_CAP,
   VITAL_RESCUE_RUNWAY_DAYS,
+  WELFARE_MODES,
 } from "./config.js";
 import {
   ATTENDANCE_ACTIONS,
@@ -92,9 +93,10 @@ const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy" } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy", welfareMode = "legacy-cash" } = {}) {
     validateFirmKnowledgeConfigs(FIRMS);
     if (!COOPERATION_MODES.includes(cooperationMode)) throw new Error(`Unknown cooperation mode: ${cooperationMode}`);
+    if (!WELFARE_MODES.includes(welfareMode)) throw new Error(`Unknown welfare mode: ${welfareMode}`);
     this.seed = seed;
     this.policy = { ...DEFAULT_POLICY, ...policy };
     this.citizenPolicy = citizenPolicy;
@@ -107,6 +109,7 @@ export class TownSimulation {
     this.schedulesEnabled = schedulesEnabled;
     this.sleepEnabled = sleepEnabled;
     this.cooperationMode = cooperationMode;
+    this.welfareMode = welfareMode;
     this.reset();
   }
 
@@ -230,6 +233,8 @@ export class TownSimulation {
       decisions: [],
       ledger: [],
       events: [],
+      welfareSequence: 0,
+      welfareHistory: [],
     };
   }
 
@@ -246,6 +251,13 @@ export class TownSimulation {
     this.foodItems = {};
     this.mutualAidOfferSequence = 0;
     this.mutualAidTransferSequence = 0;
+    this.welfareState = {
+      day: null,
+      envelopeSnapshotCash: 0,
+      envelope: 0,
+      spent: 0,
+      directAidByCitizen: {},
+    };
     this.cooperationMetrics = {
       parkAttendance: 0,
       cafeAttendance: 0,
@@ -257,7 +269,7 @@ export class TownSimulation {
     this.pendingFormations = {};
     this.opportunityWindows = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, []]));
     this.firmInstanceCounts = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, 0]));
-    this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [] };
+    this.government = { kind: "government", id: 0, name: "Town treasury", cash: 120, x: 0.88, y: 0.55, activitySequence: 0, ledger: [], events: [], welfareSequence: 0, welfareHistory: [] };
     this.firms = FIRMS.filter((archetype) => (!archetype.defaultLatent || (this.transportEnabled && archetype.archetypeId === "haulage")) && !this.latentFirmNames.includes(archetype.name)).map((archetype, id) => {
       this.firmInstanceCounts[archetype.archetypeId] = 1;
       const targetStaff = this.schedulesEnabled ? archetype.scheduledInitialStaff ?? archetype.initialStaff : archetype.initialStaff;
@@ -342,6 +354,8 @@ export class TownSimulation {
         foodReserveTarget: 1 + (id % 3),
         foodStock: [],
         mutualAidHistory: [],
+        welfareSequence: 0,
+        welfareHistory: [],
         foodConsumedToday: 0,
         foodConsumedTotal: 0,
         wasteSequence: 0,
@@ -994,6 +1008,41 @@ export class TownSimulation {
   supportShortfall(person) {
     if (!person.alive) return 0;
     return roundMoney(Math.max(0, this.essentialCost() * SUPPORT_RUNWAY_TARGET_DAYS - person.cash));
+  }
+
+  beginWelfareEnvelope() {
+    if (this.welfareState.day === this.day) return this.welfareState;
+    const envelope = this.welfareMode === "none"
+      ? 0
+      : roundMoney(this.government.cash * (this.policy.supportRate / 100) * 0.18);
+    this.welfareState = {
+      day: this.day,
+      envelopeSnapshotCash: roundMoney(this.government.cash),
+      envelope,
+      spent: 0,
+      directAidByCitizen: {},
+    };
+    return this.welfareState;
+  }
+
+  remainingWelfareEnvelope() {
+    const state = this.beginWelfareEnvelope();
+    return roundMoney(Math.max(0, Math.min(state.envelope - state.spent, this.government.cash)));
+  }
+
+  recordWelfare(actor, evidence, phase = PHASES[this.phase]) {
+    actor.welfareSequence += 1;
+    const record = Object.freeze({
+      day: this.day,
+      ...temporalMetadata(this.day, phase),
+      sequence: actor.welfareSequence,
+      actorKind: actor.kind,
+      actorId: actor.id,
+      actorName: actor.name,
+      ...structuredClone(evidence),
+    });
+    actor.welfareHistory.unshift(record);
+    return record;
   }
 
   friendIds(person) {
@@ -2348,6 +2397,7 @@ export class TownSimulation {
   }
 
   foodPhase() {
+    this.beginWelfareEnvelope();
     if (this.cooperationMode === "mutual-aid") this.runMutualAidExchange();
     const foodFirms = this.firms.filter((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "food").sort((a, b) => a.price - b.price);
     const activeFoodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food");
@@ -3954,6 +4004,14 @@ export class TownSimulation {
       })(),
       schedulesEnabled: this.schedulesEnabled,
       cooperationMode: this.cooperationMode,
+      welfareMode: this.welfareMode,
+      welfare: {
+        day: this.welfareState.day,
+        envelopeSnapshotCash: this.welfareState.envelopeSnapshotCash,
+        envelope: this.welfareState.envelope,
+        spent: this.welfareState.spent,
+        remaining: this.welfareState.day === this.day ? this.remainingWelfareEnvelope() : 0,
+      },
       citizenPolicy: this.policyMetadata(),
       controlHistory: this.controlHistory.map((entry) => ({ ...entry })),
       townStage,
