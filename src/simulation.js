@@ -371,6 +371,7 @@ export class TownSimulation {
         scheduledShiftsWorked: 0,
         scheduledShiftsElapsed: 0,
         dailyPlan: null,
+        dependentHealthPlan: null,
         currentPrimaryActivity: null,
         sleepDebt: 0,
         lastSleepQuality: null,
@@ -1720,7 +1721,7 @@ export class TownSimulation {
       alive: true, deathDay: null, estateTransferred: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
       knowledgeProfile: createKnowledgeProfile(0.05), learningHistory: [], learningSequence: 0, reliability: 0.75,
       employer: -1, employmentSpellSequence: 0, rota: null, scheduledShiftsWorked: 0, scheduledShiftsElapsed: 0,
-      dailyPlan: null, currentPrimaryActivity: null, sleepDebt: 0, lastSleepQuality: null, sleepSequence: 0, sleepHistory: [],
+      dailyPlan: null, dependentHealthPlan: null, currentPrimaryActivity: null, sleepDebt: 0, lastSleepQuality: null, sleepSequence: 0, sleepHistory: [],
       jobApplicationFirm: -1, relationships: {}, socialCapacity: 0, lastSocialDay: 0, hungryDays: 0, rentArrears: 0,
       housed: residentialGuardian.housed, health: 0.75, stress: 0, esteemBaseline: 0, motivationProfile: createMotivationProfile(this.seed, id),
       dividendPreference: 0, ownerRecoveryThreshold: 0, growth: 0, attended: false, scarcityError: false, missedWork: 0,
@@ -2994,8 +2995,20 @@ export class TownSimulation {
     if (this.schedulesEnabled) this.people.forEach((person) => {
       if (!person.alive || person.attended || person.dailyPlan?.day !== this.day) return;
       const activity = person.dailyPlan.workday;
+      if (activity.status !== "planned") return;
       let result = { completed: true };
       if (activity.activity === "clinic") result = this.executePlannedClinic(person, this.firms[activity.firmId]);
+      else if (activity.activity === "dependent-clinic") {
+        const dependent = this.people[activity.dependentId];
+        result = person.id === activity.guardianId
+          ? this.executeDependentHealthCare(dependent, person, this.firms[activity.firmId], "clinic")
+          : { completed: false, failure: "guardian was unavailable for the shared clinic visit" };
+        if (dependent?.dailyPlan?.day === this.day) {
+          dependent.dailyPlan.workday.status = result.completed ? "completed" : "failed";
+          dependent.dailyPlan.workday.failureReason = result.failure ?? null;
+          dependent.currentPrimaryActivity = { day: this.day, block: "Workday", action: "dependent-clinic", firmId: activity.firmId };
+        }
+      }
       else if (activity.activity === "school") result = this.executePlannedSchool(person, this.firms[activity.firmId]);
       else if (activity.activity === "self-study") this.applyFreePersonalActivity(person, "self-study", "Production");
       else if (activity.activity === "rest") this.applyFreePersonalActivity(person, "rest", "Production");
@@ -3513,6 +3526,140 @@ export class TownSimulation {
     return false;
   }
 
+  guardianHealthOptions(guardian, dependent) {
+    const availableFunds = roundMoney(dependent.restrictedInheritance + guardian.cash);
+    const options = [];
+    const apothecary = this.firms.find((firm) => firm.active && firm.archetypeId === "apothecary");
+    const clinic = this.firms.find((firm) => firm.active && firm.archetypeId === "clinic");
+    if (dependent.health < HEALTH_TREATMENT_THRESHOLD && this.firmServiceAvailable(apothecary, "Evening")) {
+      if (availableFunds + 1e-9 >= apothecary.price) options.push(Object.freeze({
+        action: `buy-dependent-medicine:${apothecary.id}`,
+        source: "medicine",
+        firmId: apothecary.id,
+        expectedRecovery: HEALTH_TREATMENT_RECOVERY,
+        costPressure: clamp(apothecary.price / Math.max(apothecary.price, availableFunds)),
+        capacityAvailable: apothecary.inventory >= 1 && apothecary.transactionsToday < this.transactionCapacity(apothecary),
+      }));
+      else apothecary.priceRejectionsToday += 1;
+    }
+    const guardianCommittedToClinic = guardian.dailyPlan?.day === this.day && guardian.dailyPlan.workday?.activity === "dependent-clinic";
+    if (!guardianCommittedToClinic && dependent.health < CLINIC_TREATMENT_THRESHOLD && this.firmServiceAvailable(clinic, "Workday")) {
+      if (availableFunds + 1e-9 >= clinic.price) options.push(Object.freeze({
+        action: `buy-dependent-clinic:${clinic.id}`,
+        source: "clinic",
+        firmId: clinic.id,
+        expectedRecovery: CLINIC_TREATMENT_RECOVERY,
+        costPressure: clamp(clinic.price / Math.max(clinic.price, availableFunds)),
+        capacityAvailable: clinic.inventory >= 1 && clinic.transactionsToday < this.transactionCapacity(clinic),
+      }));
+      else clinic.priceRejectionsToday += 1;
+    }
+    return options;
+  }
+
+  planGuardianHealthCare(guardian, dependent) {
+    const options = this.guardianHealthOptions(guardian, dependent);
+    const employer = guardian.employer >= 0 ? this.firms[guardian.employer] : null;
+    const scheduled = guardian.dailyPlan?.day === this.day && guardian.dailyPlan.workday?.activity === "shift";
+    const wage = scheduled && employer ? this.scheduledShiftWage(employer) : 0;
+    const observation = Object.freeze({
+      kind: "dependent-health-care",
+      citizenId: guardian.id,
+      citizenName: guardian.name,
+      dependentId: dependent.id,
+      dependentName: dependent.name,
+      stress: guardian.stress,
+      healthNeed: clamp((1 - dependent.health) + dependent.hungryDays * 0.15),
+      careScarcity: clamp(1 - this.dependentCareRunway(guardian) / 12),
+      lostWagePressure: scheduled ? wage / Math.max(1, guardian.cash + wage) : 0,
+      profile: { ...guardian.motivationProfile },
+      options,
+    });
+    const legalActions = Object.freeze(["defer-dependent-health", ...options.map((option) => option.action)]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal dependent-health action`);
+    this.recordDecision(guardian, observation, legalActions, decision, "Planning");
+    const option = options.find((candidate) => candidate.action === decision.action);
+    if (!option) return false;
+    dependent.dependentHealthPlan = { day: this.day, guardianId: guardian.id, firmId: option.firmId, source: option.source, status: "planned", failureReason: null };
+    if (option.source === "clinic") {
+      const activity = { action: option.action, activity: "dependent-clinic", guardianId: guardian.id, dependentId: dependent.id, firmId: option.firmId, firmName: this.firms[option.firmId].name, status: "planned", failureReason: null };
+      guardian.dailyPlan = { day: this.day, workday: activity };
+      dependent.dailyPlan = { day: this.day, workday: { ...activity } };
+    }
+    return true;
+  }
+
+  planDependentHealthCare(dependent) {
+    dependent.dependentHealthPlan = null;
+    if (!dependent.alive || !dependent.isDependent || dependent.health >= HEALTH_TREATMENT_THRESHOLD) return false;
+    const guardians = this.reconcileDependentCare(dependent).sort((a, b) => (
+      Number(b.id === dependent.residentialGuardianId) - Number(a.id === dependent.residentialGuardianId) || a.id - b.id
+    ));
+    return guardians.some((guardian) => this.planGuardianHealthCare(guardian, dependent));
+  }
+
+  buyDependentHealthCare(dependent, guardian, firm, source) {
+    this.reconcileInventoryBatches(firm);
+    const price = roundMoney(firm?.price ?? 0);
+    const restrictedContribution = roundMoney(Math.min(dependent.restrictedInheritance, price));
+    const guardianContribution = roundMoney(price - restrictedContribution);
+    const window = source === "clinic" ? "Workday" : "Evening";
+    if (!dependent.alive || !dependent.isDependent || !guardian?.alive || !firm?.active || firm.inventory < 1
+      || !this.firmServiceAvailable(firm, window) || guardian.cash + 1e-9 < guardianContribution
+      || firm.transactionsToday >= this.transactionCapacity(firm)) return false;
+    if (!this.requestTransaction(firm, dependent, source === "clinic" ? "dependent clinical care" : "dependent medicine")) return false;
+    const transactionBase = `dependent-health:${this.day}:${dependent.id}:${dependent.decisionSequence + 1}`;
+    if (restrictedContribution > 0) {
+      const before = dependent.restrictedInheritance;
+      const providerBefore = firm.cash;
+      dependent.restrictedInheritance = roundMoney(before - restrictedContribution);
+      firm.cash = roundMoney(firm.cash + restrictedContribution);
+      this.flows.push({ from: { kind: dependent.kind, id: dependent.id }, to: { kind: firm.kind, id: firm.id }, amount: restrictedContribution, phase: this.phase, ...temporalMetadata(this.day, this.phase) });
+      this.flows = this.flows.slice(-40);
+      this.ledger(dependent, { direction: "out", amount: restrictedContribution, text: `restricted care funds paid ${firm.name} for ${source}`, before, transactionId: `${transactionBase}:restricted` });
+      dependent.ledger[0].after = dependent.restrictedInheritance;
+      this.ledger(firm, { direction: "in", amount: restrictedContribution, text: `restricted care payment for ${dependent.name}`, before: providerBefore, transactionId: `${transactionBase}:restricted` });
+    }
+    if (guardianContribution > 0) {
+      const before = guardian.cash;
+      const providerBefore = firm.cash;
+      const paid = this.transfer(guardian, firm, guardianContribution, { exact: true });
+      if (paid !== guardianContribution) throw new Error("Atomic guardian health contribution failed");
+      this.ledger(guardian, { direction: "out", amount: paid, text: `paid ${firm.name} for ${dependent.name}'s ${source}`, before, transactionId: `${transactionBase}:guardian` });
+      this.ledger(firm, { direction: "in", amount: paid, text: `guardian payment from ${guardian.name} for ${dependent.name}`, before: providerBefore, transactionId: `${transactionBase}:guardian` });
+    }
+    const inventoryTaken = this.takeFirmInventory(firm, 1);
+    if (!inventoryTaken.length) throw new Error("Inventory changed during atomic dependent health purchase");
+    firm.sales = roundMoney(firm.sales + price);
+    firm.unitsSold += 1;
+    return true;
+  }
+
+  executeDependentHealthCare(dependent, guardian, firm, source) {
+    const plan = dependent.dependentHealthPlan;
+    if (!plan || plan.day !== this.day || plan.status !== "planned" || plan.source !== source) return { completed: false, failure: "dependent care was not planned" };
+    if (!this.buyDependentHealthCare(dependent, guardian, firm, source)) {
+      plan.status = "failed";
+      plan.failureReason = "provider, capacity, stock, or exact funding was unavailable";
+      this.note(dependent, `planned ${source} care failed because ${plan.failureReason}`, "bad");
+      return { completed: false, failure: plan.failureReason };
+    }
+    const beforeHealth = dependent.health;
+    if (source === "clinic") {
+      dependent.clinicalSeller = firm.id;
+      dependent.lastClinicalDay = this.day;
+      dependent.health = clamp(dependent.health + CLINIC_TREATMENT_RECOVERY, 0.08, 0.96);
+    } else {
+      dependent.healthSeller = firm.id;
+      dependent.lastTreatmentDay = this.day;
+      dependent.health = clamp(dependent.health + HEALTH_TREATMENT_RECOVERY, 0.08, 0.92);
+    }
+    plan.status = "completed";
+    this.note(dependent, `${guardian.name} arranged ${source} care that raised health from ${Math.round(beforeHealth * 100)}% to ${Math.round(dependent.health * 100)}%`, "good");
+    return { completed: true };
+  }
+
   foodPhase() {
     this.beginWelfareEnvelope();
     if (this.cooperationMode === "mutual-aid") this.runMutualAidExchange();
@@ -4018,6 +4165,10 @@ export class TownSimulation {
     const clinic = this.firms.find((firm) => this.firmServiceAvailable(firm, "Evening") && firm.archetypeId === "clinic" && firm.inventory >= 1);
     this.people.forEach((person) => {
       if (!person.alive) return;
+      if (person.isDependent && person.dependentHealthPlan?.day === this.day && person.dependentHealthPlan.source === "medicine" && person.dependentHealthPlan.status === "planned") {
+        const plan = person.dependentHealthPlan;
+        this.executeDependentHealthCare(person, this.people[plan.guardianId], this.firms[plan.firmId], "medicine");
+      }
       const receivedClinicalCare = this.schedulesEnabled ? false : this.considerClinicalCare(person, clinic);
       if (!receivedClinicalCare) this.considerHealthCare(person, apothecary);
       if (!this.schedulesEnabled) this.considerEducation(person, school);
@@ -5018,6 +5169,7 @@ export class TownSimulation {
     if (this.schedulesEnabled) {
       this.runJobMarket();
       this.people.forEach((person) => this.planWorkday(person));
+      this.people.forEach((person) => this.planDependentHealthCare(person));
     }
   }
 

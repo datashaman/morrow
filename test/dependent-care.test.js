@@ -1,14 +1,19 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MotivationCitizenPolicy } from "../src/citizen-policy.ts";
+import { OPPORTUNITY_OBSERVATION_DAYS } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
-const carePolicy = ({ actionForGuardian = () => null, acceptWelfare = true } = {}) => ({
+const carePolicy = ({ actionForGuardian = () => null, healthActionForGuardian = () => null, acceptWelfare = true } = {}) => ({
   id: "dependent-care-test",
   decide: ({ observation, legalActions }) => {
     if (observation.kind === "dependent-food-care") {
       const requested = actionForGuardian(observation, legalActions);
       return { action: requested && legalActions.includes(requested) ? requested : "defer-dependent-food", reasons: ["dependent care fixture"] };
+    }
+    if (observation.kind === "dependent-health-care") {
+      const requested = healthActionForGuardian(observation, legalActions);
+      return { action: requested && legalActions.includes(requested) ? requested : "defer-dependent-health", reasons: ["dependent health fixture"] };
     }
     if (observation.kind === "welfare") return { action: acceptWelfare ? "accept-welfare" : "refuse-welfare", reasons: ["welfare fixture"] };
     return { action: legalActions[0], reasons: ["fixture default"] };
@@ -22,6 +27,23 @@ const careTown = (options = {}) => {
 };
 
 const availableFoodFirms = (town) => town.firms.filter((firm) => town.firmServiceAvailable(firm, "Evening") && firm.sector === "food").sort((a, b) => a.price - b.price);
+
+const healthCareTown = (healthActionForGuardian) => {
+  const town = new TownSimulation({ seed: 71, lifecycleEnabled: true, birthsEnabled: true, schedulesEnabled: true, citizenPolicy: carePolicy({ healthActionForGuardian }), policy: { shockRisk: 0 } });
+  town.people.forEach((person) => {
+    person.cash = 100;
+    person.health = 0.2;
+  });
+  town.initialMoney = town.totalMoney();
+  for (let offset = 0; offset < OPPORTUNITY_OBSERVATION_DAYS * 3; offset += 1) {
+    town.day = offset + 1;
+    town.observeFirmOpportunities();
+    town.planningPhase();
+    if (town.firms.some((firm) => firm.archetypeId === "apothecary") && town.firms.some((firm) => firm.archetypeId === "clinic")) break;
+  }
+  const dependent = town.createNewborn([0, 1]);
+  return { town, dependent, guardian: town.people[0], apothecary: town.firms.find((firm) => firm.archetypeId === "apothecary"), clinic: town.firms.find((firm) => firm.archetypeId === "clinic") };
+};
 
 test("motivation-v3 can provide a meal or defer a capacity-blocked purchase", () => {
   const policy = new MotivationCitizenPolicy();
@@ -64,6 +86,75 @@ test("motivation-v3 weighs dependent medicine against clinic cost and a guardian
   assert.equal(policy.decide({ observation: { ...base, options: [medicine, clinic] }, legalActions: actions, random: () => 0 }).action, clinic.action);
   assert.equal(policy.decide({ observation: { ...base, healthNeed: 0.2, options: [medicine, { ...clinic, capacityAvailable: false }] }, legalActions: actions, random: () => 0 }).action, medicine.action);
   assert.equal(policy.decide({ observation: { ...base, healthNeed: 0, careScarcity: 1, stress: 1, options: [{ ...medicine, capacityAvailable: false }] }, legalActions: ["defer-dependent-health", medicine.action], random: () => 0 }).action, "defer-dependent-health");
+});
+
+test("restricted inheritance and guardian cash exact-pay dependent medicine without consuming Workday", () => {
+  const { town, dependent, guardian, apothecary } = healthCareTown((_observation, legal) => legal.find((action) => action.startsWith("buy-dependent-medicine:")));
+  dependent.health = 0.5;
+  dependent.restrictedInheritance = 1.25;
+  guardian.cash = apothecary.price - 1.25;
+  apothecary.inventory = 2;
+  apothecary.transactionsToday = 0;
+  guardian.dailyPlan = { day: town.day, workday: { action: "daytime-rest", activity: "rest", status: "planned", failureReason: null } };
+  const workdayBefore = structuredClone(guardian.dailyPlan);
+  town.initialMoney = town.totalMoney();
+  const moneyBefore = town.totalMoney();
+  const providerBefore = apothecary.cash;
+
+  assert.equal(town.planDependentHealthCare(dependent), true);
+  assert.deepEqual(guardian.dailyPlan, workdayBefore);
+  assert.equal(town.executeDependentHealthCare(dependent, guardian, apothecary, "medicine").completed, true);
+
+  assert.equal(dependent.restrictedInheritance, 0);
+  assert.equal(guardian.cash, 0);
+  assert.equal(apothecary.cash, providerBefore + apothecary.price);
+  assert.equal(dependent.healthSeller, apothecary.id);
+  assert.equal(dependent.health, 0.58);
+  assert.equal(town.totalMoney(), moneyBefore);
+});
+
+test("a dependent clinic visit replaces the guardian's shift and consumes both Workdays even when care fails", () => {
+  const { town, dependent, guardian, clinic } = healthCareTown((_observation, legal) => legal.find((action) => action.startsWith("buy-dependent-clinic:")));
+  dependent.health = 0.2;
+  dependent.restrictedInheritance = clinic.price;
+  clinic.inventory = 1;
+  clinic.transactionsToday = town.transactionCapacity(clinic);
+  const employer = town.firms[guardian.employer];
+  while (!town.firmOpenOnDay(employer)) town.day += 1;
+  guardian.rota = Object.freeze({ ...guardian.rota, weekdayIndices: Object.freeze([0, 1, 2, 3, 4, 5, 6]) });
+  assert.equal(town.scheduledForShift(guardian, employer), true);
+  guardian.dailyPlan = { day: town.day, workday: { action: `work-shift:${employer.id}`, activity: "shift", firmId: employer.id, status: "planned", failureReason: null } };
+  const moneyBefore = town.totalMoney();
+  const missedBefore = guardian.missedWork;
+
+  assert.equal(town.planDependentHealthCare(dependent), true);
+  assert.equal(guardian.dailyPlan.workday.activity, "dependent-clinic");
+  assert.equal(dependent.dailyPlan.workday.activity, "dependent-clinic");
+  town.productionPhase();
+
+  assert.equal(guardian.missedWork, missedBefore + 1);
+  assert.equal(guardian.dailyPlan.workday.status, "failed");
+  assert.equal(dependent.dailyPlan.workday.status, "failed");
+  assert.equal(guardian.currentPrimaryActivity.action, "dependent-clinic");
+  assert.equal(dependent.currentPrimaryActivity.action, "dependent-clinic");
+  assert.equal(dependent.restrictedInheritance, clinic.price);
+  assert.equal(town.totalMoney(), moneyBefore);
+});
+
+test("one guardian cannot schedule two dependent clinic visits into one Workday", () => {
+  const { town, dependent, guardian, clinic } = healthCareTown((_observation, legal) => legal.find((action) => action.startsWith("buy-dependent-clinic:")));
+  const sibling = town.createNewborn([guardian.id]);
+  dependent.health = 0.2;
+  sibling.health = 0.2;
+  dependent.restrictedInheritance = clinic.price;
+  sibling.restrictedInheritance = clinic.price;
+  clinic.inventory = 2;
+  clinic.transactionsToday = 0;
+
+  assert.equal(town.planDependentHealthCare(dependent), true);
+  assert.equal(town.planDependentHealthCare(sibling), false);
+  assert.equal(guardian.dailyPlan.workday.dependentId, dependent.id);
+  assert.equal(sibling.dependentHealthPlan, null);
 });
 
 test("a dependent follows a housed living guardian and enters treasury guardianship only when none remain", () => {
