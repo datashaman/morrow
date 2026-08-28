@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { LIFECYCLE_STAGE_START_DAYS, LIFECYCLE_STAGES } from "../src/config.js";
+import { MotivationCitizenPolicy } from "../src/citizen-policy.js";
+import { DEFAULT_LATENT_FIRM_NAMES, LIFECYCLE_STAGE_START_DAYS, LIFECYCLE_STAGES, PHASES } from "../src/config.js";
 import { lifecycleStageForAge, TownSimulation } from "../src/simulation.js";
 
 test("calendar ages map to the documented bounded lifecycle stages", () => {
@@ -168,4 +169,31 @@ test("a citizen reaching adulthood can enter the same Monday job market", () => 
   assert.equal(citizen.employer, firm.id);
   assert.equal(citizen.decisions.some((decision) => decision.kind === "job-search"), true);
   assert.equal(citizen.decisions.some((decision) => decision.kind === "job-offer"), true);
+});
+
+test("settlement displacement immediately synchronizes a dependent's residence with their guardian", () => {
+  const town = new TownSimulation({
+    seed: 101,
+    citizenPolicy: new MotivationCitizenPolicy(),
+    latentFirmNames: [...DEFAULT_LATENT_FIRM_NAMES],
+    housingCapacityEnabled: true,
+    transportEnabled: true,
+    schedulesEnabled: true,
+    sleepEnabled: true,
+    cooperationMode: "mutual-aid",
+    welfareMode: "combined",
+    lifecycleEnabled: true,
+    birthsEnabled: true,
+  });
+
+  for (let elapsed = 0; elapsed < 48 && !town.isExtinct(); elapsed += 1) {
+    for (let phase = 0; phase < PHASES.length; phase += 1) town.step();
+  }
+
+  const ari = town.people.find((person) => person.name === "Ari");
+  const guardian = town.people[ari.residentialGuardianId];
+  assert.equal(town.day - 1, 48);
+  assert.equal(ari.isDependent, true);
+  assert.equal(ari.housed, guardian.housed);
+  town.assertInvariants();
 });

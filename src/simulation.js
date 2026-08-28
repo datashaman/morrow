@@ -5000,6 +5000,7 @@ export class TownSimulation {
       this.assessNeeds(person);
     });
     this.dieCohort(deathCohort);
+    if (this.lifecycleEnabled) this.reconcileAllDependentCare();
     this.observeFirmOpportunities();
     this.day += 1;
   }
