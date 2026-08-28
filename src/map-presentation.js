@@ -1,6 +1,7 @@
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value));
 
 export const COMMON_PARK = Object.freeze({ x: 0.5, y: 0.52, radiusX: 0.14, radiusY: 0.12 });
+export const CEMETERY = Object.freeze({ x: 0.88, y: 0.82, widthRatio: 0.16, maxWidth: 120, height: 90 });
 
 export function firmLandmarkLayout(firm, { width, height = 1, nameWidth = 0, metaWidth = 0 }) {
   const landmarkWidth = Math.max(120, Math.ceil(nameWidth + 24), Math.ceil(metaWidth + 24));

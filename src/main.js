@@ -5,6 +5,7 @@ import { describeContract, describePerishableInventory, describePipeline, descri
 import { firmSelectorOptions, resolveSelectedFirmId, staffingEvidence } from "./firm-detail-presentation.js";
 import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-presentation.js";
 import {
+  CEMETERY,
   COMMON_PARK,
   deceasedMarkerSegments,
   employeeOrbitTarget,
@@ -178,7 +179,7 @@ let paused = false;
 let lastStep = performance.now();
 const canvas = document.querySelector("#town");
 const context = canvas.getContext("2d");
-const cemetery = { x: 0.88, y: 0.82, columns: 5 };
+const cemetery = { ...CEMETERY, columns: 5 };
 const commonPark = COMMON_PARK;
 let firmLandmarks = new Map();
 
@@ -726,8 +727,8 @@ function drawTown() {
 
   const cemeteryX = cemetery.x * width;
   const cemeteryY = cemetery.y * height;
-  const cemeteryWidth = Math.min(120, width * 0.16);
-  const cemeteryHeight = 90;
+  const cemeteryWidth = Math.min(cemetery.maxWidth, width * cemetery.widthRatio);
+  const cemeteryHeight = cemetery.height;
   context.strokeStyle = colors.muted;
   context.lineWidth = 1;
   context.globalAlpha = 0.7;

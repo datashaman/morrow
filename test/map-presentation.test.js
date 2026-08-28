@@ -4,6 +4,7 @@ import { FIRMS } from "../src/config.js";
 import {
   applicantFirmId,
   applicantOrbitTarget,
+  CEMETERY,
   COMMON_PARK,
   deceasedMarkerSegments,
   employeeOrbitTarget,
@@ -130,6 +131,27 @@ test("firm landmarks remain outside the Common Park at supported map sizes", () 
         metaWidth: 122,
       });
       assert.equal(landmarkClearsPark(landmark, viewport, COMMON_PARK), true, `${firm.name} overlaps the Common Park at ${viewport.width}×${viewport.height}`);
+    });
+  });
+});
+
+test("firm landmarks remain outside the cemetery at supported map sizes", () => {
+  [{ width: 550, height: 390 }, { width: 1200, height: 520 }].forEach((viewport) => {
+    const cemetery = {
+      centerX: CEMETERY.x * viewport.width,
+      centerY: CEMETERY.y * viewport.height,
+      width: Math.min(CEMETERY.maxWidth, viewport.width * CEMETERY.widthRatio),
+      height: CEMETERY.height,
+    };
+    FIRMS.forEach((firm) => {
+      const landmark = firmLandmarkLayout(firm, {
+        ...viewport,
+        nameWidth: firm.name.length * 8,
+        metaWidth: 122,
+      });
+      const separatedHorizontally = Math.abs(landmark.centerX - cemetery.centerX) >= (landmark.width + cemetery.width) / 2 + 8;
+      const separatedVertically = Math.abs(landmark.centerY - cemetery.centerY) >= (landmark.height + cemetery.height) / 2 + 8;
+      assert.ok(separatedHorizontally || separatedVertically, `${firm.name} overlaps the cemetery at ${viewport.width}×${viewport.height}`);
     });
   });
 });
