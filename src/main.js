@@ -1,6 +1,6 @@
 import "./styles.css";
 import { DEFAULT_LATENT_FIRM_NAMES, PHASES, PRODUCTS } from "./config.js";
-import { activityItems } from "./activity.js";
+import { activityItems, mutualAidDescription } from "./activity.js";
 import { describeContract, describePerishableInventory, describePipeline, describeProcessing } from "./firm-presentation.js";
 import { firmSelectorOptions, resolveSelectedFirmId, staffingEvidence } from "./firm-detail-presentation.js";
 import { describeFirmOpportunity, firmInstanceLabel } from "./firm-opportunity-presentation.js";
@@ -79,6 +79,7 @@ app.innerHTML = `
             <option value="all" selected>All</option>
             <option value="transactions">Transactions</option>
             <option value="events">Life events</option>
+            <option value="mutual-aid">Mutual aid</option>
           </select>
         </label>
       </div>
@@ -239,6 +240,8 @@ const staticActionNames = {
   "skip-food": "Skipped food",
   "defer-housing": "Deferred housing payment",
   "remain-unhoused": "Remained unhoused",
+  "keep-meal": "Kept surplus food",
+  "refuse-mutual-aid": "Refused all offered meals",
 };
 
 function actionName(decision, action) {
@@ -256,6 +259,8 @@ function actionName(decision, action) {
   if (action.startsWith("pay-housing:")) return `Tried housing payment to ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
   if (action.startsWith("secure-housing:")) return `Tried to secure housing through ${option?.firmName ?? "the provider"} (${money(option?.totalPrice ?? 0)}, ${capacity})`;
   if (action.startsWith("apply-job:")) return `Applied to ${option?.firmName ?? "an employer"} (${money(option?.offeredWage ?? 0)} wage)`;
+  if (action.startsWith("offer-meal:")) return `Offered a meal to ${option?.recipientName ?? "a close friend"}`;
+  if (action.startsWith("accept-meal:")) return `Accepted a meal from ${option?.giverName ?? "a close friend"}`;
   return action;
 }
 
@@ -266,9 +271,17 @@ function renderActivity(entity, filter, stream) {
   const activity = activityItems(entity, filter);
   stream.replaceChildren(...activity.map((entry) => {
     const item = document.createElement("li");
-    item.className = entry.type === "transaction" ? entry.direction : entry.type === "knowledge-effect" ? "knowledge-effect" : `event ${entry.kind}`;
+    item.className = entry.type === "transaction"
+      ? entry.direction
+      : entry.type === "mutual-aid"
+        ? `mutual-aid ${entry.direction}`
+        : entry.type === "knowledge-effect"
+          ? "knowledge-effect"
+          : `event ${entry.kind}`;
     item.innerHTML = entry.type === "transaction"
       ? `<time>${formatTemporalRecord(entry)}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
+      : entry.type === "mutual-aid"
+        ? `<time>${formatTemporalRecord(entry)}</time><span>${mutualAidDescription(entry)}</span><b>Mutual aid</b>`
       : entry.type === "knowledge-effect"
         ? `<time>${formatTemporalRecord(entry)}</time><span>${knowledgeEffectDescription(entry)}</span><b>Knowledge effect</b>`
         : `<time>${formatTemporalRecord(entry)}</time><span>${entry.text}</span><b>Life event</b>`;
@@ -281,6 +294,8 @@ function renderActivity(entity, filter, stream) {
       ? "No transactions yet"
       : filter === "events"
         ? "No life events yet"
+        : filter === "mutual-aid"
+          ? "No mutual-aid activity yet."
         : filter === "knowledge-effects"
           ? "No knowledge effects have been recorded for this firm."
           : "No activity yet";
@@ -306,7 +321,10 @@ function renderDecisions(entity, stream) {
     const shadow = decision.shadow
       ? ` · ${neuralLabel}: ${actionName(decision, decision.shadow.action)}${decision.shadow.diverged ? " (diverged from motivation fallback)" : " (agreed with motivation fallback)"} · unmasked ${decision.shadow.unmaskedPreference}${decision.shadow.invalidPreferenceBeforeMask ? " (illegal before masking)" : ""}`
       : "";
-    item.innerHTML = `<time>${formatTemporalRecord(decision)}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""}${shadow} · ${decision.policy}</small>`;
+    const application = decision.application
+      ? ` · Application: ${decision.application.applied ? `offer ${decision.application.offerId} transferred` : `offer ${decision.application.offerId} failed revalidation because ${decision.application.failure}`}`
+      : "";
+    item.innerHTML = `<time>${formatTemporalRecord(decision)}</time><b>${actionName(decision, decision.chosenAction)}</b><span>${decision.reasons.join(" ")}</span><small>Alternatives: ${alternatives}${evidence ? ` · Evidence: ${evidence}` : ""}${application}${shadow} · ${decision.policy}</small>`;
     return item;
   }));
   if (!entity.decisions.length) {

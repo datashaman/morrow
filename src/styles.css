@@ -84,6 +84,8 @@ select { padding: 0.45rem 2rem 0.45rem 0.6rem; }
 .activity-stream time, .activity-stream b { color: var(--muted); font-weight: 500; font-variant-numeric: tabular-nums; }
 .activity-stream .in span { color: var(--accent); }
 .activity-stream .out span { color: var(--cash); }
+.activity-stream .mutual-aid.in span { color: var(--accent); }
+.activity-stream .mutual-aid.out span { color: var(--cash); }
 .activity-stream .event span { color: var(--text); }
 .activity-stream .event.bad span { color: var(--danger); }
 .activity-stream .knowledge-effect span { color: var(--accent); }
