@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MotivationCitizenPolicy } from "../src/citizen-policy.ts";
+import { KNOWLEDGE_VOCATIONAL_DOMAINS } from "../src/config.js";
+import { TownSimulation } from "../src/simulation.js";
 
 const profile = { comfort: 1, connection: 1, mastery: 1, security: 1, foodQuality: 1, planning: 1, avoidance: 1 };
 
@@ -60,4 +62,25 @@ test("school funding and attendance ties retain the documented defer and miss ac
 
   assert.equal(policy.decide({ observation: funding, legalActions: ["defer-dependent-school-funding", "fund-dependent-school:7"], random: () => 0 }).action, "defer-dependent-school-funding");
   assert.equal(policy.decide({ observation: attendance, legalActions: ["miss-dependent-school", "attend-dependent-school:7"], random: () => 0 }).action, "miss-dependent-school");
+});
+
+test("entering the student stage selects one stable canonical trade domain without consuming town randomness", () => {
+  const first = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const second = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const a = first.createNewborn([0, 1]);
+  const b = second.createNewborn([0, 1]);
+  first.day = a.birthDay + 84;
+  second.day = b.birthDay + 84;
+
+  first.resolveLifecycleStages();
+  second.resolveLifecycleStages();
+
+  assert.equal(KNOWLEDGE_VOCATIONAL_DOMAINS.includes(a.studyDomain), true);
+  assert.equal(a.studyDomain, b.studyDomain);
+  assert.equal(a.studyDomainSelectionDay, first.day);
+  const selected = a.studyDomain;
+  first.day += 1;
+  first.resolveLifecycleStages();
+  assert.equal(a.studyDomain, selected);
+  assert.equal(a.lifecycleHistory.filter((entry) => entry.type === "study-domain-selected").length, 1);
 });

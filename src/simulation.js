@@ -46,6 +46,7 @@ import {
   INVESTMENT_EVALUATION_DAYS,
   INVESTMENT_RECRUITMENT_DAYS,
   INVESTMENT_WAGE_RESERVE_DAYS,
+  KNOWLEDGE_VOCATIONAL_DOMAINS,
   LEGACY_OPPORTUNITY_OBSERVATION_DAYS,
   LEGACY_OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
   LIFECYCLE_STAGES,
@@ -350,6 +351,8 @@ export class TownSimulation {
         transitionHostId: null,
         transitionResidenceEndDay: null,
         restrictedInheritance: 0,
+        studyDomain: null,
+        studyDomainSelectionDay: null,
         lifecycleSequence: 0,
         lifecycleHistory: [],
         partnerId: null,
@@ -1727,7 +1730,7 @@ export class TownSimulation {
     const newborn = {
       kind: "person", id, name, lifecycleStage: "infant", birthDay: this.day, ageDays: 0, isDependent: true,
       parentIds: [...parentIds].sort((a, b) => a - b), guardianIds: guardians.map((guardian) => guardian.id), formerGuardianIds: [],
-      residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, transitionHostId: null, transitionResidenceEndDay: null, restrictedInheritance: 0, lifecycleSequence: 1,
+      residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, transitionHostId: null, transitionResidenceEndDay: null, restrictedInheritance: 0, studyDomain: null, studyDomainSelectionDay: null, lifecycleSequence: 1,
       lifecycleHistory: [{ day: this.day, ...temporalMetadata(this.day, "Planning"), sequence: 1, type: "birth", text: `born to ${parentIds.map((parentId) => this.people[parentId].name).join(" and ")}`, counterpartId: null, counterpartName: null, reason: "completed gestation" }],
       partnerId: null, partnershipStartDay: null, lastPartnershipEndDay: null,
       alive: true, deathDay: null, estateTransferred: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
@@ -1833,6 +1836,7 @@ export class TownSimulation {
       person.lifecycleStage = nextStage;
       person.isDependent = nextStage !== "adult";
       this.recordLifecycle(person, "stage-changed", `entered the ${nextStage} stage`, null, `calendar age reached ${person.ageDays} days`);
+      if (nextStage === "student" && person.studyDomain === null) this.selectStudentDomain(person);
       if (nextStage === "adult") {
         const formerResidentialGuardian = this.people[person.residentialGuardianId];
         const formerGuardians = person.guardianIds.map((id) => this.people[id]).filter(Boolean).sort((a, b) => a.id - b.id);
@@ -1864,6 +1868,31 @@ export class TownSimulation {
       transitions.push(Object.freeze({ citizenId: person.id, previousStage, stage: nextStage, ageDays: person.ageDays }));
     });
     return transitions;
+  }
+
+  studentDomainAffinity(citizenId, domainIndex) {
+    return createRandom((this.seed ^ Math.imul(citizenId + 1, 0x9e3779b1) ^ Math.imul(domainIndex + 1, 0x85ebca6b)) >>> 0)();
+  }
+
+  selectStudentDomain(person) {
+    if (!person?.alive || person.lifecycleStage !== "student" || person.studyDomain !== null) return person?.studyDomain ?? null;
+    const vacancies = Object.fromEntries(KNOWLEDGE_VOCATIONAL_DOMAINS.map((domain) => [domain, 0]));
+    this.firms.filter((firm) => firm.active).forEach((firm) => {
+      const funded = Math.max(0, firm.targetStaff - firm.employees.length);
+      firm.knowledge.domains.forEach(({ id }) => { vacancies[id] += funded; });
+    });
+    const total = Object.values(vacancies).reduce((sum, count) => sum + count, 0);
+    const scored = KNOWLEDGE_VOCATIONAL_DOMAINS.map((domain, index) => ({
+      domain,
+      score: person.motivationProfile.planning * (vacancies[domain] / Math.max(1, total)) * 0.55
+        + person.motivationProfile.mastery * 0.25
+        + this.studentDomainAffinity(person.id, index) * 0.35,
+    }));
+    const selected = scored.reduce((best, candidate) => candidate.score > best.score ? candidate : best);
+    person.studyDomain = selected.domain;
+    person.studyDomainSelectionDay = this.day;
+    this.recordLifecycle(person, "study-domain-selected", `selected ${selected.domain} for student study`, null, "vacancy opportunity, motivation, and stable affinity");
+    return selected.domain;
   }
 
   resolveGestations() {
