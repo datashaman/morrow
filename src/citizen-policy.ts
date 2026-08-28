@@ -21,8 +21,9 @@ export type MutualAidAction = "keep-meals" | "refuse-all-meal-gifts" | `offer-me
 export type WelfareAction = "refuse-welfare" | "accept-welfare";
 export type PartnershipAction = "remain-single" | "continue-partnership" | "separate-partnership" | "decline-partnership" | `propose-partnership:${number}` | `accept-partnership:${number}`;
 export type BirthAction = "wait-for-child" | "try-for-child";
+export type DependentFoodAction = "defer-dependent-food" | `transfer-dependent-meal:${number}` | `buy-dependent-food:${number}`;
 export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
-export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | WelfareAction | PartnershipAction | BirthAction | OwnerAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | WelfareAction | PartnershipAction | BirthAction | DependentFoodAction | OwnerAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -358,6 +359,30 @@ export type BirthObservation = Readonly<{
   profile: MotivationProfile;
 }>;
 
+export type DependentFoodOption = Readonly<{
+  action: `transfer-dependent-meal:${number}` | `buy-dependent-food:${number}`;
+  source: "pantry" | "seller";
+  mealQuality: number;
+  spoilagePressure: number;
+  reserveCoverage: number;
+  costPressure: number;
+  capacityAvailable: boolean;
+}>;
+
+export type DependentFoodObservation = Readonly<{
+  kind: "dependent-food-care";
+  citizenId: number;
+  citizenName: string;
+  dependentId: number;
+  dependentName: string;
+  stress: number;
+  dependentNeed: number;
+  guardianSelfNeed: number;
+  careScarcity: number;
+  profile: MotivationProfile;
+  options: readonly DependentFoodOption[];
+}>;
+
 export type OwnerOption = Readonly<{
   action: OwnerAction;
   label: string;
@@ -387,7 +412,7 @@ export type OwnerObservation = Readonly<{
   options: readonly OwnerOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | WelfareObservation | PartnershipObservation | BirthObservation | OwnerObservation;
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | WelfareObservation | PartnershipObservation | BirthObservation | DependentFoodObservation | OwnerObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -514,6 +539,8 @@ export class RuleCitizenPolicy implements CitizenPolicy {
           : "decline-partnership";
     } else if (observation.kind === "birth-attempt") {
       action = "wait-for-child";
+    } else if (observation.kind === "dependent-food-care") {
+      action = observation.options[0]?.action ?? "defer-dependent-food";
     } else if (observation.kind === "owner") {
       if (observation.domain === "wage") {
         const waive = observation.options.find((option) => option.action === "waive-owner-wage");
@@ -556,6 +583,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     if (input.observation.kind === "welfare") return this.decideWelfare(input.observation, input.legalActions);
     if (input.observation.kind === "partnership") return this.decidePartnership(input.observation, input.legalActions);
     if (input.observation.kind === "birth-attempt") return this.decideBirthAttempt(input.observation, input.legalActions);
+    if (input.observation.kind === "dependent-food-care") return this.decideDependentFood(input.observation, input.legalActions);
     if (input.observation.kind === "owner") return this.decideOwner(input.observation, input.legalActions);
 
     const { observation, legalActions } = input;
@@ -706,6 +734,23 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
         + profile.planning * observation.careLoad * 0.25,
     };
     return this.highestScoringDecision(legalActions, scores, "birth attempt");
+  }
+
+  decideDependentFood(observation: DependentFoodObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const { profile } = observation;
+    const scores: Record<string, number> = {
+      "defer-dependent-food": 0.08 + profile.avoidance * observation.stress * (0.25 + observation.careScarcity * 0.45),
+    };
+    observation.options.forEach((option) => {
+      scores[option.action] = option.source === "pantry"
+        ? 0.75 + observation.dependentNeed * 0.9 + profile.connection * 0.35
+          + profile.foodQuality * option.mealQuality * 0.3 + profile.planning * option.spoilagePressure * 0.25
+          - profile.security * (observation.guardianSelfNeed * 0.65 + observation.careScarcity * 0.2)
+        : 0.75 + observation.dependentNeed * 0.9 + profile.connection * 0.3
+          + profile.foodQuality * option.mealQuality * 0.35 + profile.planning * option.reserveCoverage * 0.45
+          - profile.security * option.costPressure * 0.8 - (option.capacityAvailable ? 0 : 1.4);
+    });
+    return this.highestScoringDecision(legalActions, scores, "dependent food care");
   }
 
   decideOwner(observation: OwnerObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {

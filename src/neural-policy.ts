@@ -317,7 +317,7 @@ export class ShadowCitizenPolicy implements CitizenPolicy {
 
   decide(input: CitizenPolicyInput): CitizenPolicyDecision {
     const active = this.activePolicy.decide(input);
-    if (["health", "education", "clinical-care", "mutual-aid-offer", "mutual-aid-receive", "welfare"].includes(input.observation.kind)) return { ...active, policy: this.activePolicy.id } as CitizenPolicyDecision;
+    if (["health", "education", "clinical-care", "mutual-aid-offer", "mutual-aid-receive", "welfare", "dependent-food-care"].includes(input.observation.kind)) return { ...active, policy: this.activePolicy.id } as CitizenPolicyDecision;
     const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     const shadow: ShadowDecision = Object.freeze({
       policy: this.neuralPolicy.id,
@@ -411,7 +411,7 @@ export class GatedNeuralCitizenPolicy implements CitizenPolicy {
     const fallback = this.fallbackPolicy.decide(input);
     // These domains remain outside the personal-time activation gate.
     // Keep them under the auditable motivation fallback until a future gate covers them.
-    if (["health", "education", "clinical-care", "workday-plan", "sleep", "mutual-aid-offer", "mutual-aid-receive", "welfare", "partnership", "birth-attempt"].includes(input.observation.kind)) return { ...fallback, policy: this.fallbackPolicy.id } as CitizenPolicyDecision;
+    if (["health", "education", "clinical-care", "workday-plan", "sleep", "mutual-aid-offer", "mutual-aid-receive", "welfare", "partnership", "birth-attempt", "dependent-food-care"].includes(input.observation.kind)) return { ...fallback, policy: this.fallbackPolicy.id } as CitizenPolicyDecision;
     const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     const neuralControls = this.enabled && input.observation.kind === "personal-time";
     const shadow: ShadowDecision = Object.freeze({

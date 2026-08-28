@@ -346,6 +346,7 @@ export class TownSimulation {
         guardianIds: [],
         formerGuardianIds: [],
         residentialGuardianId: null,
+        treasuryGuardian: false,
         restrictedInheritance: 0,
         lifecycleSequence: 0,
         lifecycleHistory: [],
@@ -490,7 +491,7 @@ export class TownSimulation {
 
   totalMoney() {
     return roundMoney(
-      this.people.reduce((sum, person) => sum + person.cash, 0)
+      this.people.reduce((sum, person) => sum + person.cash + (person.restrictedInheritance ?? 0), 0)
       + this.firms.reduce((sum, firm) => sum + firm.cash, 0)
       + this.government.cash,
     );
@@ -1112,18 +1113,19 @@ export class TownSimulation {
     return null;
   }
 
-  assessWelfareOffer({ programme: programmeKey, recipient, provider, purpose, urgency }) {
+  assessWelfareOffer({ programme: programmeKey, recipient, decisionMaker = recipient, privatePayer = recipient, provider, purpose, urgency }) {
     const programme = WELFARE_PROGRAMMES[programmeKey];
     if (!programme) throw new Error(`Unknown welfare programme: ${programmeKey}`);
     this.welfareTransactionSequence += 1;
     const welfareId = `welfare:${this.day}:${this.welfareTransactionSequence}`;
     const completePrice = roundMoney(provider?.price ?? 0);
-    const privateCash = roundMoney(Math.min(recipient.cash, completePrice));
+    const restrictedCash = purpose === "food" ? Math.max(0, recipient.restrictedInheritance ?? 0) : 0;
+    const privateCash = roundMoney(Math.min(privatePayer.cash + restrictedCash, completePrice));
     const shortfall = roundMoney(Math.max(0, completePrice - privateCash));
     const envelopeBefore = this.remainingWelfareEnvelope();
     const treasuryBefore = roundMoney(this.government.cash);
     const providerFailure = this.directAssistanceProviderFailure(recipient, provider, purpose);
-    const eligible = recipient.alive && shortfall > 0 && !providerFailure;
+    const eligible = recipient.alive && decisionMaker.alive && privatePayer.alive && shortfall > 0 && !providerFailure;
     const baseEvidence = {
       welfareId,
       programme: programme.id,
@@ -1131,8 +1133,8 @@ export class TownSimulation {
       ruleVersion: programme.ruleVersion,
       recipientId: recipient.id,
       recipientName: recipient.name,
-      decisionMakerId: recipient.id,
-      decisionMakerName: recipient.name,
+      decisionMakerId: decisionMaker.id,
+      decisionMakerName: decisionMaker.name,
       providerId: provider?.id ?? null,
       providerName: provider?.name ?? null,
       purpose,
@@ -1163,16 +1165,16 @@ export class TownSimulation {
     const observation = Object.freeze({
       kind: "welfare",
       programme: programme.id,
-      citizenId: recipient.id,
-      citizenName: recipient.name,
-      stress: recipient.stress,
+      citizenId: decisionMaker.id,
+      citizenName: decisionMaker.name,
+      stress: decisionMaker.stress,
       urgency: clamp(urgency),
-      profile: { ...recipient.motivationProfile },
+      profile: { ...decisionMaker.motivationProfile },
     });
     const legalActions = Object.freeze(["refuse-welfare", "accept-welfare"]);
     const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
     if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal welfare action`);
-    this.recordDecision(recipient, observation, legalActions, decision, PHASES[this.phase]);
+    this.recordDecision(decisionMaker, observation, legalActions, decision, PHASES[this.phase]);
     const accepted = decision.action === "accept-welfare";
     const evidence = {
       ...baseEvidence,
@@ -1420,13 +1422,16 @@ export class TownSimulation {
     return Object.freeze({ completed: false, reason, evidence: Object.freeze(evidence) });
   }
 
-  settleDirectAssistance({ programme: programmeKey, recipient, decisionMaker = recipient, provider, purpose, completePrice = provider?.price, welfareId: offeredWelfareId = null }) {
+  settleDirectAssistance({ programme: programmeKey, recipient, decisionMaker = recipient, privatePayer = recipient, provider, purpose, completePrice = provider?.price, welfareId: offeredWelfareId = null }) {
     const programme = WELFARE_PROGRAMMES[programmeKey];
     if (!programme) throw new Error(`Unknown welfare programme: ${programmeKey}`);
     if (!offeredWelfareId) this.welfareTransactionSequence += 1;
     const welfareId = offeredWelfareId ?? `welfare:${this.day}:${this.welfareTransactionSequence}`;
     const price = roundMoney(completePrice ?? 0);
-    const privateCash = roundMoney(Math.min(Math.max(0, recipient?.cash ?? 0), price));
+    const restrictedCash = purpose === "food" ? Math.max(0, recipient?.restrictedInheritance ?? 0) : 0;
+    const restrictedContribution = roundMoney(Math.min(restrictedCash, price));
+    const payerContribution = roundMoney(Math.min(Math.max(0, privatePayer?.cash ?? 0), price - restrictedContribution));
+    const privateCash = roundMoney(restrictedContribution + payerContribution);
     const shortfall = roundMoney(Math.max(0, price - privateCash));
     const state = this.beginWelfareEnvelope();
     const envelopeBefore = this.remainingWelfareEnvelope();
@@ -1446,7 +1451,7 @@ export class TownSimulation {
       treasuryBefore,
     });
 
-    if (!recipient?.alive || !decisionMaker?.alive) return fail("recipient ineligible");
+    if (!recipient?.alive || (!decisionMaker?.alive && decisionMaker?.kind !== "government") || !privatePayer?.alive) return fail("recipient ineligible");
     const providerFailure = this.directAssistanceProviderFailure(recipient, provider, purpose);
     if (providerFailure) return fail(providerFailure);
     if (!(price > 0) || Math.abs(price - roundMoney(provider.price)) > 1e-9) {
@@ -1464,14 +1469,27 @@ export class TownSimulation {
     }
 
     const linkedTransactionIds = [];
-    if (privateCash > 0) {
-      const transactionId = `${welfareId}:private`;
-      const recipientBefore = recipient.cash;
+    if (restrictedContribution > 0) {
+      const transactionId = `${welfareId}:restricted`;
+      const recipientBefore = recipient.restrictedInheritance;
       const providerBefore = provider.cash;
-      const paid = this.transfer(recipient, provider, privateCash, { exact: true });
-      if (paid !== privateCash) throw new Error(`Atomic ${programme.name} private contribution failed`);
-      this.ledger(recipient, { direction: "out", amount: paid, text: `${programme.name} co-pay to ${provider.name}`, before: recipientBefore, transactionId, programme: programme.id });
-      this.ledger(provider, { direction: "in", amount: paid, text: `${programme.name} co-pay from ${recipient.name}`, before: providerBefore, transactionId, programme: programme.id });
+      recipient.restrictedInheritance = roundMoney(recipient.restrictedInheritance - restrictedContribution);
+      provider.cash = roundMoney(provider.cash + restrictedContribution);
+      this.flows.push({ from: { kind: recipient.kind, id: recipient.id }, to: { kind: provider.kind, id: provider.id }, amount: restrictedContribution, phase: this.phase, ...temporalMetadata(this.day, this.phase) });
+      this.flows = this.flows.slice(-40);
+      this.ledger(recipient, { direction: "out", amount: restrictedContribution, text: `${programme.name} restricted care contribution to ${provider.name}`, before: recipientBefore, transactionId, programme: programme.id });
+      recipient.ledger[0].after = recipient.restrictedInheritance;
+      this.ledger(provider, { direction: "in", amount: restrictedContribution, text: `${programme.name} restricted care contribution for ${recipient.name}`, before: providerBefore, transactionId, programme: programme.id });
+      linkedTransactionIds.push(transactionId);
+    }
+    if (payerContribution > 0) {
+      const transactionId = `${welfareId}:private`;
+      const recipientBefore = privatePayer.cash;
+      const providerBefore = provider.cash;
+      const paid = this.transfer(privatePayer, provider, payerContribution, { exact: true });
+      if (paid !== payerContribution) throw new Error(`Atomic ${programme.name} private contribution failed`);
+      this.ledger(privatePayer, { direction: "out", amount: paid, text: `${programme.name} co-pay to ${provider.name} for ${recipient.name}`, before: recipientBefore, transactionId, programme: programme.id });
+      this.ledger(provider, { direction: "in", amount: paid, text: `${programme.name} co-pay from ${privatePayer.name} for ${recipient.name}`, before: providerBefore, transactionId, programme: programme.id });
       linkedTransactionIds.push(transactionId);
     }
     const treasuryTransactionId = `${welfareId}:treasury`;
@@ -1561,9 +1579,10 @@ export class TownSimulation {
 
   recordLifecycle(person, type, text, counterpart = null, reason = null) {
     person.lifecycleSequence += 1;
+    const phase = PHASES[this.phase];
     const record = {
       day: this.day,
-      ...temporalMetadata(this.day, "Planning"),
+      ...temporalMetadata(this.day, phase),
       sequence: person.lifecycleSequence,
       type,
       text,
@@ -1693,7 +1712,7 @@ export class TownSimulation {
     const newborn = {
       kind: "person", id, name, lifecycleStage: "infant", birthDay: this.day, ageDays: 0, isDependent: true,
       parentIds: [...parentIds].sort((a, b) => a - b), guardianIds: guardians.map((guardian) => guardian.id), formerGuardianIds: [],
-      residentialGuardianId: residentialGuardian.id, restrictedInheritance: 0, lifecycleSequence: 1,
+      residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, restrictedInheritance: 0, lifecycleSequence: 1,
       lifecycleHistory: [{ day: this.day, ...temporalMetadata(this.day, "Planning"), sequence: 1, type: "birth", text: `born to ${parentIds.map((parentId) => this.people[parentId].name).join(" and ")}`, counterpartId: null, counterpartName: null, reason: "completed gestation" }],
       partnerId: null, partnershipStartDay: null, lastPartnershipEndDay: null,
       alive: true, deathDay: null, estateTransferred: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
@@ -1716,6 +1735,40 @@ export class TownSimulation {
     this.nextCitizenId += 1;
     parentIds.forEach((parentId) => this.recordLifecycle(this.people[parentId], "birth", `${newborn.name} was born`, newborn, "completed gestation"));
     return newborn;
+  }
+
+  reconcileDependentCare(dependent) {
+    if (!dependent?.alive || !dependent.isDependent) return [];
+    const previousGuardians = [...dependent.guardianIds];
+    const livingGuardians = previousGuardians
+      .map((id) => this.people[id])
+      .filter((guardian) => guardian?.alive && !guardian.isDependent)
+      .sort((a, b) => a.id - b.id);
+    const livingIds = livingGuardians.map((guardian) => guardian.id);
+    const removedIds = previousGuardians.filter((id) => !livingIds.includes(id));
+    if (removedIds.length) {
+      dependent.formerGuardianIds = [...new Set([...dependent.formerGuardianIds, ...removedIds])].sort((a, b) => a - b);
+      dependent.guardianIds = livingIds;
+      this.recordLifecycle(dependent, "guardianship-changed", removedIds.length === 1 ? "a guardian died" : "guardians died", null, "only living citizen guardians remain");
+    }
+    dependent.treasuryGuardian = livingGuardians.length === 0;
+    const preferred = livingGuardians.filter((guardian) => guardian.housed).sort((a, b) => a.id - b.id)[0]
+      ?? livingGuardians[0]
+      ?? null;
+    if (dependent.residentialGuardianId !== (preferred?.id ?? null)) {
+      dependent.residentialGuardianId = preferred?.id ?? null;
+      this.recordLifecycle(dependent, "residence-changed", preferred ? `residence moved with ${preferred.name}` : "entered treasury guardianship", preferred, preferred ? "preferred a housed living guardian" : "no living citizen guardian remained");
+    }
+    dependent.housed = Boolean(preferred?.housed);
+    if (preferred) {
+      dependent.homeX = preferred.homeX;
+      dependent.homeY = preferred.homeY;
+    }
+    return livingGuardians;
+  }
+
+  reconcileAllDependentCare() {
+    this.people.filter((person) => person.alive && person.isDependent).forEach((dependent) => this.reconcileDependentCare(dependent));
   }
 
   resolveGestations() {
@@ -2357,6 +2410,8 @@ export class TownSimulation {
       });
     }
     this.note(person, reason, "bad");
+    this.people.filter((dependent) => dependent.alive && dependent.isDependent && dependent.guardianIds.includes(person.id))
+      .forEach((dependent) => this.reconcileDependentCare(dependent));
     return true;
   }
 
@@ -3180,6 +3235,202 @@ export class TownSimulation {
     return { draw, reason: "firm can cover its next operating need" };
   }
 
+  dependentCareRunway(guardian) {
+    const cheapestMeal = this.firms.filter((firm) => firm.active && firm.sector === "food").reduce((price, firm) => Math.min(price, firm.price), this.essentialCost());
+    const allocatedCareCost = this.people.filter((dependent) => dependent.alive && dependent.isDependent && dependent.guardianIds.includes(guardian.id))
+      .reduce((total, dependent) => {
+        const share = dependent.guardianIds.filter((id) => this.people[id]?.alive).length > 1 ? 0.5 : 1;
+        return total + share * Math.max(0, cheapestMeal - dependent.restrictedInheritance);
+      }, 0);
+    return guardian.cash / Math.max(0.01, this.essentialCost() + allocatedCareCost);
+  }
+
+  transferGuardianMeal(guardian, dependent, mealId) {
+    const index = guardian.foodStock.findIndex((meal) => meal.mealId === mealId && this.foodExpiryDay(meal) > this.day);
+    if (index < 0) return false;
+    const [meal] = guardian.foodStock.splice(index, 1);
+    const sequence = ++this.mutualAidTransferSequence;
+    meal.custody = [...(meal.custody ?? []), Object.freeze({
+      offerId: `dependent-care:${this.day}:${guardian.id}:${dependent.id}:${sequence}`,
+      day: this.day,
+      ...temporalMetadata(this.day, "Food shopping"),
+      phase: "Food shopping",
+      sequence,
+      giverId: guardian.id,
+      giverName: guardian.name,
+      recipientId: dependent.id,
+      recipientName: dependent.name,
+      reason: "dependent care",
+    })];
+    meal.ownerKind = dependent.kind;
+    meal.ownerId = dependent.id;
+    meal.ownerName = dependent.name;
+    dependent.foodStock.push(meal);
+    this.note(guardian, `provided a stored meal to ${dependent.name}`, "good");
+    this.note(dependent, `${guardian.name} provided a stored meal`, "good");
+    return true;
+  }
+
+  buyDependentFoodFromRestrictedBalance(dependent, firm) {
+    this.reconcileInventoryBatches(firm);
+    const price = roundMoney(firm.price);
+    if (!dependent.alive || !dependent.isDependent || dependent.restrictedInheritance + 1e-9 < price || firm.inventory < 1) return false;
+    if (!this.requestTransaction(firm, dependent, "food")) return false;
+    const inventoryTaken = this.takeFirmInventory(firm, 1);
+    if (!inventoryTaken.length) throw new Error("Inventory changed during exact restricted dependent purchase");
+    const before = dependent.restrictedInheritance;
+    const providerBefore = firm.cash;
+    dependent.restrictedInheritance = roundMoney(dependent.restrictedInheritance - price);
+    firm.cash = roundMoney(firm.cash + price);
+    firm.sales = roundMoney(firm.sales + price);
+    firm.unitsSold += 1;
+    firm.perishableSalesToday += 1;
+    const transactionId = `dependent-care:${this.day}:${dependent.id}:${dependent.activitySequence + 1}`;
+    this.flows.push({ from: { kind: dependent.kind, id: dependent.id }, to: { kind: firm.kind, id: firm.id }, amount: price, phase: this.phase, ...temporalMetadata(this.day, this.phase) });
+    this.flows = this.flows.slice(-40);
+    this.ledger(dependent, { direction: "out", amount: price, text: `restricted care funds bought 1 food portion from ${firm.name}`, before, transactionId });
+    dependent.ledger[0].after = dependent.restrictedInheritance;
+    this.ledger(firm, { direction: "in", amount: price, text: `dependent food purchase for ${dependent.name}`, before: providerBefore, transactionId });
+    inventoryTaken.forEach((batch) => {
+      const food = {
+        mealId: ++this.foodItemSequence,
+        product: firm.sells,
+        processedDay: batch.batchDay,
+        purchasedDay: this.day,
+        quality: batch.qualityBasis ?? firm.quality,
+        qualityAtPurchase: this.effectiveFoodQuality({ quality: batch.qualityBasis ?? firm.quality, processedDay: batch.batchDay }),
+        shelfLife: batch.shelfLife,
+        seller: firm.id,
+        ownerKind: dependent.kind,
+        ownerId: dependent.id,
+        ownerName: dependent.name,
+        custody: [],
+        consumedDay: null,
+        spoiledDay: null,
+      };
+      this.foodItems[food.mealId] = food;
+      dependent.foodStock.push(food);
+    });
+    return true;
+  }
+
+  guardianFoodOptions(guardian, dependent, foodFirms) {
+    const pantry = guardian.foodStock.filter((meal) => this.foodExpiryDay(meal) > this.day).map((meal) => {
+      const age = Math.max(0, this.day - (meal.processedDay ?? meal.purchasedDay));
+      return Object.freeze({
+        action: `transfer-dependent-meal:${meal.mealId}`,
+        source: "pantry",
+        mealId: meal.mealId,
+        mealQuality: this.effectiveFoodQuality(meal),
+        spoilagePressure: clamp(age / Math.max(1, meal.shelfLife ?? 3)),
+        reserveCoverage: clamp(guardian.foodStock.length / Math.max(1, guardian.foodReserveTarget)),
+        costPressure: 0,
+        capacityAvailable: true,
+      });
+    });
+    const sellers = foodFirms.filter((firm) => firm.inventory >= 1 && (
+      dependent.restrictedInheritance + 1e-9 >= firm.price
+      || guardian.cash + 1e-9 >= firm.price
+      || (this.directWelfareEnabled() && firm.sells === "budgetFood")
+    )).map((firm) => {
+      const batch = this.peekFirmInventory(firm, 1)[0];
+      return Object.freeze({
+        action: `buy-dependent-food:${firm.id}`,
+        source: "seller",
+        sellerId: firm.id,
+        mealQuality: this.effectiveFoodQuality({ quality: batch?.qualityBasis ?? firm.quality, processedDay: batch?.batchDay ?? this.day }),
+        spoilagePressure: 0,
+        reserveCoverage: clamp((dependent.foodStock.length + 1) / Math.max(1, dependent.foodReserveTarget)),
+        costPressure: clamp(firm.price / Math.max(firm.price, guardian.cash)),
+        capacityAvailable: firm.transactionsToday < this.transactionCapacity(firm),
+      });
+    });
+    return [...pantry, ...sellers];
+  }
+
+  considerGuardianFood(guardian, dependent, foodFirms) {
+    const options = this.guardianFoodOptions(guardian, dependent, foodFirms);
+    const dependentNeed = 0.6 * clamp((dependent.hungryDays + 1) / 2) + 0.4 * (1 - dependent.health);
+    const guardianSelfNeed = 0.6 * clamp(guardian.hungryDays / 2) + 0.4 * (1 - guardian.health);
+    const careScarcity = clamp(1 - this.dependentCareRunway(guardian) / 12);
+    const legalActions = Object.freeze(["defer-dependent-food", ...options.map((option) => option.action)]);
+    const observation = Object.freeze({
+      kind: "dependent-food-care",
+      citizenId: guardian.id,
+      citizenName: guardian.name,
+      dependentId: dependent.id,
+      dependentName: dependent.name,
+      stress: guardian.stress,
+      dependentNeed,
+      guardianSelfNeed,
+      careScarcity,
+      profile: { ...guardian.motivationProfile },
+      options,
+    });
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal dependent-care action`);
+    this.recordDecision(guardian, observation, legalActions, decision, "Food shopping");
+    const option = options.find((candidate) => candidate.action === decision.action);
+    if (!option) return false;
+    if (option.source === "pantry") return this.transferGuardianMeal(guardian, dependent, option.mealId);
+    const provider = this.firms[option.sellerId];
+    if (dependent.restrictedInheritance + 1e-9 >= provider.price) return this.buyDependentFoodFromRestrictedBalance(dependent, provider);
+    if (guardian.cash + 1e-9 >= provider.price) {
+      const beforeCount = guardian.foodStock.length;
+      if (!this.buy(guardian, provider, 1, "food")) return false;
+      const meal = guardian.foodStock.splice(beforeCount, 1)[0];
+      if (!meal) throw new Error("Guardian food purchase did not create the dependent meal");
+      dependent.foodStock.push(meal);
+      meal.ownerKind = dependent.kind;
+      meal.ownerId = dependent.id;
+      meal.ownerName = dependent.name;
+      this.note(dependent, `${guardian.name} bought a meal from ${provider.name}`, "good");
+      return true;
+    }
+    const urgency = clamp(dependentNeed);
+    const welfare = this.assessWelfareOffer({ programme: "food", recipient: dependent, decisionMaker: guardian, privatePayer: guardian, provider, purpose: "food", urgency });
+    if (!welfare.accepted) return false;
+    return this.settleDirectAssistance({ programme: "food", recipient: dependent, decisionMaker: guardian, privatePayer: guardian, provider, purpose: "food", welfareId: welfare.welfareId }).completed;
+  }
+
+  considerDependentFood(dependent, foodFirms) {
+    if (!dependent.alive || !dependent.isDependent) return false;
+    if (dependent.foodStock.length) {
+      const meal = dependent.foodStock.shift();
+      this.consumeFood(dependent, meal);
+      return true;
+    }
+    const guardians = this.reconcileDependentCare(dependent).sort((a, b) => (
+      Number(b.id === dependent.residentialGuardianId) - Number(a.id === dependent.residentialGuardianId) || a.id - b.id
+    ));
+    for (const guardian of guardians) {
+      if (this.considerGuardianFood(guardian, dependent, foodFirms) && dependent.foodStock.length) {
+        this.consumeFood(dependent, dependent.foodStock.shift());
+        return true;
+      }
+    }
+    if (!guardians.length) {
+      const provider = foodFirms.find((firm) => firm.sells === "budgetFood" && !this.directAssistanceProviderFailure(dependent, firm, "food"));
+      if (provider) {
+        if (dependent.restrictedInheritance + 1e-9 >= provider.price && this.buyDependentFoodFromRestrictedBalance(dependent, provider)) {
+          this.consumeFood(dependent, dependent.foodStock.shift());
+          return true;
+        }
+        if (this.directWelfareEnabled()) {
+          const delivered = this.settleDirectAssistance({ programme: "food", recipient: dependent, decisionMaker: this.government, privatePayer: dependent, provider, purpose: "food" });
+          if (delivered.completed) {
+            this.consumeFood(dependent, dependent.foodStock.shift());
+            return true;
+          }
+        }
+      }
+    }
+    dependent.hungryDays += 1;
+    dependent.health = clamp(dependent.health - 0.045);
+    if (dependent.hungryDays === 2) this.note(dependent, "missed food for two days", "bad");
+    return false;
+  }
+
   foodPhase() {
     this.beginWelfareEnvelope();
     if (this.cooperationMode === "mutual-aid") this.runMutualAidExchange();
@@ -3195,7 +3446,8 @@ export class TownSimulation {
       if (this.schedulesEnabled && !foodFirms.length && activeFoodFirms.length) {
         this.note(person, `all food sellers were closed${nextFoodOpening ? `; next opening D${nextFoodOpening}` : ""}`, "neutral");
       }
-      this.considerFood(person, foodFirms);
+      if (person.isDependent) this.considerDependentFood(person, foodFirms);
+      else this.considerFood(person, foodFirms);
     });
   }
 
@@ -3428,7 +3680,7 @@ export class TownSimulation {
     const populationSize = this.people.length;
     const rotation = this.directWelfareEnabled() ? Math.floor((this.day - 1) / 7) : this.day;
     const rotatingRank = (person) => (person.id - rotation + populationSize) % populationSize;
-    return this.people.filter((person) => person.alive && !person.isDependent).sort((a, b) => (
+    return this.people.filter((person) => person.alive).sort((a, b) => (
       b.hungryDays - a.hungryDays
       || a.health - b.health
       || (this.directWelfareEnabled() ? this.runwayDays(a) - this.runwayDays(b) : 0)
@@ -4079,7 +4331,13 @@ export class TownSimulation {
     });
     this.decayRelationships();
     this.people.forEach((person) => {
-      if (!person.alive || person.isDependent) return;
+      if (!person.alive) return;
+      if (person.isDependent) {
+        person.criticalHealthDays = person.health <= 0.08 ? person.criticalHealthDays + 1 : 0;
+        if (person.criticalHealthDays >= 3) this.die(person);
+        else this.assessNeeds(person);
+        return;
+      }
       this.updateStress(person);
       if (person.stress > 0.55) {
         person.health = clamp(person.health - (0.002 + (person.stress - 0.55) * 0.018), 0.08, 1);
@@ -4645,6 +4903,7 @@ export class TownSimulation {
   planningPhase() {
     this.expirePerishableInventory();
     this.resolveGestations();
+    this.reconcileAllDependentCare();
     this.runPartnerships();
     this.runBirthAttempts();
     if (this.schedulesEnabled) Object.entries(this.pendingFormations).forEach(([archetypeId, pending]) => {
@@ -4739,6 +4998,13 @@ export class TownSimulation {
         || !["active", "completed", "ended"].includes(gestation.status)
         || gestation.dueDay !== gestation.conceivedDay + GESTATION_DAYS)) throw new Error("Invalid gestation state");
     if (this.people.some((person) => person.isDependent && (person.employer >= 0 || person.jobApplicationFirm >= 0 || person.partnerId !== null))) throw new Error("A dependent cannot hold adult economic or romantic roles");
+    if (this.people.some((person) => !Number.isFinite(person.restrictedInheritance) || person.restrictedInheritance < -1e-9)) throw new Error("Invalid restricted inheritance balance");
+    if (this.people.some((person) => person.alive && person.isDependent && (
+      person.guardianIds.some((id) => !this.people[id]?.alive || this.people[id].isDependent)
+      || person.treasuryGuardian !== (person.guardianIds.length === 0)
+      || (person.residentialGuardianId !== null && !person.guardianIds.includes(person.residentialGuardianId))
+      || person.housed !== Boolean(this.people[person.residentialGuardianId]?.housed)
+    ))) throw new Error("Invalid dependent guardianship or residence state");
     if (new Set(this.firms.map((firm) => firm.instanceId)).size !== this.firms.length) throw new Error("Firm instance identities must remain unique");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
     if (this.schedulesEnabled && this.people.some((person) => person.employer >= 0 && (
