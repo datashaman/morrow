@@ -2041,10 +2041,60 @@ export class TownSimulation {
     return true;
   }
 
+  dependentSchoolPriority(dependents = this.people) {
+    const populationSize = this.people.length;
+    const rotation = Math.floor((this.day - 1) / 7);
+    const rotatingRank = (person) => (person.id - rotation + populationSize) % populationSize;
+    return dependents.filter((person) => person.alive && person.isDependent && ["child", "student"].includes(person.lifecycleStage))
+      .sort((a, b) => {
+        const missedA = this.recentScheduledSchoolRecords(a).filter((record) => record.outcome !== "attended").length;
+        const missedB = this.recentScheduledSchoolRecords(b).filter((record) => record.outcome !== "attended").length;
+        return missedB - missedA
+          || Number(b.lifecycleStage === "student") - Number(a.lifecycleStage === "student")
+          || rotatingRank(a) - rotatingRank(b);
+      });
+  }
+
+  plannedSchoolCapacity(school) {
+    if (!school || !this.firmOpenOnDay(school)) return 0;
+    const teachers = school.employees.filter((id) => {
+      const teacher = this.people[id];
+      return teacher?.alive
+        && this.scheduledForShift(teacher, school)
+        && teacher.dailyPlan?.day === this.day
+        && teacher.dailyPlan.workday?.action === `work-shift:${school.id}`;
+    }).length;
+    return Math.floor(teachers * school.transactionsPerWorker * school.operationalReadiness * this.scheduledShiftCapacityMultiplier());
+  }
+
+  planAllDependentSchooling() {
+    const school = this.firms.find((firm) => this.firmServiceAvailable(firm, "Workday") && firm.archetypeId === "school");
+    if (!school) return [];
+    const capacity = this.plannedSchoolCapacity(school);
+    let reserved = 0;
+    const planned = [];
+    this.dependentSchoolPriority().forEach((dependent) => {
+      if (dependent.dailyPlan?.day === this.day && dependent.dailyPlan.workday?.activity === "dependent-clinic") return;
+      if (reserved >= capacity) {
+        this.recordDependentSchool(dependent, "capacity-unavailable", { school, scheduled: true, reason: "higher-priority dependent lessons used planned teaching capacity" });
+        return;
+      }
+      if (this.planDependentSchooling(dependent)) {
+        reserved += 1;
+        planned.push(dependent.id);
+      }
+    });
+    return planned;
+  }
+
   executeDependentSchooling(dependent, activity) {
     const school = this.firms[activity.schoolId];
     const guardian = activity.guardianId === null ? this.government : this.people[activity.guardianId];
     if (!activity.attend) {
+      if (school.transactionsToday < this.transactionCapacity(school)) {
+        school.transactionsToday += 1;
+        this.markFirmUse(school);
+      }
       this.recordDependentSchool(dependent, "missed", { school, guardian, reason: "dependent chose not to attend" });
       return { completed: true };
     }
@@ -3204,7 +3254,7 @@ export class TownSimulation {
       this.addFirmInventory(firm, produced);
       if (this.isPerishable(firm.sells)) firm.perishableProcessedToday += produced;
     });
-    if (this.schedulesEnabled) this.people.forEach((person) => {
+    if (this.schedulesEnabled) [...this.people].sort((a, b) => Number(b.isDependent) - Number(a.isDependent) || a.id - b.id).forEach((person) => {
       if (!person.alive || person.attended || person.dailyPlan?.day !== this.day) return;
       const activity = person.dailyPlan.workday;
       if (activity.status !== "planned") return;
@@ -5426,7 +5476,7 @@ export class TownSimulation {
       this.runJobMarket();
       this.people.forEach((person) => this.planWorkday(person));
       this.people.forEach((person) => this.planDependentHealthCare(person));
-      this.people.forEach((person) => this.planDependentSchooling(person));
+      this.planAllDependentSchooling();
     }
   }
 

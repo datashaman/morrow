@@ -114,6 +114,65 @@ test("education need uses general skill and only the latest five scheduled lesso
   assert.equal(town.dependentEducationNeed(dependent), 0.55 * 0.6 + 0.45 * 0.6);
 });
 
+test("dependent lesson priority favours recent misses, then students, before rotating id order", () => {
+  const town = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const child = town.createNewborn([0]);
+  const student = town.createNewborn([1]);
+  const repeatedlyMissedChild = town.createNewborn([2]);
+  child.lifecycleStage = "child";
+  student.lifecycleStage = "student";
+  repeatedlyMissedChild.lifecycleStage = "child";
+  town.recordDependentSchool(repeatedlyMissedChild, "missed", { scheduled: true });
+
+  assert.deepEqual(
+    town.dependentSchoolPriority([child, student, repeatedlyMissedChild]).map((person) => person.id),
+    [repeatedlyMissedChild.id, student.id, child.id],
+  );
+});
+
+test("planned school capacity counts only teachers who chose their scheduled shift", () => {
+  const town = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const school = town.firms.find((firm) => firm.employees.length >= 2);
+  school.operationalReadiness = 1;
+  const [workingTeacherId, absentTeacherId] = school.employees;
+  const workingTeacher = town.people[workingTeacherId];
+  const absentTeacher = town.people[absentTeacherId];
+  const weekdayIndex = school.openWeekdays[0];
+  while ((town.day - 1) % 7 !== weekdayIndex) town.day += 1;
+  workingTeacher.rota = { firmId: school.id, weekdayIndices: [weekdayIndex] };
+  absentTeacher.rota = { firmId: school.id, weekdayIndices: [weekdayIndex] };
+  workingTeacher.dailyPlan = { day: town.day, workday: { action: `work-shift:${school.id}` } };
+  absentTeacher.dailyPlan = { day: town.day, workday: { action: "rest" } };
+
+  assert.equal(town.plannedSchoolCapacity(school), Math.floor(school.transactionsPerWorker * town.scheduledShiftCapacityMultiplier()));
+  workingTeacher.dailyPlan.workday.action = "rest";
+  assert.equal(town.plannedSchoolCapacity(school), 0);
+});
+
+test("finite school planning reserves scarce lessons in dependent priority order", () => {
+  const town = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const school = town.firms[0];
+  school.archetypeId = "school";
+  school.serviceWindow = "Workday";
+  const weekdayIndex = (town.day - 1) % 7;
+  school.openWeekdays = [weekdayIndex];
+  const higherPriority = town.createNewborn([0]);
+  const lowerPriority = town.createNewborn([1]);
+  higherPriority.lifecycleStage = "child";
+  lowerPriority.lifecycleStage = "child";
+  town.recordDependentSchool(higherPriority, "missed", { scheduled: true });
+  town.plannedSchoolCapacity = () => 1;
+  town.planDependentSchooling = (dependent) => {
+    dependent.dailyPlan = { day: town.day, workday: { activity: "dependent-school", status: "planned" } };
+    return true;
+  };
+
+  assert.deepEqual(town.planAllDependentSchooling(), [higherPriority.id]);
+  assert.equal(higherPriority.dailyPlan.workday.status, "planned");
+  assert.equal(lowerPriority.dailyPlan, null);
+  assert.equal(lowerPriority.schoolHistory[0].outcome, "capacity-unavailable");
+});
+
 test("a delivered dependent lesson exact-pays restricted funds, protected guardian cash, and finite assistance", () => {
   const town = new TownSimulation({ seed: 91, lifecycleEnabled: true, welfareMode: "combined", policy: { supportRate: 100, shockRisk: 0 } });
   town.people.forEach((person) => { person.cash = 100; person.skill = 0.3; person.knowledgeProfile.general = 0.3; });
@@ -148,6 +207,8 @@ test("a dependent who misses a funded lesson creates history but no school reven
   const school = town.firms[0];
   const cashBefore = school.cash;
   const stockBefore = school.inventory;
+  const transactionsBefore = school.transactionsToday;
+  town.transactionCapacity = () => transactionsBefore + 1;
 
   const result = town.executeDependentSchooling(dependent, { schoolId: school.id, guardianId: 0, attend: false });
 
@@ -155,4 +216,5 @@ test("a dependent who misses a funded lesson creates history but no school reven
   assert.equal(dependent.schoolHistory[0].outcome, "missed");
   assert.equal(school.cash, cashBefore);
   assert.equal(school.inventory, stockBefore);
+  assert.equal(school.transactionsToday, transactionsBefore + 1);
 });
