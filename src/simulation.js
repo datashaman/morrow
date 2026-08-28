@@ -76,6 +76,7 @@ import {
   VITAL_RESCUE_CAP,
   VITAL_RESCUE_RUNWAY_DAYS,
   WELFARE_MODES,
+  WELFARE_PROGRAMMES,
 } from "./config.js";
 import {
   ATTENDANCE_ACTIONS,
@@ -251,6 +252,7 @@ export class TownSimulation {
     this.foodItems = {};
     this.mutualAidOfferSequence = 0;
     this.mutualAidTransferSequence = 0;
+    this.welfareTransactionSequence = 0;
     this.welfareState = {
       day: null,
       envelopeSnapshotCash: 0,
@@ -961,9 +963,9 @@ export class TownSimulation {
     });
   }
 
-  ledger(person, { direction, amount, text, before }) {
+  ledger(person, { direction, amount, text, before, transactionId = null, programme = null }) {
     person.activitySequence += 1;
-    person.ledger.unshift({
+    const entry = {
       day: this.day,
       ...temporalMetadata(this.day, this.phase),
       sequence: person.activitySequence,
@@ -972,7 +974,10 @@ export class TownSimulation {
       text,
       before: roundMoney(before),
       after: roundMoney(person.cash),
-    });
+    };
+    if (transactionId !== null) entry.transactionId = transactionId;
+    if (programme !== null) entry.programme = programme;
+    person.ledger.unshift(entry);
   }
 
   transfer(from, to, requested, { exact = false } = {}) {
@@ -1027,7 +1032,7 @@ export class TownSimulation {
 
   remainingWelfareEnvelope() {
     const state = this.beginWelfareEnvelope();
-    return roundMoney(Math.max(0, Math.min(state.envelope - state.spent, this.government.cash)));
+    return roundMoney(Math.max(0, state.envelope - state.spent));
   }
 
   recordWelfare(actor, evidence, phase = PHASES[this.phase]) {
@@ -1043,6 +1048,175 @@ export class TownSimulation {
     });
     actor.welfareHistory.unshift(record);
     return record;
+  }
+
+  directAssistanceFailure({ programme, recipient, decisionMaker, provider, purpose, completePrice, privateCash, shortfall, reason, welfareId, envelopeBefore, treasuryBefore }) {
+    const evidence = {
+      welfareId,
+      programme: programme.id,
+      programmeName: programme.name,
+      ruleVersion: programme.ruleVersion,
+      recipientId: recipient.id,
+      recipientName: recipient.name,
+      decisionMakerId: decisionMaker.id,
+      decisionMakerName: decisionMaker.name,
+      providerId: provider?.id ?? null,
+      providerName: provider?.name ?? null,
+      purpose,
+      completePrice,
+      assessedPrivateCash: privateCash,
+      exactShortfall: shortfall,
+      envelopeBefore,
+      envelopeAfter: envelopeBefore,
+      treasuryBefore,
+      treasuryAfter: treasuryBefore,
+      privateContribution: 0,
+      treasuryContribution: 0,
+      linkedTransactionIds: [],
+      outcome: "failed",
+      reason,
+    };
+    this.recordWelfare(recipient, evidence);
+    if (provider) this.recordWelfare(provider, evidence);
+    this.recordWelfare(this.government, evidence);
+    return Object.freeze({ completed: false, reason, evidence: Object.freeze(evidence) });
+  }
+
+  settleDirectAssistance({ programme: programmeKey, recipient, decisionMaker = recipient, provider, purpose, completePrice = provider?.price }) {
+    const programme = WELFARE_PROGRAMMES[programmeKey];
+    if (!programme) throw new Error(`Unknown welfare programme: ${programmeKey}`);
+    this.welfareTransactionSequence += 1;
+    const welfareId = `welfare:${this.day}:${this.welfareTransactionSequence}`;
+    const price = roundMoney(completePrice ?? 0);
+    const privateCash = roundMoney(Math.min(Math.max(0, recipient?.cash ?? 0), price));
+    const shortfall = roundMoney(Math.max(0, price - privateCash));
+    const state = this.beginWelfareEnvelope();
+    const envelopeBefore = this.remainingWelfareEnvelope();
+    const treasuryBefore = roundMoney(this.government.cash);
+    const fail = (reason) => this.directAssistanceFailure({
+      programme,
+      recipient,
+      decisionMaker,
+      provider,
+      purpose,
+      completePrice: price,
+      privateCash,
+      shortfall,
+      reason,
+      welfareId,
+      envelopeBefore,
+      treasuryBefore,
+    });
+
+    if (!recipient?.alive || !decisionMaker?.alive) return fail("recipient ineligible");
+    if (!provider) return fail("no eligible provider");
+    if (!provider.active) return fail("provider inactive");
+    if (!this.firmOpenOnDay(provider)) return fail("provider closed");
+    if (!this.firmServiceAvailable(provider, "Evening")) return fail(purpose === "rent" ? "unavailable housing transaction" : "no eligible provider");
+    if (!(price > 0) || Math.abs(price - roundMoney(provider.price)) > 1e-9) {
+      return fail(purpose === "rent" ? "unavailable housing transaction" : "no eligible provider");
+    }
+    if (purpose === "food") {
+      this.reconcileInventoryBatches(provider);
+      if (provider.sector !== "food" || provider.sells !== "budgetFood") return fail("no eligible provider");
+      if (provider.inventory + 1e-9 < 1) return fail("no stock");
+    } else if (purpose === "rent") {
+      if (provider.sector !== "housing" || !recipient.housed || !this.rentDueToday()) return fail("unavailable housing transaction");
+    } else throw new Error(`Unsupported direct-assistance purpose: ${purpose}`);
+    const attendedStaff = provider.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
+    if (attendedStaff === 0) return fail("no attended staff");
+    if (provider.transactionsToday >= this.transactionCapacity(provider)) return fail("no transaction capacity");
+    if (!(shortfall > 0)) return fail("no exact shortfall");
+    if (shortfall > envelopeBefore + 1e-9) return fail("exhausted daily envelope");
+    if (shortfall > this.government.cash + 1e-9) return fail("insufficient treasury cash");
+
+    const inventory = purpose === "food" ? this.peekFirmInventory(provider, 1) : null;
+    if (purpose === "food" && !inventory.length) return fail("no stock");
+    if (!this.requestTransaction(provider, recipient, purpose === "rent" ? "housing payment" : "food")) {
+      throw new Error(`Validated ${programme.name} transaction could not reserve provider capacity`);
+    }
+
+    const linkedTransactionIds = [];
+    if (privateCash > 0) {
+      const transactionId = `${welfareId}:private`;
+      const recipientBefore = recipient.cash;
+      const providerBefore = provider.cash;
+      const paid = this.transfer(recipient, provider, privateCash, { exact: true });
+      if (paid !== privateCash) throw new Error(`Atomic ${programme.name} private contribution failed`);
+      this.ledger(recipient, { direction: "out", amount: paid, text: `${programme.name} co-pay to ${provider.name}`, before: recipientBefore, transactionId, programme: programme.id });
+      this.ledger(provider, { direction: "in", amount: paid, text: `${programme.name} co-pay from ${recipient.name}`, before: providerBefore, transactionId, programme: programme.id });
+      linkedTransactionIds.push(transactionId);
+    }
+    const treasuryTransactionId = `${welfareId}:treasury`;
+    const providerBeforeTreasury = provider.cash;
+    const treasuryPaid = this.transfer(this.government, provider, shortfall, { exact: true });
+    if (treasuryPaid !== shortfall) throw new Error(`Atomic ${programme.name} treasury contribution failed`);
+    this.ledger(this.government, { direction: "out", amount: treasuryPaid, text: `${programme.name} to ${provider.name} for ${recipient.name}`, before: treasuryBefore, transactionId: treasuryTransactionId, programme: programme.id });
+    this.ledger(provider, { direction: "in", amount: treasuryPaid, text: `${programme.name} from treasury for ${recipient.name}`, before: providerBeforeTreasury, transactionId: treasuryTransactionId, programme: programme.id });
+    linkedTransactionIds.push(treasuryTransactionId);
+
+    if (purpose === "food") {
+      const inventoryTaken = this.takeFirmInventory(provider, 1);
+      if (!inventoryTaken.length) throw new Error(`Inventory changed during atomic ${programme.name} settlement`);
+      recipient.foodSeller = provider.id;
+      inventoryTaken.forEach((batch) => {
+        const food = {
+          mealId: ++this.foodItemSequence,
+          product: provider.sells,
+          processedDay: batch.batchDay,
+          purchasedDay: this.day,
+          quality: batch.qualityBasis ?? provider.quality,
+          qualityAtPurchase: this.effectiveFoodQuality({ quality: batch.qualityBasis ?? provider.quality, processedDay: batch.batchDay }),
+          shelfLife: batch.shelfLife,
+          seller: provider.id,
+          ownerKind: recipient.kind,
+          ownerId: recipient.id,
+          ownerName: recipient.name,
+          custody: [],
+          consumedDay: null,
+          spoiledDay: null,
+        };
+        this.foodItems[food.mealId] = food;
+        recipient.foodStock.push(food);
+      });
+      provider.perishableSalesToday += 1;
+    } else {
+      recipient.rentSeller = provider.id;
+      recipient.rentArrears = 0;
+    }
+    provider.sales = roundMoney(provider.sales + price);
+    provider.unitsSold += 1;
+    state.spent = roundMoney(state.spent + shortfall);
+    state.directAidByCitizen[recipient.id] = roundMoney((state.directAidByCitizen[recipient.id] ?? 0) + shortfall);
+    const evidence = {
+      welfareId,
+      programme: programme.id,
+      programmeName: programme.name,
+      ruleVersion: programme.ruleVersion,
+      recipientId: recipient.id,
+      recipientName: recipient.name,
+      decisionMakerId: decisionMaker.id,
+      decisionMakerName: decisionMaker.name,
+      providerId: provider.id,
+      providerName: provider.name,
+      purpose,
+      completePrice: price,
+      assessedPrivateCash: privateCash,
+      exactShortfall: shortfall,
+      envelopeBefore,
+      envelopeAfter: this.remainingWelfareEnvelope(),
+      treasuryBefore,
+      treasuryAfter: roundMoney(this.government.cash),
+      privateContribution: privateCash,
+      treasuryContribution: shortfall,
+      linkedTransactionIds,
+      outcome: "delivered",
+      reason: "exact essential purchase completed",
+    };
+    this.recordWelfare(recipient, evidence);
+    this.recordWelfare(provider, evidence);
+    this.recordWelfare(this.government, evidence);
+    return Object.freeze({ completed: true, reason: evidence.reason, evidence: Object.freeze(evidence) });
   }
 
   friendIds(person) {
