@@ -71,6 +71,13 @@ export function deceasedMarkerSegments(x, y) {
   ];
 }
 
+export function livingMarkerPresentation(person, selected = false) {
+  if (!person.alive) return Object.freeze({ kind: "deceased", radius: 0, selectedRadius: selected ? 9 : null });
+  if (!person.isDependent) return Object.freeze({ kind: "adult", radius: selected ? 7 : 5, selectedRadius: selected ? 9 : null });
+  const radius = person.lifecycleStage === "infant" ? 4 : person.lifecycleStage === "child" ? 5 : 6;
+  return Object.freeze({ kind: "dependent", radius, selectedRadius: selected ? radius + 3 : null });
+}
+
 export function resolveCanvasColor(value, darkMode = false) {
   const match = value.trim().match(/^light-dark\(\s*([^,]+),\s*([^)]+)\s*\)$/);
   if (!match) return value.trim();

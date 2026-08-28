@@ -9,10 +9,12 @@ import {
   deceasedMarkerSegments,
   employeeOrbitTarget,
   firmLandmarkLayout,
+  livingMarkerPresentation,
   parkVisitorTarget,
   personMapTarget,
   resolveCanvasColor,
 } from "./map-presentation.js";
+import { citizenLifecycleEvidence, citizenSelectorOptions, lifecycleEventLabel, lifecycleStageLabel } from "./lifecycle-presentation.js";
 import { TownSimulation } from "./simulation.js";
 import { playbackPresentation } from "./playback-presentation.js";
 import { formatTemporalRecord, PHASE_BLOCKS } from "./civil-time.js";
@@ -46,7 +48,7 @@ app.innerHTML = `
 
     <div class="stage-wrap">
       <canvas id="town" aria-label="Animated map of people, firms, the Common Park, and cemetery in the town"></canvas>
-      <div class="legend" aria-hidden="true"><span><i class="person-dot"></i>Person</span><span><i class="deceased-dot"></i>Deceased</span><span><i class="firm-dot"></i>Firm</span><span><i class="park-swatch"></i>Common Park</span><span><i class="cash-line"></i>Cash transfer</span></div>
+      <div class="legend" aria-hidden="true"><span><i class="person-dot"></i>Adult</span><span><i class="dependent-dot"></i>Dependent</span><span><i class="deceased-dot"></i>Deceased</span><span><i class="firm-dot"></i>Firm</span><span><i class="park-swatch"></i>Common Park</span><span><i class="cash-line"></i>Cash transfer</span></div>
     </div>
 
     <section class="person-card" aria-live="polite">
@@ -82,6 +84,7 @@ app.innerHTML = `
             <option value="events">Life events</option>
             <option value="mutual-aid">Mutual aid</option>
             <option value="welfare">Welfare</option>
+            <option value="lifecycle">Lifecycle</option>
           </select>
         </label>
       </div>
@@ -195,10 +198,10 @@ const policyControls = [
 const policyLabels = Object.fromEntries(policyControls.map(([name, label]) => [name, label]));
 
 function buildControls() {
-  elements["person-select"].replaceChildren(...simulation.people.map((person) => {
+  elements["person-select"].replaceChildren(...citizenSelectorOptions(simulation.people).map(({ value, label }) => {
     const option = document.createElement("option");
-    option.value = person.id;
-    option.textContent = person.name;
+    option.value = value;
+    option.textContent = label;
     return option;
   }));
   elements["person-select"].value = String(selected);
@@ -225,6 +228,19 @@ function buildControls() {
     wrapper.append(heading, input);
     return wrapper;
   }));
+}
+
+function syncPersonSelector() {
+  const options = citizenSelectorOptions(simulation.people);
+  const current = [...elements["person-select"].options];
+  if (current.length === options.length && current.every((option, index) => option.value === String(options[index].value) && option.textContent === options[index].label)) return;
+  elements["person-select"].replaceChildren(...options.map(({ value, label }) => {
+    const option = document.createElement("option");
+    option.value = value;
+    option.textContent = label;
+    return option;
+  }));
+  elements["person-select"].value = String(selected);
 }
 
 function renderControlHistory(history) {
@@ -304,8 +320,10 @@ function renderActivity(entity, filter, stream) {
         ? `mutual-aid ${entry.direction}`
         : entry.type === "knowledge-effect"
           ? "knowledge-effect"
-          : entry.type === "welfare"
-            ? `welfare ${entry.outcome}`
+        : entry.type === "welfare"
+          ? `welfare ${entry.outcome}`
+        : entry.type === "lifecycle"
+          ? "lifecycle"
           : `event ${entry.kind}`;
     item.innerHTML = entry.type === "transaction"
       ? `<time>${formatTemporalRecord(entry)}</time><span>${entry.direction === "in" ? "+" : "−"}${money(entry.amount)} ${entry.text}</span><b>${money(entry.before)} → ${money(entry.after)}</b>`
@@ -315,6 +333,8 @@ function renderActivity(entity, filter, stream) {
         ? `<time>${formatTemporalRecord(entry)}</time><span>${knowledgeEffectDescription(entry)}</span><b>Knowledge effect</b>`
       : entry.type === "welfare"
         ? `<time>${formatTemporalRecord(entry)}</time><span>${welfareDescription(entry)}</span><b>Welfare</b>`
+      : entry.type === "lifecycle"
+        ? `<time>${formatTemporalRecord(entry)}</time><span>${entry.text}${entry.reason ? ` · ${entry.reason}` : ""}</span><b>${lifecycleEventLabel(entry.lifecycleType)}</b>`
         : `<time>${formatTemporalRecord(entry)}</time><span>${entry.text}</span><b>Life event</b>`;
     return item;
   }));
@@ -331,6 +351,8 @@ function renderActivity(entity, filter, stream) {
           ? "No knowledge effects have been recorded for this firm."
         : filter === "welfare"
           ? "No welfare activity yet."
+        : filter === "lifecycle"
+          ? "No lifecycle activity yet."
           : "No activity yet";
     stream.append(item);
   }
@@ -433,6 +455,7 @@ function renderKnowledge(person) {
 
 function updateInterface() {
   const state = simulation.snapshot();
+  syncPersonSelector();
   const playback = playbackPresentation(state.alive, paused);
   paused = playback.paused;
   elements.pause.disabled = playback.pauseDisabled;
@@ -468,6 +491,21 @@ function updateInterface() {
   const finalHousing = person.housed
     ? (person.rentSeller >= 0 ? `last housing: housed through ${simulation.firms[person.rentSeller].name}` : "last housing: housed")
     : (person.rentSeller >= 0 ? `last housing: unhoused; previous provider ${simulation.firms[person.rentSeller].name}` : "last housing: unhoused");
+  const personLifecycle = citizenLifecycleEvidence(person, { people: simulation.people, gestations: simulation.gestations, day: simulation.day });
+  canvas.setAttribute("aria-label", `Animated town map. Selected citizen ${person.name}: ${person.alive ? personLifecycle.stageLabel : `died on day ${person.deathDay}`}.`);
+  const nextTransition = personLifecycle.nextStage
+    ? `${lifecycleStageLabel(personLifecycle.nextStage)} on D${personLifecycle.transitionDay} (${personLifecycle.daysRemaining}d)`
+    : "no modeled age transition";
+  const parents = personLifecycle.parentNames.length ? personLifecycle.parentNames.join(" and ") : "not modeled";
+  const guardians = personLifecycle.treasuryGuardian ? "treasury" : personLifecycle.guardianNames.length ? personLifecycle.guardianNames.join(" and ") : "none";
+  const residence = personLifecycle.residentialGuardianName ? `with ${personLifecycle.residentialGuardianName}` : person.housed ? "housed without a current guardian" : "unhoused";
+  const latestLesson = personLifecycle.latestLesson
+    ? `${personLifecycle.latestLesson.outcome} on D${personLifecycle.latestLesson.day}${personLifecycle.latestLesson.schoolName ? ` at ${personLifecycle.latestLesson.schoolName}` : ""}${personLifecycle.latestLesson.guardianName ? `; funded by ${personLifecycle.latestLesson.guardianName}` : ""}`
+    : "no scheduled lesson yet";
+  const study = person.studyDomain ? domainLabel(person.studyDomain) : "not selected";
+  const family = `partner: ${personLifecycle.partnerName ?? "none"} · children: ${personLifecycle.childNames.length ? personLifecycle.childNames.join(", ") : "none"} · current dependents: ${personLifecycle.dependentNames.length ? personLifecycle.dependentNames.join(", ") : "none"}`;
+  const gestation = personLifecycle.activeGestationDueDay ? ` · gestation due D${personLifecycle.activeGestationDueDay}` : "";
+  const cooldown = personLifecycle.cooldownEndDay ? ` · re-partnering cooldown until D${personLifecycle.cooldownEndDay}` : "";
 
   elements.clock.textContent = `W${state.calendar.week} ${state.calendar.weekday} · ${state.block} · ${state.phaseName}${playback.clockSuffix}`;
   elements["neural-control"].checked = state.citizenPolicy.mode === "neural";
@@ -482,10 +520,14 @@ function updateInterface() {
   elements.population.textContent = `${state.alive}/${state.totalCitizens}`;
   elements["population-detail"].textContent = `${state.alive} alive · ${state.dead} dead · ${state.totalCitizens} total`;
   elements["town-stage"].innerHTML = `<span><small>Current town stage</small><strong>${state.townStage.label}</strong></span><p>${state.townStage.description} Essential reliability ${percent(state.townStage.evidence.essentialReliability)} · employment ${percent(state.townStage.evidence.employmentRate)} · ten-day reserves ${percent(state.townStage.evidence.reserveShare)} · discretionary demand ${percent(state.townStage.evidence.discretionaryDemand)} · persistent optional sectors ${state.townStage.evidence.persistentOptionalSectors}/${state.townStage.evidence.activeOptionalSectors}.</p>`;
-  elements.focus.textContent = person.alive ? `${needNames[person.focus]} focus` : `Died · day ${person.deathDay}`;
+  elements.focus.textContent = person.alive
+    ? person.isDependent ? `${personLifecycle.stageLabel} · ${personLifecycle.ageDays}d` : `${needNames[person.focus]} focus`
+    : `Died · day ${person.deathDay}`;
   elements["person-summary"].textContent = person.alive
-    ? `Alive · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)}; ${clinicalCare}; ${healthCare} · skill ${percent(person.skill)}; ${education} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary}`
-    : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · estate ${money(person.estateTransferred)} transferred to treasury · remaining cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
+    ? person.isDependent
+      ? `${personLifecycle.stageLabel} · age ${personLifecycle.ageDays} days · next: ${nextTransition} · parents: ${parents} · guardians: ${guardians} · residence: ${residence} · restricted inheritance ${money(person.restrictedInheritance)} · health ${percent(person.health)}; ${clinicalCare}; ${healthCare} · food: ${foodSeller}; ${foodQuality}; ${pantry} · school: ${latestLesson}; ${personLifecycle.missedLessons}/${personLifecycle.scheduledLessonCount} recent scheduled lessons missed · study domain: ${study} · general knowledge ${percent(person.knowledgeProfile.general)}`
+      : `Alive · Adult${person.birthDay === null ? "; age not modeled" : ` · age ${personLifecycle.ageDays} days`} · Works for: ${employer}${owned ? ` · owns: ${owned.name}` : ""} · current cash ${money(person.cash)} · runway ${simulation.runwayDays(person).toFixed(1)} days · stress ${percent(person.stress)} · health ${percent(person.health)}; ${clinicalCare}; ${healthCare} · skill ${percent(person.skill)}; ${education} · food: ${foodSeller}; ${foodQuality}; ${pantry} · housing: ${provider} · relationships: ${relationshipSummary} · ${family}${gestation}${cooldown}`
+    : `Died on day ${person.deathDay}${owned ? ` · owned: ${owned.name}` : ""} · cash estate ${money(person.estateTransferred)} · estate duty ${money(person.estateDutyPaid)} · inherited ${money(person.inheritanceDistributed)} · treasury received ${money(person.estateTransferred - person.inheritanceDistributed)} · remaining cash ${money(person.cash)} · health at death ${percent(person.health)} · last food seller: ${foodSeller}; ${foodQuality}; ${pantry} · ${finalHousing}`;
   const currentWorkday = person.dailyPlan?.day === simulation.day ? person.dailyPlan.workday : null;
   const includeTodayForShift = state.block === "Morning" || (state.block === "Workday" && currentWorkday?.status === "planned");
   const scheduleEvidence = citizenScheduleEvidence({
@@ -497,7 +539,9 @@ function updateInterface() {
     nextShiftDay: simulation.nextShiftDay(person, { includeToday: includeTodayForShift }),
     daysUntilRent: simulation.daysUntilRent(),
   });
-  elements["person-schedule"].textContent = `${scheduleEvidence.currentActivity} · ${scheduleEvidence.workStatus} · ${scheduleEvidence.nextShift} · ${scheduleEvidence.nextRent} · ${scheduleEvidence.sleep}`;
+  elements["person-schedule"].textContent = person.isDependent
+    ? `${scheduleEvidence.currentActivity} · ${nextTransition} · residential guardian: ${personLifecycle.residentialGuardianName ?? (personLifecycle.treasuryGuardian ? "treasury" : "none")} · ${scheduleEvidence.sleep}`
+    : `${scheduleEvidence.currentActivity} · ${scheduleEvidence.workStatus} · ${scheduleEvidence.nextShift} · ${scheduleEvidence.nextRent} · ${scheduleEvidence.sleep}`;
   elements.needs.hidden = !person.alive;
 
   elements.needs.replaceChildren(...Object.entries(person.needs).map(([name, value]) => {
@@ -732,10 +776,18 @@ function drawTown() {
     person.y += (target.y - person.y) * 0.02;
     const x = person.x * width;
     const y = person.y * height;
+    const marker = livingMarkerPresentation(person, person.id === selected);
     if (person.alive) {
-      context.beginPath(); context.arc(x, y, person.id === selected ? 7 : 5, 0, Math.PI * 2);
-      context.fillStyle = !person.housed || person.hungryDays ? colors.danger : colors.accent;
-      context.fill();
+      const markerColor = !person.housed || person.hungryDays ? colors.danger : colors.accent;
+      context.beginPath(); context.arc(x, y, marker.radius, 0, Math.PI * 2);
+      if (marker.kind === "dependent") {
+        context.strokeStyle = markerColor;
+        context.lineWidth = 2;
+        context.stroke();
+      } else {
+        context.fillStyle = markerColor;
+        context.fill();
+      }
     } else {
       context.strokeStyle = colors.muted;
       context.lineWidth = 2.5;
@@ -744,7 +796,7 @@ function drawTown() {
       });
     }
     if (person.id === selected) {
-      context.beginPath(); context.arc(x, y, 9, 0, Math.PI * 2); context.strokeStyle = colors.text; context.lineWidth = 1.5; context.stroke();
+      context.beginPath(); context.arc(x, y, marker.selectedRadius ?? 9, 0, Math.PI * 2); context.strokeStyle = colors.text; context.lineWidth = 1.5; context.stroke();
       context.fillStyle = colors.text; context.textAlign = "center"; context.font = "600 12px system-ui"; context.fillText(person.name, x, y - 13);
     }
   });

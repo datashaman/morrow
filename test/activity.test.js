@@ -21,6 +21,9 @@ const person = {
   welfareHistory: [
     { day: 3, phaseIndex: 4, sequence: 7, programme: "food-assistance", outcome: "delivered", reason: "exact essential purchase completed" },
   ],
+  lifecycleHistory: [
+    { day: 1, phaseIndex: 0, sequence: 1, type: "birth", text: "born to Amina and Jonah" },
+  ],
 };
 
 test("activity defaults to all transactions, life events, and knowledge effects in sequence order", () => {
@@ -34,6 +37,7 @@ test("activity defaults to all transactions, life events, and knowledge effects 
       ["transaction", "wage"],
       ["event", "missed rent"],
       ["transaction", "food"],
+      ["lifecycle", "born to Amina and Jonah"],
       ["event", "entered town"],
     ],
   );
@@ -45,6 +49,7 @@ test("activity can be filtered by record type", () => {
   assert.deepEqual(activityItems(person, "knowledge-effects").map(({ grossContribution }) => grossContribution), [0.2]);
   assert.deepEqual(activityItems(person, "mutual-aid").map(({ giverName }) => giverName), ["Maya"]);
   assert.deepEqual(activityItems(person, "welfare").map(({ programme }) => programme), ["food-assistance"]);
+  assert.deepEqual(activityItems(person, "lifecycle").map(({ lifecycleType }) => lifecycleType), ["birth"]);
 });
 
 test("activity returns the complete matching history", () => {
@@ -54,14 +59,16 @@ test("activity returns the complete matching history", () => {
     knowledgeEffectHistory: Array.from({ length: 4 }, (_, index) => ({ day: index + 1, sequence: index + 27 })),
     mutualAidHistory: Array.from({ length: 3 }, (_, index) => ({ day: index + 1, sequence: index + 31 })),
     welfareHistory: Array.from({ length: 5 }, (_, index) => ({ day: index + 1, sequence: index + 34 })),
+    lifecycleHistory: Array.from({ length: 2 }, (_, index) => ({ day: index + 1, sequence: index + 39, type: "stage-change" })),
   };
 
-  assert.equal(activityItems(longHistory).length, 38);
+  assert.equal(activityItems(longHistory).length, 40);
   assert.equal(activityItems(longHistory, "transactions").length, 15);
   assert.equal(activityItems(longHistory, "events").length, 11);
   assert.equal(activityItems(longHistory, "knowledge-effects").length, 4);
   assert.equal(activityItems(longHistory, "mutual-aid").length, 3);
   assert.equal(activityItems(longHistory, "welfare").length, 5);
+  assert.equal(activityItems(longHistory, "lifecycle").length, 2);
 });
 
 test("mutual-aid activity names the counterparty, provenance, quality, age, and pantry change", () => {

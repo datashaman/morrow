@@ -42,6 +42,7 @@ h1 { margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: clamp
 .legend span { display: flex; align-items: center; gap: 0.35rem; }
 .legend i { display: block; }
 .person-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+.dependent-dot { width: 8px; height: 8px; border: 2px solid var(--accent); border-radius: 50%; background: transparent; }
 .deceased-dot { position: relative; width: 10px; height: 10px; }
 .deceased-dot::before, .deceased-dot::after { position: absolute; display: block; content: ""; background: var(--muted); }
 .deceased-dot::before { left: 4px; width: 2px; height: 10px; }
@@ -91,6 +92,7 @@ select { padding: 0.45rem 2rem 0.45rem 0.6rem; }
 .activity-stream .knowledge-effect span { color: var(--accent); }
 .activity-stream .welfare span { color: var(--cash); }
 .activity-stream .welfare.failed span, .activity-stream .welfare.ineligible span { color: var(--danger); }
+.activity-stream .lifecycle span { color: var(--accent); }
 .activity-stream .activity-empty { display: block; color: var(--muted); }
 
 .welfare-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; }

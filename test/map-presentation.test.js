@@ -9,6 +9,7 @@ import {
   employeeOrbitTarget,
   firmLandmarkLayout,
   landmarkClearsPark,
+  livingMarkerPresentation,
   parkVisitorTarget,
   personMapTarget,
   resolveCanvasColor,
@@ -91,6 +92,12 @@ test("the deceased marker is a cross-and-base silhouette rather than a living ci
     [16, 28, 24, 28],
     [16, 36, 24, 36],
   ]);
+});
+
+test("living marker presentation distinguishes filled adults from stage-sized hollow dependents", () => {
+  assert.deepEqual(livingMarkerPresentation({ alive: true, isDependent: false, lifecycleStage: "adult" }), { kind: "adult", radius: 5, selectedRadius: null });
+  assert.deepEqual(livingMarkerPresentation({ alive: true, isDependent: true, lifecycleStage: "infant" }), { kind: "dependent", radius: 4, selectedRadius: null });
+  assert.deepEqual(livingMarkerPresentation({ alive: true, isDependent: true, lifecycleStage: "student" }, true), { kind: "dependent", radius: 6, selectedRadius: 9 });
 });
 
 test("canvas colors resolve the browser light-dark token before drawing", () => {
