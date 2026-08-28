@@ -1203,10 +1203,12 @@ test("critical health causes a traceable death and updates population counts", (
   assert.equal(person.events[0].text, "died after health reached a critical level");
   assert.equal(person.cash, 0);
   assert.equal(person.estateTransferred, estate);
+  assert.equal(person.estateDutyPaid, Math.floor(estate * 10) / 100);
+  assert.equal(person.inheritanceDistributed, 0);
   assert.equal(town.government.cash, Math.round((treasuryBefore + estate) * 100) / 100);
   assert.deepEqual(
     (({ direction, amount, text, before, after }) => ({ direction, amount, text, before, after }))(person.ledger[0]),
-    { direction: "out", amount: estate, text: "intestate estate transferred to treasury", before: estate, after: 0 },
+    { direction: "out", amount: Math.round((estate - person.estateDutyPaid) * 100) / 100, text: "intestate estate remainder to treasury", before: Math.round((estate - person.estateDutyPaid) * 100) / 100, after: 0 },
   );
   assert.equal(town.totalMoney(), initialMoney);
   assert.deepEqual(

@@ -165,6 +165,8 @@ test("treasury guardianship finite-funds an orphan's exact medicine shortfall", 
   apothecary.inventory = 2;
   apothecary.transactionsToday = 0;
   apothecary.employees.forEach((id) => { town.people[id].attended = true; });
+  town.transfer(guardian, town.government, guardian.cash, { exact: true });
+  town.transfer(secondGuardian, town.government, secondGuardian.cash, { exact: true });
   town.die(guardian, "guardian died");
   town.die(secondGuardian, "guardian died");
   town.initialMoney = town.totalMoney();

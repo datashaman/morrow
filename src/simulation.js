@@ -363,6 +363,8 @@ export class TownSimulation {
         alive: true,
         deathDay: null,
         estateTransferred: 0,
+        estateDutyPaid: 0,
+        inheritanceDistributed: 0,
         criticalHealthDays: 0,
         cash,
         skill,
@@ -1740,7 +1742,7 @@ export class TownSimulation {
       residentialGuardianId: residentialGuardian.id, treasuryGuardian: false, transitionHostId: null, transitionResidenceEndDay: null, restrictedInheritance: 0, studyDomain: null, studyDomainSelectionDay: null, schoolHistory: [], schoolSequence: 0, lifecycleSequence: 1,
       lifecycleHistory: [{ day: this.day, ...temporalMetadata(this.day, "Planning"), sequence: 1, type: "birth", text: `born to ${parentIds.map((parentId) => this.people[parentId].name).join(" and ")}`, counterpartId: null, counterpartName: null, reason: "completed gestation" }],
       partnerId: null, partnershipStartDay: null, lastPartnershipEndDay: null,
-      alive: true, deathDay: null, estateTransferred: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
+      alive: true, deathDay: null, estateTransferred: 0, estateDutyPaid: 0, inheritanceDistributed: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
       knowledgeProfile: createKnowledgeProfile(0.05), learningHistory: [], learningSequence: 0, reliability: 0.75,
       employer: -1, employmentSpellSequence: 0, rota: null, scheduledShiftsWorked: 0, scheduledShiftsElapsed: 0,
       dailyPlan: null, dependentHealthPlan: null, currentPrimaryActivity: null, sleepDebt: 0, lastSleepQuality: null, sleepSequence: 0, sleepHistory: [],
@@ -2723,7 +2725,16 @@ export class TownSimulation {
     return { option: frozenOptions.find((option) => option.action === decision.action), decision };
   }
 
-  die(person, reason = "died after health reached a critical level") {
+  deathEstateSnapshot(person) {
+    return Object.freeze({
+      person,
+      partnerId: person.partnerId,
+      childIds: this.people.filter((candidate) => candidate.parentIds.includes(person.id)).map((candidate) => candidate.id),
+      estate: roundMoney(person.cash + (person.restrictedInheritance ?? 0)),
+    });
+  }
+
+  markDeath(person, reason = "died after health reached a critical level") {
     if (!person.alive) return false;
     if (person.partnerId !== null) this.endPartnership(person, "partner died", { cooldown: false });
     if (person.employer >= 0) {
@@ -2744,19 +2755,102 @@ export class TownSimulation {
     person.socialToday = false;
     person.socialVenueToday = null;
     person.rentArrears = 0;
-    const estateBefore = person.cash;
-    person.estateTransferred = this.transfer(person, this.government, estateBefore, { exact: true });
-    if (person.estateTransferred > 0) {
-      this.ledger(person, {
-        direction: "out",
-        amount: person.estateTransferred,
-        text: "intestate estate transferred to treasury",
-        before: estateBefore,
-      });
-    }
     this.note(person, reason, "bad");
     this.people.filter((dependent) => dependent.alive && dependent.isDependent && dependent.guardianIds.includes(person.id))
       .forEach((dependent) => this.reconcileDependentCare(dependent));
+    return true;
+  }
+
+  transferInheritance(from, heir, amount, transactionId) {
+    if (amount <= 0) return 0;
+    const deceasedBefore = from.cash;
+    if (heir.isDependent) {
+      if (from.cash + 1e-9 < amount) throw new Error("Inheritance cannot overdraw an estate");
+      const heirBefore = heir.restrictedInheritance;
+      from.cash = roundMoney(from.cash - amount);
+      heir.restrictedInheritance = roundMoney(heir.restrictedInheritance + amount);
+      this.flows.push({ from: { kind: from.kind, id: from.id }, to: { kind: heir.kind, id: heir.id }, amount, phase: this.phase, ...temporalMetadata(this.day, this.phase) });
+      this.flows = this.flows.slice(-40);
+      this.ledger(from, { direction: "out", amount, text: `inheritance to ${heir.name}`, before: deceasedBefore, transactionId });
+      this.ledger(heir, { direction: "in", amount, text: `restricted inheritance from ${from.name}`, before: heirBefore, transactionId });
+      heir.ledger[0].after = heir.restrictedInheritance;
+      return amount;
+    }
+    const heirBefore = heir.cash;
+    const paid = this.transfer(from, heir, amount, { exact: true });
+    if (paid !== amount) throw new Error("Inheritance transfer was incomplete");
+    this.ledger(from, { direction: "out", amount: paid, text: `inheritance to ${heir.name}`, before: deceasedBefore, transactionId });
+    this.ledger(heir, { direction: "in", amount: paid, text: `inheritance from ${from.name}`, before: heirBefore, transactionId });
+    return paid;
+  }
+
+  distributeEstate(snapshot, cohortIds) {
+    const { person, estate, partnerId, childIds } = snapshot;
+    person.cash = estate;
+    person.restrictedInheritance = 0;
+    person.estateTransferred = estate;
+    const duty = Math.floor(estate * 10 + 1e-9) / 100;
+    const postDuty = roundMoney(estate - duty);
+    let distributed = 0;
+    if (duty > 0) {
+      const deceasedBefore = person.cash;
+      const treasuryBefore = this.government.cash;
+      const transactionId = `estate:${this.day}:${person.id}:duty`;
+      const paid = this.transfer(person, this.government, duty, { exact: true });
+      this.ledger(person, { direction: "out", amount: paid, text: "estate duty to treasury", before: deceasedBefore, transactionId });
+      this.ledger(this.government, { direction: "in", amount: paid, text: `estate duty from ${person.name}`, before: treasuryBefore, transactionId });
+    }
+    person.estateDutyPaid = duty;
+    const partner = partnerId === null || cohortIds.has(partnerId) ? null : this.people[partnerId];
+    const children = childIds.map((id) => this.people[id]).filter((child) => child.alive && !cohortIds.has(child.id)).sort((a, b) => a.id - b.id);
+    let partnerShare = 0;
+    let childrenPool = 0;
+    if (partner?.alive && children.length) {
+      partnerShare = Math.floor(postDuty * 50 + 1e-9) / 100;
+      childrenPool = roundMoney(postDuty - partnerShare);
+    } else if (partner?.alive) partnerShare = postDuty;
+    else if (children.length) childrenPool = postDuty;
+    if (partnerShare > 0) distributed += this.transferInheritance(person, partner, partnerShare, `estate:${this.day}:${person.id}:partner`);
+    if (childrenPool > 0 && children.length) {
+      const poolCents = Math.round(childrenPool * 100);
+      const baseCents = Math.floor(poolCents / children.length);
+      const remainder = poolCents % children.length;
+      children.forEach((child, index) => {
+        const share = (baseCents + Number(index < remainder)) / 100;
+        distributed += this.transferInheritance(person, child, share, `estate:${this.day}:${person.id}:child:${child.id}`);
+      });
+    }
+    const treasuryRemainder = roundMoney(person.cash);
+    if (treasuryRemainder > 0) {
+      const deceasedBefore = person.cash;
+      const treasuryBefore = this.government.cash;
+      const transactionId = `estate:${this.day}:${person.id}:remainder`;
+      const paid = this.transfer(person, this.government, treasuryRemainder, { exact: true });
+      const text = partner?.alive || children.length ? "unallocated estate remainder to treasury" : "intestate estate remainder to treasury";
+      this.ledger(person, { direction: "out", amount: paid, text, before: deceasedBefore, transactionId });
+      this.ledger(this.government, { direction: "in", amount: paid, text: `${text} from ${person.name}`, before: treasuryBefore, transactionId });
+    }
+    person.inheritanceDistributed = roundMoney(distributed);
+    return Object.freeze({ personId: person.id, estate, duty, partnerId: partner?.alive ? partner.id : null, childIds: children.map((child) => child.id), distributed: person.inheritanceDistributed, treasuryRemainder });
+  }
+
+  dieCohort(entries) {
+    const seen = new Set();
+    const deaths = entries.map((entry) => entry?.person ? entry : { person: entry, reason: "died after health reached a critical level" })
+      .filter(({ person }) => {
+        if (!person?.alive || seen.has(person.id)) return false;
+        seen.add(person.id);
+        return true;
+      });
+    const snapshots = deaths.map(({ person }) => this.deathEstateSnapshot(person));
+    const cohortIds = new Set(snapshots.map(({ person }) => person.id));
+    deaths.forEach(({ person, reason }) => this.markDeath(person, reason));
+    return snapshots.map((snapshot) => this.distributeEstate(snapshot, cohortIds));
+  }
+
+  die(person, reason = "died after health reached a critical level") {
+    if (!person.alive) return false;
+    this.dieCohort([{ person, reason }]);
     return true;
   }
 
@@ -4879,11 +4973,12 @@ export class TownSimulation {
       this.applySleepDebtConsequences(person);
     });
     this.decayRelationships();
+    const deathCohort = [];
     this.people.forEach((person) => {
       if (!person.alive) return;
       if (person.isDependent) {
         person.criticalHealthDays = person.health <= 0.08 ? person.criticalHealthDays + 1 : 0;
-        if (person.criticalHealthDays >= 3) this.die(person);
+        if (person.criticalHealthDays >= 3) deathCohort.push({ person, reason: "died after health reached a critical level" });
         else this.assessNeeds(person);
         return;
       }
@@ -4898,12 +4993,13 @@ export class TownSimulation {
       }
       person.criticalHealthDays = person.health <= 0.08 ? person.criticalHealthDays + 1 : 0;
       if (person.criticalHealthDays >= 3) {
-        this.die(person);
+        deathCohort.push({ person, reason: "died after health reached a critical level" });
         return;
       }
       this.updateStress(person);
       this.assessNeeds(person);
     });
+    this.dieCohort(deathCohort);
     this.observeFirmOpportunities();
     this.day += 1;
   }
@@ -5556,6 +5652,10 @@ export class TownSimulation {
         || gestation.dueDay !== gestation.conceivedDay + GESTATION_DAYS)) throw new Error("Invalid gestation state");
     if (this.people.some((person) => person.isDependent && (person.employer >= 0 || person.jobApplicationFirm >= 0 || person.partnerId !== null))) throw new Error("A dependent cannot hold adult economic or romantic roles");
     if (this.people.some((person) => !Number.isFinite(person.restrictedInheritance) || person.restrictedInheritance < -1e-9)) throw new Error("Invalid restricted inheritance balance");
+    if (this.people.some((person) => [person.estateTransferred, person.estateDutyPaid, person.inheritanceDistributed]
+      .some((amount) => !Number.isFinite(amount) || amount < -1e-9)
+      || person.estateDutyPaid + person.inheritanceDistributed > person.estateTransferred + 1e-9
+      || (!person.alive && (person.cash > 1e-9 || person.restrictedInheritance > 1e-9)))) throw new Error("Invalid death-estate accounting");
     if (this.people.some((person) => person.alive && person.isDependent && (
       person.guardianIds.some((id) => !this.people[id]?.alive || this.people[id].isDependent)
       || person.treasuryGuardian !== (person.guardianIds.length === 0)
