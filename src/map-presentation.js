@@ -48,6 +48,37 @@ export function applicantFirmId(person, firms) {
   return firm?.active && firm.targetStaff > firm.employees.length ? firm.id : null;
 }
 
+function homeActivityReason(action, place) {
+  if (action === "sleep") return `Sleeping ${place}`;
+  if (["self-study", "late-self-study"].includes(action)) return `Studying ${place}`;
+  if (action === "rest") return `Resting ${place}`;
+  return `Spending time ${place}`;
+}
+
+function firmActivityReason(action, firmName) {
+  if (action === "shift") return `Working at ${firmName}`;
+  if (["clinic", "dependent-clinic"].includes(action)) return `Receiving care at ${firmName}`;
+  if (["school", "dependent-school"].includes(action)) return `Studying at ${firmName}`;
+  if (action === "buy-learning-tools") return `Using learning tools at ${firmName}`;
+  return `Visiting ${firmName}`;
+}
+
+export function personMapPresence(person, { activity = null, activityFirm = null, applicantFirm = null } = {}) {
+  if (!person.alive) return Object.freeze({ kind: "cemetery", firmId: null, reason: "Interred in the cemetery" });
+  if (activity?.action === "park-social") return Object.freeze({ kind: "park", firmId: null, reason: "Socialising in the Common Park" });
+  if (activityFirm) return Object.freeze({ kind: "firm", firmId: activityFirm.id, reason: firmActivityReason(activity.action, activityFirm.name) });
+  if (activity) {
+    const atHome = person.housed ? "at home" : "in the Common Park while unhoused";
+    return Object.freeze({ kind: person.housed ? "home" : "park", firmId: null, reason: homeActivityReason(activity.action, atHome) });
+  }
+  if (!person.isDependent && person.employer < 0) {
+    if (applicantFirm) return Object.freeze({ kind: "applicant", firmId: applicantFirm.id, reason: `Applying at ${applicantFirm.name}` });
+    return Object.freeze({ kind: "park", firmId: null, reason: "Seeking work in the Common Park; no current application" });
+  }
+  if (!person.housed) return Object.freeze({ kind: "park", firmId: null, reason: "In the Common Park while unhoused" });
+  return Object.freeze({ kind: "home", firmId: null, reason: "At home between primary activities" });
+}
+
 export function parkVisitorTarget(personId, park, elapsedMs = 0) {
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   const direction = personId % 2 === 0 ? 1 : -1;
@@ -59,9 +90,12 @@ export function parkVisitorTarget(personId, park, elapsedMs = 0) {
   };
 }
 
-export function personMapTarget(person, { primaryTarget, homeTarget, graveTarget }) {
-  if (!person.alive) return graveTarget;
-  return primaryTarget ?? homeTarget;
+export function personMapTarget(presence, { firmTarget, applicantTarget, parkTarget, homeTarget, graveTarget }) {
+  if (presence.kind === "cemetery") return graveTarget;
+  if (presence.kind === "firm") return firmTarget;
+  if (presence.kind === "applicant") return applicantTarget;
+  if (presence.kind === "park") return parkTarget;
+  return homeTarget;
 }
 
 export function deceasedMarkerSegments(x, y) {

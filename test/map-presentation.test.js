@@ -12,6 +12,7 @@ import {
   landmarkClearsPark,
   livingMarkerPresentation,
   parkVisitorTarget,
+  personMapPresence,
   personMapTarget,
   resolveCanvasColor,
 } from "../src/map-presentation.js";
@@ -77,14 +78,34 @@ test("park visitors mill deterministically within the Common Park", () => {
   assert.ok(ellipticalDistance < 1);
 });
 
-test("map targets use only death or the current primary activity", () => {
+test("map presence explains primary activity, job seeking, home, park, and death", () => {
   const homeTarget = { x: 0.5, y: 0.5 };
-  const primaryTarget = { x: 0.8, y: 0.2 };
+  const firmTarget = { x: 0.8, y: 0.2 };
   const graveTarget = { x: 0.9, y: 0.8 };
+  const parkTarget = { x: 0.5, y: 0.6 };
+  const applicantTarget = { x: 0.2, y: 0.3 };
+  const targets = { firmTarget, applicantTarget, parkTarget, homeTarget, graveTarget };
+  const firm = { id: 2, name: "Morrow School" };
+  const unemployed = { alive: true, isDependent: false, employer: -1, housed: true };
 
-  assert.deepEqual(personMapTarget({ alive: false }, { primaryTarget, homeTarget, graveTarget }), graveTarget);
-  assert.deepEqual(personMapTarget({ alive: true }, { primaryTarget, homeTarget, graveTarget }), primaryTarget);
-  assert.deepEqual(personMapTarget({ alive: true }, { primaryTarget: null, homeTarget, graveTarget }), homeTarget);
+  const working = personMapPresence(unemployed, { activity: { action: "shift" }, activityFirm: firm });
+  assert.deepEqual(working, { kind: "firm", firmId: 2, reason: "Working at Morrow School" });
+  assert.deepEqual(personMapTarget(working, targets), firmTarget);
+
+  const applying = personMapPresence(unemployed, { applicantFirm: firm });
+  assert.deepEqual(applying, { kind: "applicant", firmId: 2, reason: "Applying at Morrow School" });
+  assert.deepEqual(personMapTarget(applying, targets), applicantTarget);
+
+  const seeking = personMapPresence(unemployed);
+  assert.deepEqual(seeking, { kind: "park", firmId: null, reason: "Seeking work in the Common Park; no current application" });
+  assert.deepEqual(personMapTarget(seeking, targets), parkTarget);
+
+  const resting = personMapPresence(unemployed, { activity: { action: "rest" } });
+  assert.deepEqual(resting, { kind: "home", firmId: null, reason: "Resting at home" });
+  assert.deepEqual(personMapTarget(resting, targets), homeTarget);
+
+  assert.deepEqual(personMapPresence({ ...unemployed, isDependent: true }), { kind: "home", firmId: null, reason: "At home between primary activities" });
+  assert.deepEqual(personMapPresence({ ...unemployed, alive: false }), { kind: "cemetery", firmId: null, reason: "Interred in the cemetery" });
 });
 
 test("the deceased marker is a cross-and-base silhouette rather than a living circle", () => {
