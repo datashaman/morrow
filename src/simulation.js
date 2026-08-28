@@ -1051,7 +1051,7 @@ export class TownSimulation {
   }
 
   directWelfareEnabled() {
-    return this.welfareMode === "direct-only" || this.welfareMode === "combined";
+    return this.policy.supportRate > 0 && (this.welfareMode === "direct-only" || this.welfareMode === "combined");
   }
 
   directAssistanceProviderFailure(recipient, provider, purpose) {
@@ -1144,6 +1144,208 @@ export class TownSimulation {
     this.recordWelfare(recipient, evidence);
     this.recordWelfare(this.government, evidence);
     return Object.freeze({ welfareId, eligible: true, accepted, evidence: Object.freeze(evidence) });
+  }
+
+  cashReliefOrder() {
+    const populationSize = this.people.length;
+    const rotation = Math.floor((this.day - 1) / 7);
+    const rotatingRank = (person) => (person.id - rotation + populationSize) % populationSize;
+    return this.people.filter((person) => person.alive && person.isDependent !== true).sort((a, b) => (
+      b.hungryDays - a.hungryDays
+      || Number(a.housed) - Number(b.housed)
+      || this.runwayDays(a) - this.runwayDays(b)
+      || rotatingRank(a) - rotatingRank(b)
+    ));
+  }
+
+  recordCashReliefAssessment(recipient, evidence) {
+    this.recordWelfare(recipient, evidence);
+    this.recordWelfare(this.government, evidence);
+    return evidence;
+  }
+
+  assessCashReliefOffer(recipient) {
+    const programme = WELFARE_PROGRAMMES.cash;
+    const cashShortfall = this.supportShortfall(recipient);
+    const directAid = roundMoney(this.welfareState.directAidByCitizen[recipient.id] ?? 0);
+    const maximumCashRelief = roundMoney(Math.max(0, 5 - directAid));
+    if (!recipient.alive || recipient.isDependent === true || cashShortfall <= 0 || maximumCashRelief <= 0) return null;
+    this.welfareTransactionSequence += 1;
+    const welfareId = `welfare:${this.day}:${this.welfareTransactionSequence}`;
+    const envelopeBefore = this.remainingWelfareEnvelope();
+    const treasuryBefore = roundMoney(this.government.cash);
+    const amount = roundMoney(Math.min(cashShortfall, maximumCashRelief, envelopeBefore, treasuryBefore));
+    const baseEvidence = {
+      welfareId,
+      programme: programme.id,
+      programmeName: programme.name,
+      ruleVersion: programme.ruleVersion,
+      recipientId: recipient.id,
+      recipientName: recipient.name,
+      decisionMakerId: recipient.id,
+      decisionMakerName: recipient.name,
+      providerId: null,
+      providerName: null,
+      purpose: "unrestricted emergency cash",
+      completePrice: null,
+      assessedPrivateCash: roundMoney(recipient.cash),
+      exactShortfall: cashShortfall,
+      directAidReceivedToday: directAid,
+      maximumCashRelief,
+      offeredAmount: amount,
+      envelopeBefore,
+      envelopeAfter: envelopeBefore,
+      treasuryBefore,
+      treasuryAfter: treasuryBefore,
+      eligibilityResult: "eligible",
+      eligibilityReason: "cash remained below the four-day essential-runway target",
+      offered: amount > 0,
+      decision: null,
+      motivationScores: null,
+      privateContribution: 0,
+      treasuryContribution: 0,
+      linkedTransactionIds: [],
+      outcome: amount > 0 ? "offered" : "failed",
+      reason: amount > 0 ? "immediate voluntary welfare offer" : envelopeBefore <= 0 ? "exhausted daily envelope" : "insufficient treasury cash",
+    };
+    if (!(amount > 0)) {
+      this.recordCashReliefAssessment(recipient, baseEvidence);
+      return Object.freeze({ welfareId, eligible: true, accepted: false, amount: 0, evidence: Object.freeze(baseEvidence) });
+    }
+    const fourDayTarget = this.essentialCost() * SUPPORT_RUNWAY_TARGET_DAYS;
+    const urgency = 0.5 * clamp(cashShortfall / fourDayTarget)
+      + 0.3 * clamp(recipient.hungryDays / 2)
+      + 0.2 * Number(!recipient.housed);
+    const observation = Object.freeze({
+      kind: "welfare",
+      programme: programme.id,
+      citizenId: recipient.id,
+      citizenName: recipient.name,
+      stress: recipient.stress,
+      urgency: clamp(urgency),
+      profile: { ...recipient.motivationProfile },
+    });
+    const legalActions = Object.freeze(["refuse-welfare", "accept-welfare"]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal welfare action`);
+    this.recordDecision(recipient, observation, legalActions, decision, "Settlement");
+    const accepted = decision.action === "accept-welfare";
+    const evidence = {
+      ...baseEvidence,
+      decision: decision.action,
+      motivationScores: structuredClone(decision.scores ?? {}),
+      outcome: accepted ? "accepted" : "refused",
+      reason: accepted ? "citizen accepted immediate assistance" : "citizen refused immediate assistance",
+    };
+    this.recordCashReliefAssessment(recipient, evidence);
+    return Object.freeze({ welfareId, eligible: true, accepted, amount, evidence: Object.freeze(evidence) });
+  }
+
+  settleEmergencyCashRelief(recipient, amount, welfareId) {
+    if (!recipient.alive || recipient.isDependent === true) return Object.freeze({ completed: false, reason: "recipient ineligible" });
+    const programme = WELFARE_PROGRAMMES.cash;
+    const envelopeBefore = this.remainingWelfareEnvelope();
+    const treasuryBefore = roundMoney(this.government.cash);
+    const cashShortfall = this.supportShortfall(recipient);
+    const directAid = roundMoney(this.welfareState.directAidByCitizen[recipient.id] ?? 0);
+    const maximumCashRelief = roundMoney(Math.max(0, 5 - directAid));
+    const exactAmount = roundMoney(amount);
+    if (!(exactAmount > 0) || exactAmount > cashShortfall + 1e-9 || exactAmount > maximumCashRelief + 1e-9) throw new Error("Emergency Cash Relief exceeded its assessed limit");
+    const failure = exactAmount > envelopeBefore + 1e-9
+      ? "exhausted daily envelope"
+      : exactAmount > treasuryBefore + 1e-9
+        ? "insufficient treasury cash"
+        : null;
+    if (failure) {
+      const evidence = {
+        welfareId,
+        programme: programme.id,
+        programmeName: programme.name,
+        ruleVersion: programme.ruleVersion,
+        recipientId: recipient.id,
+        recipientName: recipient.name,
+        decisionMakerId: recipient.id,
+        decisionMakerName: recipient.name,
+        providerId: null,
+        providerName: null,
+        purpose: "unrestricted emergency cash",
+        completePrice: null,
+        assessedPrivateCash: roundMoney(recipient.cash),
+        exactShortfall: cashShortfall,
+        envelopeBefore,
+        envelopeAfter: envelopeBefore,
+        treasuryBefore,
+        treasuryAfter: treasuryBefore,
+        privateContribution: 0,
+        treasuryContribution: 0,
+        linkedTransactionIds: [],
+        outcome: "failed",
+        reason: failure,
+      };
+      this.recordCashReliefAssessment(recipient, evidence);
+      return Object.freeze({ completed: false, reason: failure, evidence: Object.freeze(evidence) });
+    }
+    const transactionId = `${welfareId}:treasury`;
+    const recipientBefore = recipient.cash;
+    const paid = this.transfer(this.government, recipient, exactAmount, { exact: true });
+    if (paid !== exactAmount) throw new Error("Atomic Emergency Cash Relief transfer failed");
+    this.ledger(this.government, { direction: "out", amount: paid, text: `Emergency Cash Relief to ${recipient.name}`, before: treasuryBefore, transactionId, programme: programme.id });
+    this.ledger(recipient, { direction: "in", amount: paid, text: "Emergency Cash Relief from treasury", before: recipientBefore, transactionId, programme: programme.id });
+    this.welfareState.spent = roundMoney(this.welfareState.spent + paid);
+    const evidence = {
+      welfareId,
+      programme: programme.id,
+      programmeName: programme.name,
+      ruleVersion: programme.ruleVersion,
+      recipientId: recipient.id,
+      recipientName: recipient.name,
+      decisionMakerId: recipient.id,
+      decisionMakerName: recipient.name,
+      providerId: null,
+      providerName: null,
+      purpose: "unrestricted emergency cash",
+      completePrice: null,
+      assessedPrivateCash: recipientBefore,
+      exactShortfall: cashShortfall,
+      directAidReceivedToday: directAid,
+      maximumCashRelief,
+      envelopeBefore,
+      envelopeAfter: this.remainingWelfareEnvelope(),
+      treasuryBefore,
+      treasuryAfter: roundMoney(this.government.cash),
+      privateContribution: 0,
+      treasuryContribution: paid,
+      linkedTransactionIds: [transactionId],
+      outcome: "delivered",
+      reason: "unrestricted emergency cash transferred",
+    };
+    this.recordCashReliefAssessment(recipient, evidence);
+    return Object.freeze({ completed: true, reason: evidence.reason, evidence: Object.freeze(evidence) });
+  }
+
+  runEmergencyCashRelief() {
+    if (this.welfareMode !== "combined" || this.policy.supportRate <= 0) return [];
+    return this.cashReliefOrder().map((person) => {
+      const offer = this.assessCashReliefOffer(person);
+      if (!offer?.accepted) return offer;
+      return this.settleEmergencyCashRelief(person, offer.amount, offer.welfareId);
+    }).filter(Boolean);
+  }
+
+  runLegacyCashSupport() {
+    if (this.welfareMode !== "legacy-cash") return 0;
+    const budget = this.government.cash * (this.policy.supportRate / 100) * 0.18;
+    let spent = 0;
+    const vulnerable = this.people.filter((person) => person.alive).sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
+    vulnerable.forEach((person) => {
+      const shortfall = this.supportShortfall(person);
+      if (spent >= budget || this.government.cash <= 0 || shortfall <= 0) return;
+      const before = person.cash;
+      const paid = this.transfer(this.government, person, Math.min(5, shortfall, budget - spent));
+      spent = roundMoney(spent + paid);
+      if (paid) this.ledger(person, { direction: "in", amount: paid, text: "support from treasury", before });
+    });
+    return spent;
   }
 
   directAssistanceFailure({ programme, recipient, decisionMaker, provider, purpose, completePrice, privateCash, shortfall, reason, welfareId, envelopeBefore, treasuryBefore }) {
@@ -3537,17 +3739,8 @@ export class TownSimulation {
     this.resolveHousingReceivership();
     this.resolveEssentialSectorReentry();
     this.resolveHousingCapacity();
-    const budget = this.government.cash * (this.policy.supportRate / 100) * 0.18;
-    let spent = 0;
-    const vulnerable = this.people.filter((person) => person.alive).sort((a, b) => (b.hungryDays + (!b.housed ? 3 : 0)) - (a.hungryDays + (!a.housed ? 3 : 0)) || a.cash - b.cash);
-    vulnerable.forEach((person) => {
-      const shortfall = this.supportShortfall(person);
-      if (spent >= budget || this.government.cash <= 0 || shortfall <= 0) return;
-      const before = person.cash;
-      const paid = this.transfer(this.government, person, Math.min(5, shortfall, budget - spent));
-      spent = roundMoney(spent + paid);
-      if (paid) this.ledger(person, { direction: "in", amount: paid, text: "support from treasury", before });
-    });
+    this.runLegacyCashSupport();
+    this.runEmergencyCashRelief();
 
     if (this.schedulesEnabled && calendarForDay(this.day).weekdayIndex === 6) {
       this.firms.filter((firm) => firm.active).forEach((firm) => this.reviewOwnerPrice(firm));

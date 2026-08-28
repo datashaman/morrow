@@ -319,3 +319,139 @@ test("an unavailable direct provider records ineligibility rather than claimant 
   assert.equal(recipient.welfareHistory[0].decision, null);
   assert.equal(grocer.priceRejectionsToday, 0);
 });
+
+test("Emergency Cash Relief preserves the four-day means test and five-cash cap", () => {
+  const town = new TownSimulation({ seed: 71, welfareMode: "combined", policy: { supportRate: 100 } });
+  town.phase = 7;
+  const recipient = town.people.at(-1);
+  recipient.cash = 0;
+  recipient.stress = 0;
+  recipient.motivationProfile = { ...recipient.motivationProfile, security: 1.3, planning: 1.3, avoidance: 0.7 };
+  town.government.cash = 100;
+  town.beginWelfareEnvelope();
+  const moneyBefore = town.totalMoney();
+
+  const offer = town.assessCashReliefOffer(recipient);
+  const result = town.settleEmergencyCashRelief(recipient, offer.amount, offer.welfareId);
+
+  assert.equal(offer.accepted, true);
+  assert.equal(offer.amount, 5);
+  assert.equal(result.completed, true);
+  assert.equal(recipient.cash, 5);
+  assert.equal(town.government.cash, 95);
+  assert.equal(town.welfareState.spent, 5);
+  assert.equal(town.totalMoney(), moneyBefore);
+  assert.equal(result.evidence.linkedTransactionIds[0], `${offer.welfareId}:treasury`);
+  assert.equal(recipient.ledger[0].programme, "emergency-cash-relief");
+  assert.equal(town.government.ledger[0].transactionId, recipient.ledger[0].transactionId);
+});
+
+test("same-day direct aid reduces the Emergency Cash Relief cap dollar for dollar", () => {
+  const town = new TownSimulation({ seed: 72, welfareMode: "combined", policy: { supportRate: 100 } });
+  const recipient = town.people.at(-1);
+  recipient.cash = 0;
+  recipient.stress = 0;
+  recipient.motivationProfile = { ...recipient.motivationProfile, security: 1.3, planning: 1.3, avoidance: 0.7 };
+  town.government.cash = 100;
+  town.beginWelfareEnvelope();
+  town.welfareState.directAidByCitizen[recipient.id] = 3.25;
+
+  const offer = town.assessCashReliefOffer(recipient);
+
+  assert.equal(offer.evidence.maximumCashRelief, 1.75);
+  assert.equal(offer.amount, 1.75);
+});
+
+test("refused Emergency Cash Relief moves no cash or envelope capacity", () => {
+  const town = new TownSimulation({ seed: 73, welfareMode: "combined", policy: { supportRate: 100 } });
+  const recipient = town.people.at(-1);
+  recipient.cash = 0;
+  recipient.stress = 1;
+  recipient.motivationProfile = { ...recipient.motivationProfile, security: 0.7, planning: 0.7, avoidance: 1.3 };
+  town.government.cash = 100;
+  town.beginWelfareEnvelope();
+  const balancesBefore = [recipient.cash, town.government.cash];
+
+  const offer = town.assessCashReliefOffer(recipient);
+
+  assert.equal(offer.accepted, false);
+  assert.equal(offer.evidence.outcome, "refused");
+  assert.deepEqual([recipient.cash, town.government.cash], balancesBefore);
+  assert.equal(town.welfareState.spent, 0);
+});
+
+test("Emergency Cash Relief records exhaustion without an offer or transfer", () => {
+  const town = new TownSimulation({ seed: 74, welfareMode: "combined", policy: { supportRate: 100 } });
+  const recipient = town.people.at(-1);
+  recipient.cash = 0;
+  town.beginWelfareEnvelope();
+  town.welfareState.spent = town.welfareState.envelope;
+
+  const offer = town.assessCashReliefOffer(recipient);
+
+  assert.equal(offer.eligible, true);
+  assert.equal(offer.accepted, false);
+  assert.equal(offer.amount, 0);
+  assert.equal(offer.evidence.outcome, "failed");
+  assert.equal(offer.evidence.reason, "exhausted daily envelope");
+  assert.equal(recipient.cash, 0);
+});
+
+test("Emergency Cash Relief queue prioritizes hunger, homelessness, runway, then week rotation", () => {
+  const town = new TownSimulation({ seed: 75, welfareMode: "combined" });
+  const [a, b, c, d] = town.people;
+  a.hungryDays = 1;
+  a.housed = true;
+  a.cash = 0;
+  b.hungryDays = 2;
+  b.housed = true;
+  b.cash = 0;
+  c.hungryDays = 2;
+  c.housed = false;
+  c.cash = 2;
+  d.hungryDays = 2;
+  d.housed = false;
+  d.cash = 1;
+
+  assert.deepEqual(town.cashReliefOrder().slice(0, 4).map((person) => person.id), [d.id, c.id, b.id, a.id]);
+});
+
+test("no-welfare and direct-only modes do not run cash relief, while legacy mode retains the old transfer", () => {
+  const none = new TownSimulation({ seed: 76, welfareMode: "none" });
+  const direct = new TownSimulation({ seed: 76, welfareMode: "direct-only" });
+  const legacy = new TownSimulation({ seed: 76, welfareMode: "legacy-cash", policy: { supportRate: 100 } });
+  none.people[0].cash = 0;
+  direct.people[0].cash = 0;
+  legacy.people[0].cash = 0;
+
+  assert.deepEqual(none.runEmergencyCashRelief(), []);
+  assert.deepEqual(direct.runEmergencyCashRelief(), []);
+  assert.equal(none.people[0].cash, 0);
+  assert.equal(direct.people[0].cash, 0);
+  assert.equal(legacy.runLegacyCashSupport() > 0, true);
+  assert.equal(legacy.people[0].ledger[0].text, "support from treasury");
+});
+
+test("a zero Welfare budget disables offers in the combined interactive model", () => {
+  const town = new TownSimulation({ seed: 78, welfareMode: "combined", policy: { supportRate: 0 } });
+  town.phase = 4;
+  const recipient = town.people.at(-1);
+  const grocer = town.firms.find((firm) => firm.archetypeId === "everyday-grocer");
+  recipient.cash = 0;
+
+  town.considerFood(recipient, [grocer]);
+
+  assert.equal(recipient.welfareHistory.length, 0);
+  assert.deepEqual(town.runEmergencyCashRelief(), []);
+});
+
+test("death is terminal for welfare assessment and payment", () => {
+  const town = new TownSimulation({ seed: 77, welfareMode: "combined", policy: { supportRate: 100 } });
+  const recipient = town.people.at(-1);
+  town.die(recipient);
+  const historyLength = recipient.welfareHistory.length;
+
+  assert.equal(town.assessCashReliefOffer(recipient), null);
+  assert.equal(town.settleEmergencyCashRelief(recipient, 1, "welfare:1:dead").completed, false);
+  assert.equal(recipient.welfareHistory.length, historyLength);
+});
