@@ -29,7 +29,7 @@ const careTown = (options = {}) => {
 const availableFoodFirms = (town) => town.firms.filter((firm) => town.firmServiceAvailable(firm, "Evening") && firm.sector === "food").sort((a, b) => a.price - b.price);
 
 const healthCareTown = (healthActionForGuardian) => {
-  const town = new TownSimulation({ seed: 71, lifecycleEnabled: true, birthsEnabled: true, schedulesEnabled: true, citizenPolicy: carePolicy({ healthActionForGuardian }), policy: { shockRisk: 0 } });
+  const town = new TownSimulation({ seed: 71, lifecycleEnabled: true, birthsEnabled: true, schedulesEnabled: true, welfareMode: "combined", citizenPolicy: carePolicy({ healthActionForGuardian }), policy: { shockRisk: 0 } });
   town.people.forEach((person) => {
     person.cash = 100;
     person.health = 0.2;
@@ -155,6 +155,35 @@ test("one guardian cannot schedule two dependent clinic visits into one Workday"
   assert.equal(town.planDependentHealthCare(sibling), false);
   assert.equal(guardian.dailyPlan.workday.dependentId, dependent.id);
   assert.equal(sibling.dependentHealthPlan, null);
+});
+
+test("treasury guardianship finite-funds an orphan's exact medicine shortfall", () => {
+  const { town, dependent, guardian, apothecary } = healthCareTown(() => null);
+  const secondGuardian = town.people[1];
+  dependent.health = 0.5;
+  dependent.restrictedInheritance = 0.6;
+  apothecary.inventory = 2;
+  apothecary.transactionsToday = 0;
+  apothecary.employees.forEach((id) => { town.people[id].attended = true; });
+  town.die(guardian, "guardian died");
+  town.die(secondGuardian, "guardian died");
+  town.initialMoney = town.totalMoney();
+  const moneyBefore = town.totalMoney();
+  const treasuryBefore = town.government.cash;
+  const providerBefore = apothecary.cash;
+  const shortfall = apothecary.price - dependent.restrictedInheritance;
+
+  assert.equal(dependent.treasuryGuardian, true);
+  assert.equal(town.planDependentHealthCare(dependent), true);
+  assert.equal(dependent.dependentHealthPlan.guardianId, null);
+  assert.equal(town.executeDependentHealthCare(dependent, town.government, apothecary, "medicine").completed, true);
+
+  assert.equal(dependent.restrictedInheritance, 0);
+  assert.equal(town.government.cash, treasuryBefore - shortfall);
+  assert.equal(apothecary.cash, providerBefore + apothecary.price);
+  assert.equal(town.welfareState.spent, shortfall);
+  assert.equal(dependent.welfareHistory[0].programme, "child-health-assistance");
+  assert.equal(town.totalMoney(), moneyBefore);
 });
 
 test("a dependent follows a housed living guardian and enters treasury guardianship only when none remain", () => {

@@ -1102,13 +1102,18 @@ export class TownSimulation {
     if (!provider) return "no eligible provider";
     if (!provider.active) return "provider inactive";
     if (!this.firmOpenOnDay(provider)) return "provider closed";
-    if (!this.firmServiceAvailable(provider, "Evening")) return purpose === "rent" ? "unavailable housing transaction" : "no eligible provider";
+    const serviceWindow = purpose === "clinical care" ? "Workday" : "Evening";
+    if (!this.firmServiceAvailable(provider, serviceWindow)) return purpose === "rent" ? "unavailable housing transaction" : "no eligible provider";
     if (purpose === "food") {
       this.reconcileInventoryBatches(provider);
       if (provider.sector !== "food" || provider.sells !== "budgetFood") return "no eligible provider";
       if (provider.inventory + 1e-9 < 1) return "no stock";
     } else if (purpose === "rent") {
       if (provider.sector !== "housing" || !recipient.housed || !this.rentDueToday()) return "unavailable housing transaction";
+    } else if (purpose === "medicine") {
+      if (provider.archetypeId !== "apothecary" || provider.sells !== "medicine" || provider.inventory < 1) return "no eligible provider";
+    } else if (purpose === "clinical care") {
+      if (provider.archetypeId !== "clinic" || provider.sells !== "clinicalCare" || provider.inventory < 1) return "no eligible provider";
     }
     const attendedStaff = provider.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
     if (attendedStaff === 0) return "no attended staff";
@@ -1431,7 +1436,7 @@ export class TownSimulation {
     if (!offeredWelfareId) this.welfareTransactionSequence += 1;
     const welfareId = offeredWelfareId ?? `welfare:${this.day}:${this.welfareTransactionSequence}`;
     const price = roundMoney(completePrice ?? 0);
-    const restrictedCash = purpose === "food" ? Math.max(0, recipient?.restrictedInheritance ?? 0) : 0;
+    const restrictedCash = ["food", "medicine", "clinical care"].includes(purpose) ? Math.max(0, recipient?.restrictedInheritance ?? 0) : 0;
     const restrictedContribution = roundMoney(Math.min(restrictedCash, price));
     const payerContribution = roundMoney(Math.min(Math.max(0, privatePayer?.cash ?? 0), price - restrictedContribution));
     const privateCash = roundMoney(restrictedContribution + payerContribution);
@@ -1460,14 +1465,16 @@ export class TownSimulation {
     if (!(price > 0) || Math.abs(price - roundMoney(provider.price)) > 1e-9) {
       return fail(purpose === "rent" ? "unavailable housing transaction" : "no eligible provider");
     }
-    if (purpose !== "food" && purpose !== "rent") throw new Error(`Unsupported direct-assistance purpose: ${purpose}`);
+    if (!["food", "rent", "medicine", "clinical care"].includes(purpose)) throw new Error(`Unsupported direct-assistance purpose: ${purpose}`);
     if (!(shortfall > 0)) return fail("no exact shortfall");
     if (shortfall > envelopeBefore + 1e-9) return fail("exhausted daily envelope");
     if (shortfall > this.government.cash + 1e-9) return fail("insufficient treasury cash");
 
-    const inventory = purpose === "food" ? this.peekFirmInventory(provider, 1) : null;
-    if (purpose === "food" && !inventory.length) return fail("no stock");
-    if (!this.requestTransaction(provider, recipient, purpose === "rent" ? "housing payment" : "food")) {
+    const inventoryPurpose = ["food", "medicine", "clinical care"].includes(purpose);
+    const inventory = inventoryPurpose ? this.peekFirmInventory(provider, 1) : null;
+    if (inventoryPurpose && !inventory.length) return fail("no stock");
+    const transactionPurpose = purpose === "rent" ? "housing payment" : purpose;
+    if (!this.requestTransaction(provider, recipient, transactionPurpose)) {
       throw new Error(`Validated ${programme.name} transaction could not reserve provider capacity`);
     }
 
@@ -1528,9 +1535,14 @@ export class TownSimulation {
         recipient.foodStock.push(food);
       });
       provider.perishableSalesToday += 1;
-    } else {
+    } else if (purpose === "rent") {
       recipient.rentSeller = provider.id;
       recipient.rentArrears = 0;
+    } else {
+      const inventoryTaken = this.takeFirmInventory(provider, 1);
+      if (!inventoryTaken.length) throw new Error(`Inventory changed during atomic ${programme.name} settlement`);
+      if (purpose === "medicine") recipient.healthSeller = provider.id;
+      else recipient.clinicalSeller = provider.id;
     }
     provider.sales = roundMoney(provider.sales + price);
     provider.unitsSold += 1;
@@ -3000,8 +3012,10 @@ export class TownSimulation {
       if (activity.activity === "clinic") result = this.executePlannedClinic(person, this.firms[activity.firmId]);
       else if (activity.activity === "dependent-clinic") {
         const dependent = this.people[activity.dependentId];
-        result = person.id === activity.guardianId
-          ? this.executeDependentHealthCare(dependent, person, this.firms[activity.firmId], "clinic")
+        result = activity.guardianId === null && person.id === activity.dependentId
+          ? this.executeDependentHealthCare(dependent, this.government, this.firms[activity.firmId], "clinic")
+          : person.id === activity.guardianId
+            ? this.executeDependentHealthCare(dependent, person, this.firms[activity.firmId], "clinic")
           : { completed: false, failure: "guardian was unavailable for the shared clinic visit" };
         if (dependent?.dailyPlan?.day === this.day) {
           dependent.dailyPlan.workday.status = result.completed ? "completed" : "failed";
@@ -3528,11 +3542,12 @@ export class TownSimulation {
 
   guardianHealthOptions(guardian, dependent) {
     const availableFunds = roundMoney(dependent.restrictedInheritance + guardian.cash);
+    const publicFallback = this.directWelfareEnabled();
     const options = [];
     const apothecary = this.firms.find((firm) => firm.active && firm.archetypeId === "apothecary");
     const clinic = this.firms.find((firm) => firm.active && firm.archetypeId === "clinic");
     if (dependent.health < HEALTH_TREATMENT_THRESHOLD && this.firmServiceAvailable(apothecary, "Evening")) {
-      if (availableFunds + 1e-9 >= apothecary.price) options.push(Object.freeze({
+      if (availableFunds + 1e-9 >= apothecary.price || publicFallback) options.push(Object.freeze({
         action: `buy-dependent-medicine:${apothecary.id}`,
         source: "medicine",
         firmId: apothecary.id,
@@ -3544,7 +3559,7 @@ export class TownSimulation {
     }
     const guardianCommittedToClinic = guardian.dailyPlan?.day === this.day && guardian.dailyPlan.workday?.activity === "dependent-clinic";
     if (!guardianCommittedToClinic && dependent.health < CLINIC_TREATMENT_THRESHOLD && this.firmServiceAvailable(clinic, "Workday")) {
-      if (availableFunds + 1e-9 >= clinic.price) options.push(Object.freeze({
+      if (availableFunds + 1e-9 >= clinic.price || publicFallback) options.push(Object.freeze({
         action: `buy-dependent-clinic:${clinic.id}`,
         source: "clinic",
         firmId: clinic.id,
@@ -3596,7 +3611,32 @@ export class TownSimulation {
     const guardians = this.reconcileDependentCare(dependent).sort((a, b) => (
       Number(b.id === dependent.residentialGuardianId) - Number(a.id === dependent.residentialGuardianId) || a.id - b.id
     ));
-    return guardians.some((guardian) => this.planGuardianHealthCare(guardian, dependent));
+    if (guardians.some((guardian) => this.planGuardianHealthCare(guardian, dependent))) return true;
+    return guardians.length ? false : this.planTreasuryDependentHealthCare(dependent);
+  }
+
+  planTreasuryDependentHealthCare(dependent) {
+    const canFund = (firm) => firm && (dependent.restrictedInheritance + 1e-9 >= firm.price || this.directWelfareEnabled());
+    const clinic = this.firms.find((firm) => firm.active && firm.archetypeId === "clinic");
+    const apothecary = this.firms.find((firm) => firm.active && firm.archetypeId === "apothecary");
+    const source = dependent.health < CLINIC_TREATMENT_THRESHOLD && this.firmServiceAvailable(clinic, "Workday") && canFund(clinic)
+      ? "clinic"
+      : this.firmServiceAvailable(apothecary, "Evening") && canFund(apothecary) ? "medicine" : null;
+    if (!source) return false;
+    const firm = source === "clinic" ? clinic : apothecary;
+    dependent.dependentHealthPlan = { day: this.day, guardianId: null, firmId: firm.id, source, status: "planned", failureReason: null };
+    if (source === "clinic") dependent.dailyPlan = { day: this.day, workday: {
+      action: `buy-dependent-clinic:${firm.id}`,
+      activity: "dependent-clinic",
+      guardianId: null,
+      dependentId: dependent.id,
+      firmId: firm.id,
+      firmName: firm.name,
+      status: "planned",
+      failureReason: null,
+    } };
+    this.note(dependent, `treasury guardianship planned ${source} care at ${firm.name}`, "neutral");
+    return true;
   }
 
   buyDependentHealthCare(dependent, guardian, firm, source) {
@@ -3605,7 +3645,7 @@ export class TownSimulation {
     const restrictedContribution = roundMoney(Math.min(dependent.restrictedInheritance, price));
     const guardianContribution = roundMoney(price - restrictedContribution);
     const window = source === "clinic" ? "Workday" : "Evening";
-    if (!dependent.alive || !dependent.isDependent || !guardian?.alive || !firm?.active || firm.inventory < 1
+    if (!dependent.alive || !dependent.isDependent || (!guardian?.alive && guardian?.kind !== "government") || !firm?.active || firm.inventory < 1
       || !this.firmServiceAvailable(firm, window) || guardian.cash + 1e-9 < guardianContribution
       || firm.transactionsToday >= this.transactionCapacity(firm)) return false;
     if (!this.requestTransaction(firm, dependent, source === "clinic" ? "dependent clinical care" : "dependent medicine")) return false;
@@ -3636,10 +3676,24 @@ export class TownSimulation {
     return true;
   }
 
+  settleDependentHealthPayment(dependent, guardian, firm, source) {
+    const completePrivateFunds = roundMoney(dependent.restrictedInheritance + (guardian.kind === "person" ? guardian.cash : 0));
+    if (completePrivateFunds + 1e-9 >= firm.price) return this.buyDependentHealthCare(dependent, guardian, firm, source);
+    if (!this.directWelfareEnabled()) return false;
+    return this.settleDirectAssistance({
+      programme: "childHealth",
+      recipient: dependent,
+      decisionMaker: guardian,
+      privatePayer: guardian.kind === "person" ? guardian : dependent,
+      provider: firm,
+      purpose: source === "clinic" ? "clinical care" : "medicine",
+    }).completed;
+  }
+
   executeDependentHealthCare(dependent, guardian, firm, source) {
     const plan = dependent.dependentHealthPlan;
     if (!plan || plan.day !== this.day || plan.status !== "planned" || plan.source !== source) return { completed: false, failure: "dependent care was not planned" };
-    if (!this.buyDependentHealthCare(dependent, guardian, firm, source)) {
+    if (!this.settleDependentHealthPayment(dependent, guardian, firm, source)) {
       plan.status = "failed";
       plan.failureReason = "provider, capacity, stock, or exact funding was unavailable";
       this.note(dependent, `planned ${source} care failed because ${plan.failureReason}`, "bad");
@@ -4167,7 +4221,8 @@ export class TownSimulation {
       if (!person.alive) return;
       if (person.isDependent && person.dependentHealthPlan?.day === this.day && person.dependentHealthPlan.source === "medicine" && person.dependentHealthPlan.status === "planned") {
         const plan = person.dependentHealthPlan;
-        this.executeDependentHealthCare(person, this.people[plan.guardianId], this.firms[plan.firmId], "medicine");
+        const guardian = plan.guardianId === null ? this.government : this.people[plan.guardianId];
+        this.executeDependentHealthCare(person, guardian, this.firms[plan.firmId], "medicine");
       }
       const receivedClinicalCare = this.schedulesEnabled ? false : this.considerClinicalCare(person, clinic);
       if (!receivedClinicalCare) this.considerHealthCare(person, apothecary);

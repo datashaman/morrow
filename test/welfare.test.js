@@ -15,7 +15,7 @@ test("welfare mode is explicit, validated, retained by reset, and exposed by sna
   assert.deepEqual(town.government.welfareHistory, []);
 });
 
-test("the daily welfare envelope snapshots treasury cash once after payroll", () => {
+test("the daily welfare envelope snapshots treasury cash only once per day", () => {
   const town = new TownSimulation({ seed: 61, welfareMode: "combined", policy: { supportRate: 35 } });
   town.government.cash = 200;
 
