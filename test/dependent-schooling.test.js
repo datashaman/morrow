@@ -89,6 +89,7 @@ test("school funding protects three days of guardian essentials and allocated de
   const town = new TownSimulation({ seed: 91, lifecycleEnabled: true });
   const dependent = town.createNewborn([0]);
   const guardian = town.people[0];
+  dependent.lifecycleStage = "child";
   const school = { active: true, price: 4.5 };
   const reserve = town.guardianSchoolProtectedReserve(guardian);
   dependent.restrictedInheritance = 1.5;
@@ -121,6 +122,7 @@ test("a delivered dependent lesson exact-pays restricted funds, protected guardi
   const school = town.firms.find((firm) => firm.archetypeId === "school");
   const dependent = town.createNewborn([0]);
   const guardian = town.people[0];
+  dependent.lifecycleStage = "child";
   dependent.restrictedInheritance = 1;
   guardian.cash = town.guardianSchoolProtectedReserve(guardian) + 1;
   school.inventory = 2;
@@ -128,12 +130,29 @@ test("a delivered dependent lesson exact-pays restricted funds, protected guardi
   const moneyBefore = town.totalMoney();
   const schoolBefore = school.cash;
 
-  const result = town.settleDependentSchoolPayment(dependent, guardian, school);
+  const result = town.executeDependentSchooling(dependent, { schoolId: school.id, guardianId: guardian.id, attend: true });
 
   assert.equal(result.completed, true);
   assert.equal(dependent.restrictedInheritance, 0);
   assert.equal(guardian.cash, town.guardianSchoolProtectedReserve(guardian));
   assert.equal(school.cash, schoolBefore + school.price);
-  assert.equal(result.evidence.treasuryContribution, school.price - 2);
+  assert.equal(dependent.skill, 0.05 + 0.004 * 0.95);
+  assert.equal(dependent.schoolHistory[0].outcome, "attended");
+  assert.equal(dependent.welfareHistory[0].treasuryContribution, school.price - 2);
   assert.equal(town.totalMoney(), moneyBefore);
+});
+
+test("a dependent who misses a funded lesson creates history but no school revenue", () => {
+  const town = new TownSimulation({ seed: 91, lifecycleEnabled: true });
+  const dependent = town.createNewborn([0]);
+  const school = town.firms[0];
+  const cashBefore = school.cash;
+  const stockBefore = school.inventory;
+
+  const result = town.executeDependentSchooling(dependent, { schoolId: school.id, guardianId: 0, attend: false });
+
+  assert.equal(result.completed, true);
+  assert.equal(dependent.schoolHistory[0].outcome, "missed");
+  assert.equal(school.cash, cashBefore);
+  assert.equal(school.inventory, stockBefore);
 });

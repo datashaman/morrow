@@ -1975,6 +1975,97 @@ export class TownSimulation {
     return record;
   }
 
+  planGuardianSchoolFunding(guardian, dependent, school) {
+    const reserve = this.guardianSchoolProtectedReserve(guardian);
+    const available = Math.max(0, roundMoney(guardian.cash - reserve)) + dependent.restrictedInheritance;
+    const canOffer = this.guardianCanFundSchool(guardian, dependent, school) || this.directWelfareEnabled();
+    const observation = Object.freeze({
+      kind: "dependent-school-funding",
+      citizenId: guardian.id,
+      citizenName: guardian.name,
+      dependentId: dependent.id,
+      dependentName: dependent.name,
+      stress: guardian.stress,
+      educationNeed: this.dependentEducationNeed(dependent),
+      careScarcity: clamp(1 - this.dependentCareRunway(guardian) / 12),
+      costPressure: clamp(school.price / Math.max(school.price, available)),
+      profile: { ...guardian.motivationProfile },
+      schoolId: school.id,
+    });
+    const legalActions = Object.freeze(["defer-dependent-school-funding", ...(canOffer ? [`fund-dependent-school:${school.id}`] : [])]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal dependent-school-funding action`);
+    this.recordDecision(guardian, observation, legalActions, decision, "Planning");
+    return decision.action === `fund-dependent-school:${school.id}`;
+  }
+
+  planDependentSchooling(dependent) {
+    if (!dependent.alive || !dependent.isDependent || !["child", "student"].includes(dependent.lifecycleStage)
+      || dependent.dailyPlan?.day === this.day && dependent.dailyPlan.workday?.activity === "dependent-clinic") return false;
+    const school = this.firms.find((firm) => this.firmServiceAvailable(firm, "Workday") && firm.archetypeId === "school");
+    if (!school) return false;
+    const guardians = this.reconcileDependentCare(dependent).sort((a, b) => (
+      Number(b.id === dependent.residentialGuardianId) - Number(a.id === dependent.residentialGuardianId) || a.id - b.id
+    ));
+    const guardian = guardians.find((candidate) => this.planGuardianSchoolFunding(candidate, dependent, school)) ?? null;
+    if (!guardian && !(guardians.length === 0 && this.directWelfareEnabled())) return false;
+    const records = this.recentScheduledSchoolRecords(dependent);
+    const missed = records.filter((record) => record.outcome !== "attended").length;
+    const observation = Object.freeze({
+      kind: "dependent-school-attendance",
+      citizenId: dependent.id,
+      citizenName: dependent.name,
+      schoolId: school.id,
+      educationNeed: this.dependentEducationNeed(dependent),
+      missedLessonRate: clamp(missed / 5),
+      hunger: Number(dependent.hungryDays > 0),
+      health: dependent.health,
+      sleepDebt: this.sleepEnabled ? dependent.sleepDebt : 0,
+      stress: dependent.stress,
+      reliability: dependent.reliability,
+      profile: { ...dependent.motivationProfile },
+    });
+    const legalActions = Object.freeze(["miss-dependent-school", `attend-dependent-school:${school.id}`]);
+    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal dependent-school-attendance action`);
+    this.recordDecision(dependent, observation, legalActions, decision, "Planning");
+    dependent.dailyPlan = { day: this.day, workday: {
+      action: decision.action,
+      activity: "dependent-school",
+      schoolId: school.id,
+      guardianId: guardian?.id ?? null,
+      attend: decision.action === `attend-dependent-school:${school.id}`,
+      status: "planned",
+      failureReason: null,
+    } };
+    return true;
+  }
+
+  executeDependentSchooling(dependent, activity) {
+    const school = this.firms[activity.schoolId];
+    const guardian = activity.guardianId === null ? this.government : this.people[activity.guardianId];
+    if (!activity.attend) {
+      this.recordDependentSchool(dependent, "missed", { school, guardian, reason: "dependent chose not to attend" });
+      return { completed: true };
+    }
+    const payment = this.settleDependentSchoolPayment(dependent, guardian, school);
+    if (!payment.completed) {
+      this.recordDependentSchool(dependent, "failed", { school, guardian, reason: payment.reason });
+      return { completed: false, failure: payment.reason };
+    }
+    const generalRate = dependent.lifecycleStage === "student" ? 0.006 : 0.004;
+    const before = dependent.skill;
+    dependent.skill = clamp(before + generalRate * (1 - before), 0, 0.95);
+    this.syncGeneralKnowledge(dependent, { source: "education", sourceId: school.id, sourceName: school.name, rule: `dependent-${dependent.lifecycleStage}-general-v1`, phase: "Production" });
+    if (dependent.lifecycleStage === "student" && dependent.studyDomain) this.applyKnowledgeLearning(dependent, {
+      source: "education", sourceId: school.id, sourceName: school.name, domain: dependent.studyDomain, rate: 0.003,
+      rule: "dependent-student-domain-v1", phase: "Production",
+    });
+    dependent.lastEducationDay = this.day;
+    this.recordDependentSchool(dependent, "attended", { school, guardian, reason: "paid lesson delivered" });
+    return { completed: true };
+  }
+
   resolveGestations() {
     if (!this.lifecycleEnabled || !this.birthsEnabled || calendarForDay(this.day).weekdayIndex !== 0) return [];
     const resolved = [];
@@ -3133,6 +3224,7 @@ export class TownSimulation {
         }
       }
       else if (activity.activity === "school") result = this.executePlannedSchool(person, this.firms[activity.firmId]);
+      else if (activity.activity === "dependent-school") result = this.executeDependentSchooling(person, activity);
       else if (activity.activity === "self-study") this.applyFreePersonalActivity(person, "self-study", "Production");
       else if (activity.activity === "rest") this.applyFreePersonalActivity(person, "rest", "Production");
       activity.status = result.completed ? "completed" : "failed";
@@ -5334,6 +5426,7 @@ export class TownSimulation {
       this.runJobMarket();
       this.people.forEach((person) => this.planWorkday(person));
       this.people.forEach((person) => this.planDependentHealthCare(person));
+      this.people.forEach((person) => this.planDependentSchooling(person));
     }
   }
 
