@@ -73,6 +73,29 @@ test("late study is excluded when hunger, health, debt, or focus makes it illega
   assert.deepEqual(decision.legalActions, ["sleep"]);
 });
 
+test("dependents sleep automatically and never receive a late-study action", () => {
+  const rejectingPolicy = {
+    id: "reject-dependent-sleep-policy",
+    decide({ observation, legalActions }) {
+      if (observation.kind === "sleep") throw new Error("dependent sleep reached citizen policy");
+      return { action: legalActions[0], reasons: ["fixture"] };
+    },
+  };
+  const town = new TownSimulation({ seed: 42, lifecycleEnabled: true, sleepEnabled: true, citizenPolicy: rejectingPolicy });
+  const dependent = town.createNewborn([0, 1]);
+  dependent.focus = "growth";
+  dependent.sleepDebt = 0.1;
+  const skillBefore = dependent.skill;
+
+  const record = town.resolveSleep(dependent);
+
+  assert.equal(record.action, "sleep");
+  assert.equal(dependent.decisions[0].policy, "dependent-sleep-v1");
+  assert.deepEqual(dependent.decisions[0].legalActions, ["sleep"]);
+  assert.equal(dependent.skill, skillBefore);
+  assert.ok(dependent.sleepDebt < 0.35);
+});
+
 test("sleep debt lowers physiological need, raises stress pressure, and causes bounded health loss", () => {
   const town = new TownSimulation({ seed: 42, sleepEnabled: true, citizenPolicy: sleepPolicy });
   const person = town.people[0];

@@ -4339,11 +4339,12 @@ export class TownSimulation {
   }
 
   resolveSleep(person) {
-    if (!this.sleepEnabled || !person.alive || person.isDependent) return null;
+    if (!this.sleepEnabled || !person.alive) return null;
     const debtBefore = person.sleepDebt;
     const debtAfterAccrual = clamp(debtBefore + 0.25);
     const quality = this.sleepQuality(person);
-    const lateStudyLegal = person.hungryDays === 0
+    const lateStudyLegal = !person.isDependent
+      && person.hungryDays === 0
       && person.health >= 0.4
       && debtBefore < 0.6
       && ["esteem", "growth"].includes(person.focus);
@@ -4361,7 +4362,9 @@ export class TownSimulation {
       focus: person.focus,
       profile: { ...person.motivationProfile },
     });
-    const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+    const decision = person.isDependent
+      ? { action: "sleep", reasons: ["Dependents sleep automatically and cannot choose late study."], scores: { sleep: 1 }, policy: "dependent-sleep-v1" }
+      : this.citizenPolicy.decide({ observation, legalActions, random: this.random });
     if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal sleep action`);
     this.recordDecision(person, observation, legalActions, decision, "Settlement");
     person.sleepDebt = decision.action === "sleep"
@@ -4414,7 +4417,7 @@ export class TownSimulation {
     if (!this.schedulesEnabled) this.runJobMarket();
     operatingFirms.forEach((firm) => this.finishFirmSettlement(firm));
     if (this.sleepEnabled) this.people.forEach((person) => {
-      if (!person.alive || person.isDependent) return;
+      if (!person.alive) return;
       this.resolveSleep(person);
       this.applySleepDebtConsequences(person);
     });
