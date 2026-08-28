@@ -3049,12 +3049,24 @@ export class TownSimulation {
       }
       return;
     }
-    this.people.forEach((person) => {
+    this.housingAccessOrder().forEach((person) => {
       if (!person.alive) return;
       if (!person.housed) person.rentArrears = 0;
       if (person.housed && !this.rentDueToday()) return;
       this.considerHousing(person, housing);
     });
+  }
+
+  housingAccessOrder() {
+    if (!this.directWelfareEnabled()) return this.people;
+    const populationSize = this.people.length;
+    const rotation = Math.floor((this.day - 1) / 7);
+    const rotatingRank = (person) => (person.id - rotation + populationSize) % populationSize;
+    return this.people.filter((person) => person.alive).sort((a, b) => (
+      b.rentArrears - a.rentArrears
+      || this.runwayDays(a) - this.runwayDays(b)
+      || rotatingRank(a) - rotatingRank(b)
+    ));
   }
 
   considerHousing(person, housing) {
@@ -3064,7 +3076,16 @@ export class TownSimulation {
     const canPay = person.cash + 1e-9 >= due;
     const occupancy = this.housingOccupancy();
     const dwellingAvailable = !this.housingCapacityEnabled || wasHoused || occupancy < housing.dwellingCapacity;
-    if (!canPay) housing.priceRejectionsToday += 1;
+    let welfareAssessment = null;
+    if (!canPay && wasHoused && this.directWelfareEnabled()) {
+      const urgency = 0.65 * clamp((person.rentArrears + 1) / 3) + 0.35 * clamp(1 - this.runwayDays(person) / 4);
+      welfareAssessment = this.assessWelfareOffer({ programme: "rent", recipient: person, provider: housing, purpose: "rent", urgency });
+      if (welfareAssessment.accepted) {
+        const settlement = this.settleDirectAssistance({ programme: "rent", recipient: person, provider: housing, purpose: "rent", welfareId: welfareAssessment.welfareId });
+        if (settlement.completed) return true;
+      }
+    }
+    if (!canPay && !welfareAssessment) housing.priceRejectionsToday += 1;
     const option = canPay && dwellingAvailable ? {
       action: `${wasHoused ? "pay-housing" : "secure-housing"}:${housing.id}`,
       firmId: housing.id,

@@ -249,6 +249,60 @@ test("refused Food Assistance spends nothing and ordinary hunger consequences co
   assert.equal(grocer.priceRejectionsToday, 0);
 });
 
+test("Rent Assistance is offered only for an unaffordable current rent and resets arrears on delivery", () => {
+  const town = new TownSimulation({ seed: 67, welfareMode: "combined", policy: { supportRate: 100 } });
+  town.phase = 5;
+  const recipient = town.people.at(-1);
+  const housing = town.firms.find((firm) => firm.sector === "housing");
+  recipient.cash = 1;
+  recipient.rentArrears = 2;
+  recipient.stress = 0;
+  recipient.motivationProfile = { ...recipient.motivationProfile, security: 1.3, planning: 1.3, avoidance: 0.7 };
+
+  const paid = town.considerHousing(recipient, housing);
+
+  assert.equal(paid, true);
+  assert.equal(recipient.housed, true);
+  assert.equal(recipient.rentArrears, 0);
+  assert.equal(recipient.welfareHistory.some((record) => record.programme === "rent-assistance" && record.outcome === "delivered"), true);
+});
+
+test("refused Rent Assistance follows ordinary arrears and eviction consequences", () => {
+  const town = new TownSimulation({ seed: 69, welfareMode: "combined", policy: { supportRate: 100 } });
+  town.phase = 5;
+  const recipient = town.people.at(-1);
+  const housing = town.firms.find((firm) => firm.sector === "housing");
+  recipient.cash = 1;
+  recipient.rentArrears = 2;
+  recipient.stress = 1;
+  recipient.motivationProfile = { ...recipient.motivationProfile, security: 0.7, planning: 0.7, avoidance: 1.3 };
+  const balancesBefore = [recipient.cash, housing.cash, town.government.cash];
+
+  const paid = town.considerHousing(recipient, housing);
+
+  assert.equal(paid, false);
+  assert.equal(recipient.housed, false);
+  assert.equal(recipient.rentArrears, 0);
+  assert.equal(recipient.welfareHistory[0].outcome, "refused");
+  assert.deepEqual([recipient.cash, housing.cash, town.government.cash], balancesBefore);
+  assert.equal(housing.priceRejectionsToday, 0);
+});
+
+test("Rent Assistance queue prioritizes eviction risk, runway, then week rotation", () => {
+  const town = new TownSimulation({ seed: 70, welfareMode: "combined" });
+  const [a, b, c, d] = town.people;
+  a.rentArrears = 1;
+  a.cash = 1;
+  b.rentArrears = 2;
+  b.cash = 4;
+  c.rentArrears = 2;
+  c.cash = 2;
+  d.rentArrears = 2;
+  d.cash = 2;
+
+  assert.deepEqual(town.housingAccessOrder().slice(0, 4).map((person) => person.id), [c.id, d.id, b.id, a.id]);
+});
+
 test("an unavailable direct provider records ineligibility rather than claimant refusal", () => {
   const town = new TownSimulation({ seed: 68, welfareMode: "combined", policy: { supportRate: 100 } });
   town.phase = 4;
