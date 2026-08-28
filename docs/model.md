@@ -72,6 +72,7 @@ Policy sliders commit on release, and neural personal-time control changes immed
 
 There are 40 named people. Each person carries:
 
+- Lifecycle foundation: an immutable citizen ID, one of `infant`, `child`, `student`, or `adult`, an optional birth day and calendar age, explicit dependent status, parent and guardian references, a residential guardian reference, a restricted-inheritance balance, and lifecycle history. The initial 40 citizens are adults with no modeled birth day or general adult ageing. The lifecycle gate is disabled while the remaining tracer slices are introduced, so this state alone changes no adult choices.
 - Economic state: cash, employer, current job application, seller references, food reserve, housing status, rent arrears, and transaction ledger
 - Capacity and mortality: skill, versioned general and canonical vocational knowledge, complete learning history, reliability, stable employment-spell rota, scheduled and attended shift counts, missed work, health, living status, critical-health duration, and death day
 - Sleep: bounded debt, most recent sleep quality, complete newest-first sleep history, and current primary activity
@@ -83,6 +84,8 @@ There are 40 named people. Each person carries:
 - Display state: home and current map positions
 
 Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.58 to 0.94; stress ranges from 0.12 to 0.37. These are design values, not calibrated distributions.
+
+Calendar-age stage boundaries are fixed gameplay hypotheses: infant from day 0 through 27, child from day 28 through 83, student from day 84 through 167, and adult from day 168. Existing adults keep `null` birth day and age because this tracer does not introduce general adult ageing. Citizen IDs remain append-only array references; the next available ID begins after the initial population. No birth, maturation, guardianship, partnership, or dependent behavior is active in this foundation slice.
 
 #### Trade-knowledge tracer
 

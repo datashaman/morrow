@@ -29,6 +29,8 @@ export const FRIENDSHIP_DAILY_DECAY = 0.015;
 export const FRIENDSHIP_END_THRESHOLD = 0.2;
 export const COOPERATION_MODES = Object.freeze(["legacy", "public-social", "mutual-aid"]);
 export const WELFARE_MODES = Object.freeze(["none", "legacy-cash", "direct-only", "combined"]);
+export const LIFECYCLE_STAGES = Object.freeze(["infant", "child", "student", "adult"]);
+export const LIFECYCLE_STAGE_START_DAYS = Object.freeze({ infant: 0, child: 28, student: 84, adult: 168 });
 export const WELFARE_PROGRAMMES = Object.freeze({
   food: Object.freeze({ id: "food-assistance", name: "Food Assistance", ruleVersion: "food-assistance-v1" }),
   rent: Object.freeze({ id: "rent-assistance", name: "Rent Assistance", ruleVersion: "rent-assistance-v1" }),

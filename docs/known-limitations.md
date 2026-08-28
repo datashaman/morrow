@@ -67,8 +67,8 @@ The seed is fixed in the browser and interactive runs still cannot be exported, 
 
 ## Social and demographic simplifications
 
-- People are isolated individuals rather than households or families.
-- There is no age, disability, gender, caregiving, migration, birth, or demographic replacement.
+- People remain isolated individuals rather than households or families. They now carry inert lifecycle and family-reference fields, but no relationship or care behavior uses them yet.
+- The lifecycle foundation defines infant, child, student, and adult calendar-age boundaries while retaining the initial population as adults of unknown age. The lifecycle gate remains disabled: there are no births, dependents, guardianship behavior, maturation, general adult ageing, disability, gender, caregiving, migration, or demographic replacement yet.
 - Friendships are symmetric, strength-weighted, and capped by a fixed capacity.
 - Social contact occurs through paid café visits and free Common Park visits, but there are no home, workplace, neighborhood, online, family, or organized-group encounters.
 - Friends can share only one qualifying stored meal through the batched close-friend rule. They cannot lend or gift cash, share housing, refer one another for jobs, transmit stress, provide care, pool resources, or transfer any other good. A gift creates no gratitude, obligation, reciprocity score, relationship reward, or guarantee that need improves.

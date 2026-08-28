@@ -44,6 +44,8 @@ import {
   INVESTMENT_WAGE_RESERVE_DAYS,
   LEGACY_OPPORTUNITY_OBSERVATION_DAYS,
   LEGACY_OPPORTUNITY_PROTECTED_RUNWAY_DAYS,
+  LIFECYCLE_STAGES,
+  LIFECYCLE_STAGE_START_DAYS,
   MAINTENANCE_INTERVAL_DAYS,
   MIN_FOOD_QUALITY,
   MISSED_MAINTENANCE_CAPACITY,
@@ -93,8 +95,16 @@ import { createKnowledgeProfile, validateFirmKnowledgeConfigs, weightedVocationa
 const clamp = (value, min = 0, max = 1) => Math.max(min, Math.min(max, value));
 const roundMoney = (value) => Math.round(value * 100) / 100;
 
+export const lifecycleStageForAge = (ageDays) => {
+  if (!Number.isInteger(ageDays) || ageDays < 0) throw new Error("Citizen age must be a non-negative whole number of days");
+  if (ageDays >= LIFECYCLE_STAGE_START_DAYS.adult) return "adult";
+  if (ageDays >= LIFECYCLE_STAGE_START_DAYS.student) return "student";
+  if (ageDays >= LIFECYCLE_STAGE_START_DAYS.child) return "child";
+  return "infant";
+};
+
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy", welfareMode = "legacy-cash" } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy", welfareMode = "legacy-cash", lifecycleEnabled = false } = {}) {
     validateFirmKnowledgeConfigs(FIRMS);
     if (!COOPERATION_MODES.includes(cooperationMode)) throw new Error(`Unknown cooperation mode: ${cooperationMode}`);
     if (!WELFARE_MODES.includes(welfareMode)) throw new Error(`Unknown welfare mode: ${welfareMode}`);
@@ -111,6 +121,7 @@ export class TownSimulation {
     this.sleepEnabled = sleepEnabled;
     this.cooperationMode = cooperationMode;
     this.welfareMode = welfareMode;
+    this.lifecycleEnabled = lifecycleEnabled;
     this.reset();
   }
 
@@ -314,6 +325,16 @@ export class TownSimulation {
         kind: "person",
         id,
         name,
+        lifecycleStage: "adult",
+        birthDay: null,
+        ageDays: null,
+        isDependent: false,
+        parentIds: [],
+        guardianIds: [],
+        residentialGuardianId: null,
+        restrictedInheritance: 0,
+        lifecycleSequence: 0,
+        lifecycleHistory: [],
         alive: true,
         deathDay: null,
         estateTransferred: 0,
@@ -384,6 +405,7 @@ export class TownSimulation {
         events: [{ day: 1, ...temporalMetadata(1, "Planning"), sequence: 1, text: "entered the town economy", kind: "neutral" }],
       };
     });
+    this.nextCitizenId = this.people.length;
 
     for (let i = 0; i < 52; i += 1) {
       const a = this.random.pick(this.people);
@@ -4398,6 +4420,13 @@ export class TownSimulation {
     const entities = [...this.people, ...this.firms, this.government];
     if (entities.some((entity) => entity.cash < -1e-9 || !Number.isFinite(entity.cash))) throw new Error("Invalid cash balance");
     if (this.firms.some((firm, id) => firm.id !== id)) throw new Error("Firm entity IDs must remain stable array references");
+    if (this.people.some((person, id) => person.id !== id) || this.nextCitizenId !== this.people.length) throw new Error("Citizen entity IDs must remain stable append-only array references");
+    if (this.people.some((person) => !LIFECYCLE_STAGES.includes(person.lifecycleStage)
+      || person.isDependent !== (person.lifecycleStage !== "adult")
+      || (person.birthDay === null) !== (person.ageDays === null)
+      || (person.ageDays !== null && lifecycleStageForAge(person.ageDays) !== person.lifecycleStage))) {
+      throw new Error("Invalid citizen lifecycle state");
+    }
     if (new Set(this.firms.map((firm) => firm.instanceId)).size !== this.firms.length) throw new Error("Firm instance identities must remain unique");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
     if (this.schedulesEnabled && this.people.some((person) => person.employer >= 0 && (
@@ -4469,6 +4498,7 @@ export class TownSimulation {
   snapshot() {
     const alive = this.people.filter((person) => person.alive).length;
     const dead = this.people.length - alive;
+    const lifecycleCounts = Object.fromEntries(LIFECYCLE_STAGES.map((stage) => [stage, this.people.filter((person) => person.alive && person.lifecycleStage === stage).length]));
     const townStage = inferTownStage({ day: this.day, people: this.people, firms: this.firms, policy: this.policy, essentialCost: this.essentialCost() });
     return {
       day: this.day,
@@ -4482,6 +4512,8 @@ export class TownSimulation {
       alive,
       dead,
       totalCitizens: this.people.length,
+      lifecycleEnabled: this.lifecycleEnabled,
+      lifecycleCounts,
       positionsAvailable: this.firms
         .filter((firm) => firm.active)
         .reduce((total, firm) => total + Math.max(0, firm.targetStaff - firm.employees.length), 0),
