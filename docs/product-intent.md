@@ -32,6 +32,7 @@ Policy controls should make causal exploration possible. Re-running the same see
 - Dated perishable produce and food with FIFO use, expiry, and attributable waste
 - Employment, layoffs, vacancies, hiring, and firm closure
 - Funded employment opportunities backed by attributable demand and retained firm cash, without an employment floor or guaranteed job
+- A headless finite public-realm employment tracer with an existing-cash treasury counterparty; it remains disabled in the browser unless paired fixed-seed evidence improves earned demand without worsening survival, food access, or dependent care
 - Hunger, bounded self-care and clinical treatment, health, stress, scarcity errors, arrears, eviction, rehousing, and death
 - Paid, finite retail education plus transferable workplace knowledge across every current trade, with bounded operation-specific effects that never guarantee employment, demand, or success
 - Explicit labor-gated fabrication, construction-material supply, finite dwellings, and paid building projects
