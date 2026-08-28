@@ -34,6 +34,9 @@ export const LIFECYCLE_STAGE_START_DAYS = Object.freeze({ infant: 0, child: 28, 
 export const PARTNERSHIP_FRIENDSHIP_THRESHOLD = 0.75;
 export const PARTNERSHIP_END_FRIENDSHIP_THRESHOLD = 0.2;
 export const PARTNERSHIP_COOLDOWN_DAYS = 28;
+export const GESTATION_DAYS = 28;
+export const BIRTH_SPACING_DAYS = 84;
+export const CONCEPTION_CHANCE = 0.25;
 export const WELFARE_PROGRAMMES = Object.freeze({
   food: Object.freeze({ id: "food-assistance", name: "Food Assistance", ruleVersion: "food-assistance-v1" }),
   rent: Object.freeze({ id: "rent-assistance", name: "Rent Assistance", ruleVersion: "rent-assistance-v1" }),
@@ -166,6 +169,12 @@ export const NAMES = [
   "Lina", "Adam", "Tara", "Yusuf", "Nia", "Max", "Ravi", "Ella",
   "Sizwe", "Ana", "Omar", "Luca", "Priya", "Kai", "Mara", "Tumi",
 ];
+
+export const BIRTH_NAMES = Object.freeze([
+  "Alex", "Ari", "Avery", "Bo", "Casey", "Emery", "Finley", "Indigo",
+  "Jules", "Kit", "Lane", "Micah", "Morgan", "Parker", "Quinn", "Remy",
+  "River", "Robin", "Rowan", "Sage", "Shiloh", "Sky", "Taylor", "Wren",
+]);
 
 const tradeDomain = (id, weight, workplaceLearningRate, learningRule) => Object.freeze({
   id,

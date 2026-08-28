@@ -20,8 +20,9 @@ export type ClinicalAction = "defer-clinical-care" | `buy-clinical-care:${number
 export type MutualAidAction = "keep-meals" | "refuse-all-meal-gifts" | `offer-meal:${number}` | `accept-meal:${number}`;
 export type WelfareAction = "refuse-welfare" | "accept-welfare";
 export type PartnershipAction = "remain-single" | "continue-partnership" | "separate-partnership" | "decline-partnership" | `propose-partnership:${number}` | `accept-partnership:${number}`;
+export type BirthAction = "wait-for-child" | "try-for-child";
 export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
-export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | WelfareAction | PartnershipAction | OwnerAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | WelfareAction | PartnershipAction | BirthAction | OwnerAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -343,6 +344,20 @@ export type PartnershipObservation = Readonly<{
   options: readonly PartnershipOption[];
 }>;
 
+export type BirthObservation = Readonly<{
+  kind: "birth-attempt";
+  citizenId: number;
+  citizenName: string;
+  partnerId: number;
+  partnerName: string;
+  stress: number;
+  friendshipStrength: number;
+  sharedSecurity: number;
+  careCapacity: number;
+  careLoad: number;
+  profile: MotivationProfile;
+}>;
+
 export type OwnerOption = Readonly<{
   action: OwnerAction;
   label: string;
@@ -372,7 +387,7 @@ export type OwnerObservation = Readonly<{
   options: readonly OwnerOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | WelfareObservation | PartnershipObservation | OwnerObservation;
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | WelfareObservation | PartnershipObservation | BirthObservation | OwnerObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -497,6 +512,8 @@ export class RuleCitizenPolicy implements CitizenPolicy {
         : observation.domain === "proposal"
           ? "remain-single"
           : "decline-partnership";
+    } else if (observation.kind === "birth-attempt") {
+      action = "wait-for-child";
     } else if (observation.kind === "owner") {
       if (observation.domain === "wage") {
         const waive = observation.options.find((option) => option.action === "waive-owner-wage");
@@ -538,6 +555,7 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     if (input.observation.kind === "mutual-aid-receive") return this.decideMutualAidReceive(input.observation, input.legalActions);
     if (input.observation.kind === "welfare") return this.decideWelfare(input.observation, input.legalActions);
     if (input.observation.kind === "partnership") return this.decidePartnership(input.observation, input.legalActions);
+    if (input.observation.kind === "birth-attempt") return this.decideBirthAttempt(input.observation, input.legalActions);
     if (input.observation.kind === "owner") return this.decideOwner(input.observation, input.legalActions);
 
     const { observation, legalActions } = input;
@@ -676,6 +694,18 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
       });
     }
     return this.highestScoringDecision(legalActions, scores, `partnership ${observation.domain}`);
+  }
+
+  decideBirthAttempt(observation: BirthObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const { profile } = observation;
+    const scores: Record<string, number> = {
+      "try-for-child": profile.connection * (0.25 + observation.friendshipStrength * 0.35)
+        + profile.planning * observation.careCapacity * 0.45,
+      "wait-for-child": 0.25 + profile.security * (1 - observation.careCapacity) * 0.65
+        + profile.avoidance * observation.stress * 0.25
+        + profile.planning * observation.careLoad * 0.25,
+    };
+    return this.highestScoringDecision(legalActions, scores, "birth attempt");
   }
 
   decideOwner(observation: OwnerObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {

@@ -26,7 +26,7 @@ test("town stage is a pure deterministic projection with inspectable evidence", 
   assert.deepEqual(input, before);
   assert.equal(first.id, "complexity");
   assert.deepEqual(Object.keys(first.evidence), [
-    "livingCitizens", "essentialReliability", "essentialStates", "employmentRate", "reserveShare", "reserveRunwayDays",
+    "livingCitizens", "adultCitizens", "essentialReliability", "essentialStates", "employmentRate", "reserveShare", "reserveRunwayDays",
     "discretionaryDemand", "activeOptionalSectors", "persistentOptionalSectors", "oldestOptionalAge", "activeArchetypes",
   ]);
 });

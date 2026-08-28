@@ -475,8 +475,8 @@ function updateInterface() {
   renderControlHistory(state.controlHistory);
   elements.money.textContent = `${(state.totalMoney / state.initialMoney * 100).toFixed(2)}%`;
   elements["money-detail"].textContent = `${money(state.totalMoney)} of ${money(state.initialMoney)} remains on ledgers`;
-  elements.employment.textContent = `${state.alive ? Math.round(state.employed / state.alive * 100) : 0}%`;
-  elements["employment-detail"].textContent = `${state.employed} employed · ${state.alive - state.employed} seeking · ${state.positionsAvailable} position${state.positionsAvailable === 1 ? "" : "s"} available`;
+  elements.employment.textContent = `${state.workforceAdults ? Math.round(state.employed / state.workforceAdults * 100) : 0}%`;
+  elements["employment-detail"].textContent = `${state.employed} employed · ${state.workforceAdults - state.employed} seeking · ${state.positionsAvailable} position${state.positionsAvailable === 1 ? "" : "s"} available`;
   elements.hardship.textContent = state.hungry + state.unhoused;
   elements["hardship-detail"].textContent = `${state.hungry} living without food · ${state.unhoused} living without housing`;
   elements.population.textContent = `${state.alive}/${state.totalCitizens}`;

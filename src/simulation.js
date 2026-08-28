@@ -1,7 +1,10 @@
 import {
+  BIRTH_NAMES,
+  BIRTH_SPACING_DAYS,
   CLINIC_TREATMENT_RECOVERY,
   CLINIC_TREATMENT_RESERVE_DAYS,
   CLINIC_TREATMENT_THRESHOLD,
+  CONCEPTION_CHANCE,
   CLOSE_FRIENDSHIP_THRESHOLD,
   COOPERATION_MODES,
   DEFAULT_POLICY,
@@ -21,6 +24,7 @@ import {
   FRIENDSHIP_DAILY_DECAY,
   FRIENDSHIP_DECAY_GRACE_DAYS,
   FRIENDSHIP_END_THRESHOLD,
+  GESTATION_DAYS,
   FOOD_HEALTH_RECOVERY,
   FOOD_PANTRY_CAPACITY,
   FOOD_QUALITY_DECAY_PER_DAY,
@@ -107,7 +111,7 @@ export const lifecycleStageForAge = (ageDays) => {
 };
 
 export class TownSimulation {
-  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy", welfareMode = "legacy-cash", lifecycleEnabled = false } = {}) {
+  constructor({ seed = 20260823, policy = {}, citizenPolicy = createDefaultCitizenPolicy(), latentFirmNames = [], formationArchetypeIds = PRIVATE_FORMATION_ARCHETYPE_IDS, housingCapacityEnabled = false, transportEnabled = false, knowledgeEnabled = true, employmentInterventionEnabled = true, schedulesEnabled = false, sleepEnabled = false, cooperationMode = "legacy", welfareMode = "legacy-cash", lifecycleEnabled = false, birthsEnabled = false } = {}) {
     validateFirmKnowledgeConfigs(FIRMS);
     if (!COOPERATION_MODES.includes(cooperationMode)) throw new Error(`Unknown cooperation mode: ${cooperationMode}`);
     if (!WELFARE_MODES.includes(welfareMode)) throw new Error(`Unknown welfare mode: ${welfareMode}`);
@@ -125,6 +129,7 @@ export class TownSimulation {
     this.cooperationMode = cooperationMode;
     this.welfareMode = welfareMode;
     this.lifecycleEnabled = lifecycleEnabled;
+    this.birthsEnabled = birthsEnabled;
     this.reset();
   }
 
@@ -267,6 +272,11 @@ export class TownSimulation {
     this.mutualAidOfferSequence = 0;
     this.mutualAidTransferSequence = 0;
     this.welfareTransactionSequence = 0;
+    this.gestationSequence = 0;
+    this.gestations = [];
+    this.birthAttemptCounts = {};
+    this.birthAttemptHistory = [];
+    this.lastBirthDays = {};
     this.welfareState = {
       day: null,
       envelopeSnapshotCash: 0,
@@ -521,7 +531,7 @@ export class TownSimulation {
   }
 
   cafeDemandCount(archetype) {
-    return this.people.filter((person) => person.alive && (
+    return this.people.filter((person) => person.alive && !person.isDependent && (
       (person.focus === "belonging" && person.cash > archetype.price + 7)
       || (person.scarcityError && person.stress > 0.65 && person.cash + 1e-9 >= archetype.price)
     )).length;
@@ -530,7 +540,7 @@ export class TownSimulation {
   premiumFoodDemandCount(archetype) {
     const reserve = this.essentialCost() * this.formationProtectedRunwayDays();
     return this.people.reduce((total, person) => {
-      if (!person.alive || person.foodStock.length || person.cash + 1e-9 < archetype.price + reserve) return total;
+      if (!person.alive || person.isDependent || person.foodStock.length || person.cash + 1e-9 < archetype.price + reserve) return total;
       const affordableUnits = Math.floor((person.cash - reserve + 1e-9) / archetype.price);
       return total + Math.max(0, Math.min(person.foodReserveTarget, affordableUnits));
     }, 0);
@@ -538,14 +548,14 @@ export class TownSimulation {
 
   apothecaryDemandCount(archetype) {
     const reserve = this.essentialCost() * HEALTH_TREATMENT_RESERVE_DAYS;
-    return this.people.filter((person) => person.alive
+    return this.people.filter((person) => person.alive && !person.isDependent
       && person.health < HEALTH_TREATMENT_THRESHOLD
       && person.cash + 1e-9 >= archetype.price + reserve).length;
   }
 
   educationDemandCount(archetype) {
     const reserve = this.essentialCost() * EDUCATION_RESERVE_DAYS;
-    return this.people.filter((person) => person.alive
+    return this.people.filter((person) => person.alive && !person.isDependent
       && person.skill < EDUCATION_SKILL_THRESHOLD
       && person.cash + 1e-9 >= archetype.price + reserve).length;
   }
@@ -556,13 +566,13 @@ export class TownSimulation {
 
   clinicDemandCount(archetype) {
     const reserve = this.essentialCost() * CLINIC_TREATMENT_RESERVE_DAYS;
-    return this.people.filter((person) => person.alive
+    return this.people.filter((person) => person.alive && !person.isDependent
       && person.health < CLINIC_TREATMENT_THRESHOLD
       && person.cash + 1e-9 >= archetype.price + reserve).length;
   }
 
   housingOccupancy() {
-    return this.people.filter((person) => person.alive && person.housed).length;
+    return this.people.filter((person) => person.alive && !person.isDependent && person.housed).length;
   }
 
   housingProjectDemand(housing = this.firms.find((firm) => firm.active && firm.sector === "housing")) {
@@ -605,6 +615,7 @@ export class TownSimulation {
     const excludedOwners = new Set(excludedOwnerIds);
     return this.people
       .filter((person) => person.alive
+        && !person.isDependent
         && person.employer < 0
         && !excludedOwners.has(person.id)
         && !this.firms.some((firm) => firm.active && firm.owner === person.id)
@@ -1598,6 +1609,7 @@ export class TownSimulation {
     if (!a || !b || a === b || !a.alive || !b.alive || a.lifecycleStage !== "adult" || b.lifecycleStage !== "adult") return false;
     if (requireUnpartnered && (a.partnerId !== null || b.partnerId !== null)) return false;
     if (this.partnershipCooldownActive(a) || this.partnershipCooldownActive(b) || this.partnershipKinExcluded(a, b)) return false;
+    if (this.activeGestationFor(a.id) || this.activeGestationFor(b.id)) return false;
     const strength = Math.min(a.relationships[b.id]?.strength ?? 0, b.relationships[a.id]?.strength ?? 0);
     return strength + 1e-9 >= PARTNERSHIP_FRIENDSHIP_THRESHOLD;
   }
@@ -1649,6 +1661,124 @@ export class TownSimulation {
     this.recordLifecycle(person, "partnership-ended", `romantic partnership with ${partner.name} ended`, partner, reason);
     this.recordLifecycle(partner, "partnership-ended", `romantic partnership with ${person.name} ended`, person, reason);
     return true;
+  }
+
+  pairKey(aId, bId) {
+    return [aId, bId].sort((a, b) => a - b).join(":");
+  }
+
+  activeGestationFor(citizenId) {
+    return this.gestations.find((gestation) => gestation.status === "active" && gestation.parentIds.includes(citizenId)) ?? null;
+  }
+
+  isolatedConceptionDraw(aId, bId, attemptSequence) {
+    const [left, right] = [aId, bId].sort((a, b) => a - b);
+    const isolatedSeed = (this.seed ^ Math.imul(left + 1, 0x9e3779b1) ^ Math.imul(right + 1, 0x85ebca6b) ^ Math.imul(attemptSequence, 0xc2b2ae35)) >>> 0;
+    return createRandom(isolatedSeed)();
+  }
+
+  birthName(citizenId) {
+    const random = createRandom((this.seed ^ Math.imul(citizenId + 1, 0x27d4eb2d)) >>> 0);
+    const base = BIRTH_NAMES[Math.floor(random() * BIRTH_NAMES.length)];
+    const matches = this.people.filter((person) => person.name === base || person.name.startsWith(`${base} `)).length;
+    return matches ? `${base} ${matches + 1}` : base;
+  }
+
+  createNewborn(parentIds) {
+    const id = this.nextCitizenId;
+    const guardians = parentIds.map((parentId) => this.people[parentId]).filter((parent) => parent?.alive).sort((a, b) => a.id - b.id);
+    if (!guardians.length) return null;
+    const residentialGuardian = guardians.find((guardian) => guardian.housed) ?? guardians[0];
+    const name = this.birthName(id);
+    const newborn = {
+      kind: "person", id, name, lifecycleStage: "infant", birthDay: this.day, ageDays: 0, isDependent: true,
+      parentIds: [...parentIds].sort((a, b) => a - b), guardianIds: guardians.map((guardian) => guardian.id), formerGuardianIds: [],
+      residentialGuardianId: residentialGuardian.id, restrictedInheritance: 0, lifecycleSequence: 1,
+      lifecycleHistory: [{ day: this.day, ...temporalMetadata(this.day, "Planning"), sequence: 1, type: "birth", text: `born to ${parentIds.map((parentId) => this.people[parentId].name).join(" and ")}`, counterpartId: null, counterpartName: null, reason: "completed gestation" }],
+      partnerId: null, partnershipStartDay: null, lastPartnershipEndDay: null,
+      alive: true, deathDay: null, estateTransferred: 0, criticalHealthDays: 0, cash: 0, skill: 0.05,
+      knowledgeProfile: createKnowledgeProfile(0.05), learningHistory: [], learningSequence: 0, reliability: 0.75,
+      employer: -1, employmentSpellSequence: 0, rota: null, scheduledShiftsWorked: 0, scheduledShiftsElapsed: 0,
+      dailyPlan: null, currentPrimaryActivity: null, sleepDebt: 0, lastSleepQuality: null, sleepSequence: 0, sleepHistory: [],
+      jobApplicationFirm: -1, relationships: {}, socialCapacity: 0, lastSocialDay: 0, hungryDays: 0, rentArrears: 0,
+      housed: residentialGuardian.housed, health: 0.75, stress: 0, esteemBaseline: 0, motivationProfile: createMotivationProfile(this.seed, id),
+      dividendPreference: 0, ownerRecoveryThreshold: 0, growth: 0, attended: false, scarcityError: false, missedWork: 0,
+      foodSeller: -1, foodReserveTarget: 1, foodStock: [], mutualAidHistory: [], welfareSequence: 0, welfareHistory: [],
+      foodConsumedToday: 0, foodConsumedTotal: 0, wasteSequence: 0, wasteHistory: [], lastFoodQuality: null, lastFoodAge: null,
+      personalSeller: -1, healthSeller: -1, lastTreatmentDay: null, educationSeller: -1, lastEducationDay: null,
+      clinicalSeller: -1, lastClinicalDay: null, socialVenueToday: null, rentSeller: -1,
+      homeX: residentialGuardian.homeX, homeY: residentialGuardian.homeY, x: residentialGuardian.homeX, y: residentialGuardian.homeY,
+      activitySequence: 1, decisionSequence: 0, decisions: [], ledger: [],
+      events: [{ day: this.day, ...temporalMetadata(this.day, "Planning"), sequence: 1, text: `born to ${parentIds.map((parentId) => this.people[parentId].name).join(" and ")}`, kind: "good" }],
+      needs: { physiological: 0.75, safety: 0, belonging: 0, esteem: 0, growth: 0 }, focus: "physiological", socialToday: false,
+    };
+    this.people.push(newborn);
+    this.nextCitizenId += 1;
+    parentIds.forEach((parentId) => this.recordLifecycle(this.people[parentId], "birth", `${newborn.name} was born`, newborn, "completed gestation"));
+    return newborn;
+  }
+
+  resolveGestations() {
+    if (!this.lifecycleEnabled || !this.birthsEnabled || calendarForDay(this.day).weekdayIndex !== 0) return [];
+    const resolved = [];
+    this.gestations.filter((gestation) => gestation.status === "active" && gestation.dueDay <= this.day).sort((a, b) => a.id - b.id).forEach((gestation) => {
+      const livingParents = gestation.parentIds.filter((parentId) => this.people[parentId]?.alive);
+      if (!livingParents.length) {
+        gestation.status = "ended";
+        gestation.endedDay = this.day;
+        gestation.outcome = "both prospective guardians died";
+        gestation.parentIds.forEach((parentId) => this.recordLifecycle(this.people[parentId], "gestation-ended", "gestation ended before birth", null, gestation.outcome));
+        resolved.push(gestation);
+        return;
+      }
+      const newborn = this.createNewborn(gestation.parentIds);
+      gestation.status = "completed";
+      gestation.completedDay = this.day;
+      gestation.newbornId = newborn.id;
+      this.lastBirthDays[this.pairKey(...gestation.parentIds)] = this.day;
+      resolved.push(gestation);
+    });
+    return resolved;
+  }
+
+  runBirthAttempts() {
+    if (!this.lifecycleEnabled || !this.birthsEnabled || calendarForDay(this.day).weekdayIndex !== 0) return [];
+    const results = [];
+    this.people.filter((person) => person.alive && person.partnerId !== null && person.id < person.partnerId).sort((a, b) => a.id - b.id).forEach((a) => {
+      const b = this.people[a.partnerId];
+      const key = this.pairKey(a.id, b.id);
+      if (this.activeGestationFor(a.id) || this.activeGestationFor(b.id)) return;
+      if (this.lastBirthDays[key] !== undefined && this.day - this.lastBirthDays[key] < BIRTH_SPACING_DAYS) return;
+      const currentDependents = new Set([...this.people.filter((person) => person.isDependent && person.guardianIds.some((id) => id === a.id || id === b.id)).map((person) => person.id)]).size;
+      const careLoad = clamp(currentDependents / 3);
+      const sharedSecurity = Math.min(this.materialSecurity(a), this.materialSecurity(b));
+      const housingAvailable = this.housingOccupancy() < (this.firms.find((firm) => firm.sector === "housing")?.dwellingCapacity ?? 0) ? 1 : 0;
+      const foodReliable = this.firms.some((firm) => firm.active && firm.sector === "food" && firm.inventory > 0) ? 1 : 0;
+      const careCapacity = clamp(0.35 * sharedSecurity + 0.2 * ((a.health + b.health) / 2) + 0.2 * housingAvailable + 0.15 * foodReliable + 0.1 * (1 - careLoad));
+      const friendshipStrength = Math.min(a.relationships[b.id]?.strength ?? 0, b.relationships[a.id]?.strength ?? 0);
+      const decisions = [a, b].map((person) => {
+        const observation = Object.freeze({ kind: "birth-attempt", citizenId: person.id, citizenName: person.name, partnerId: person === a ? b.id : a.id, partnerName: person === a ? b.name : a.name, stress: person.stress, friendshipStrength, sharedSecurity, careCapacity, careLoad, profile: { ...person.motivationProfile } });
+        const legalActions = Object.freeze(["wait-for-child", "try-for-child"]);
+        const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+        if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal birth-attempt action`);
+        this.recordDecision(person, observation, legalActions, decision, "Planning");
+        return decision;
+      });
+      if (!decisions.every((decision) => decision.action === "try-for-child")) return;
+      const attemptSequence = (this.birthAttemptCounts[key] ?? 0) + 1;
+      this.birthAttemptCounts[key] = attemptSequence;
+      const draw = this.isolatedConceptionDraw(a.id, b.id, attemptSequence);
+      const conceived = draw < CONCEPTION_CHANCE;
+      const attempt = { day: this.day, parentIds: [a.id, b.id], attemptSequence, draw, chance: CONCEPTION_CHANCE, conceived };
+      results.push(attempt);
+      this.birthAttemptHistory.unshift(Object.freeze({ ...attempt }));
+      if (!conceived) return;
+      const gestation = { id: ++this.gestationSequence, parentIds: [a.id, b.id], attemptSequence, conceivedDay: this.day, dueDay: this.day + GESTATION_DAYS, status: "active", newbornId: null };
+      this.gestations.push(gestation);
+      this.recordLifecycle(a, "conception", `began a gestation with ${b.name}`, b, `attempt ${attemptSequence}`);
+      this.recordLifecycle(b, "conception", `began a gestation with ${a.name}`, a, `attempt ${attemptSequence}`);
+    });
+    return results;
   }
 
   runPartnerships() {
@@ -1886,7 +2016,7 @@ export class TownSimulation {
   }
 
   hire(firm, person, silent = false) {
-    if (!firm.active || !person.alive || person.employer >= 0) return false;
+    if (!firm.active || !person.alive || person.isDependent || person.employer >= 0) return false;
     person.employer = firm.id;
     person.jobApplicationFirm = -1;
     firm.employees.push(person.id);
@@ -1907,7 +2037,7 @@ export class TownSimulation {
   }
 
   considerJobOffer(firm, candidate, offeredWage) {
-    if (!firm.active || !candidate.alive || candidate.employer >= 0) return false;
+    if (!firm.active || !candidate.alive || candidate.isDependent || candidate.employer >= 0) return false;
     const needs = this.assessNeeds(candidate);
     const observation = Object.freeze({
       kind: "job-offer",
@@ -1943,7 +2073,7 @@ export class TownSimulation {
   }
 
   considerJobSearch(person, firms = this.firms) {
-    if (!person.alive || person.employer >= 0) return null;
+    if (!person.alive || person.isDependent || person.employer >= 0) return null;
     person.jobApplicationFirm = -1;
     const eligibleFirms = this.eligibleJobFirms(firms);
     if (!eligibleFirms.length) return null;
@@ -1986,12 +2116,12 @@ export class TownSimulation {
     const eligibleFirms = this.eligibleJobFirms(firms);
     if (!eligibleFirms.length) return 0;
     this.people
-      .filter((person) => person.alive && person.employer < 0)
+      .filter((person) => person.alive && !person.isDependent && person.employer < 0)
       .forEach((person) => this.considerJobSearch(person, eligibleFirms));
     let hires = 0;
     eligibleFirms.forEach((firm) => {
       const candidate = this.people
-        .filter((person) => person.alive && person.employer < 0 && person.jobApplicationFirm === firm.id)
+        .filter((person) => person.alive && !person.isDependent && person.employer < 0 && person.jobApplicationFirm === firm.id)
         .sort((a, b) => b.skill + b.reliability * 0.25 - (a.skill + a.reliability * 0.25))[0];
       const wage = this.scheduledShiftWage(firm);
       if (candidate && this.considerJobOffer(firm, candidate, wage)) {
@@ -2051,7 +2181,7 @@ export class TownSimulation {
   }
 
   planWorkday(person) {
-    if (!person.alive) return null;
+    if (!person.alive || person.isDependent) return null;
     this.assessNeeds(person);
     const employer = person.employer >= 0 ? this.firms[person.employer] : null;
     const scheduled = Boolean(employer && this.firmOpenOnDay(employer) && this.scheduledForShift(person, employer));
@@ -3119,7 +3249,7 @@ export class TownSimulation {
   }
 
   runMutualAidExchange() {
-    const living = this.people.filter((person) => person.alive).sort((a, b) => a.id - b.id);
+    const living = this.people.filter((person) => person.alive && !person.isDependent).sort((a, b) => a.id - b.id);
     const snapshots = new Map(living.map((person) => [person.id, Object.freeze({
       personId: person.id,
       alive: person.alive,
@@ -3298,7 +3428,7 @@ export class TownSimulation {
     const populationSize = this.people.length;
     const rotation = this.directWelfareEnabled() ? Math.floor((this.day - 1) / 7) : this.day;
     const rotatingRank = (person) => (person.id - rotation + populationSize) % populationSize;
-    return this.people.filter((person) => person.alive).sort((a, b) => (
+    return this.people.filter((person) => person.alive && !person.isDependent).sort((a, b) => (
       b.hungryDays - a.hungryDays
       || a.health - b.health
       || (this.directWelfareEnabled() ? this.runwayDays(a) - this.runwayDays(b) : 0)
@@ -3307,7 +3437,7 @@ export class TownSimulation {
   }
 
   considerFood(person, foodFirms) {
-    if (!person.alive) return false;
+    if (!person.alive || person.isDependent) return false;
     const reserveTarget = this.foodReserveTargetForDay(person);
     const oldestStoredFoodIndex = person.foodStock.reduce((oldest, food, index, stock) => {
       if (oldest < 0) return index;
@@ -3437,7 +3567,7 @@ export class TownSimulation {
         const provider = this.firms.find((firm) => firm.active && firm.sector === "housing");
         if (provider) {
           const nextOpening = this.nextOpeningDay(provider);
-          this.people.filter((person) => person.alive && (!person.housed || this.rentDueToday())).forEach((person) => {
+          this.people.filter((person) => person.alive && !person.isDependent && (!person.housed || this.rentDueToday())).forEach((person) => {
             this.note(person, `${provider.name} was closed for housing payments${nextOpening ? `; next opening D${nextOpening}` : ""}`, "neutral");
           });
         }
@@ -3465,7 +3595,7 @@ export class TownSimulation {
   }
 
   considerHousing(person, housing) {
-    if (!person.alive || !housing?.active) return false;
+    if (!person.alive || person.isDependent || !housing?.active) return false;
     const wasHoused = person.housed;
     const due = roundMoney(wasHoused ? housing.price : housing.price * 3);
     const canPay = person.cash + 1e-9 >= due;
@@ -3559,7 +3689,7 @@ export class TownSimulation {
   }
 
   considerHealthCare(person, apothecary) {
-    if (!person.alive || person.health >= HEALTH_TREATMENT_THRESHOLD) return false;
+    if (!person.alive || person.isDependent || person.health >= HEALTH_TREATMENT_THRESHOLD) return false;
     const affordable = apothecary && person.cash + 1e-9 >= apothecary.price;
     if (apothecary && !affordable) apothecary.priceRejectionsToday += 1;
     const option = affordable ? {
@@ -3598,7 +3728,7 @@ export class TownSimulation {
   }
 
   considerClinicalCare(person, clinic) {
-    if (!person.alive || person.health >= CLINIC_TREATMENT_THRESHOLD) return false;
+    if (!person.alive || person.isDependent || person.health >= CLINIC_TREATMENT_THRESHOLD) return false;
     const reserve = this.essentialCost() * CLINIC_TREATMENT_RESERVE_DAYS;
     const affordable = clinic && person.cash + 1e-9 >= clinic.price + reserve;
     if (clinic && !affordable) clinic.priceRejectionsToday += 1;
@@ -3638,7 +3768,7 @@ export class TownSimulation {
   }
 
   considerEducation(person, school) {
-    if (!person.alive || person.skill >= EDUCATION_SKILL_THRESHOLD) return false;
+    if (!person.alive || person.isDependent || person.skill >= EDUCATION_SKILL_THRESHOLD) return false;
     this.assessNeeds(person);
     const reserve = this.essentialCost() * EDUCATION_RESERVE_DAYS;
     const affordable = school && person.cash + 1e-9 >= school.price + reserve;
@@ -3785,7 +3915,7 @@ export class TownSimulation {
   }
 
   considerPersonalTime(person, café, makers) {
-    if (!person.alive) return false;
+    if (!person.alive || person.isDependent) return false;
     this.assessNeeds(person);
     const pursuesDiscretionaryPurchase = this.random() < this.policy.discretionaryDemand / 100;
     const canBuy = (firm, reserve = 0) => firm
@@ -3868,7 +3998,7 @@ export class TownSimulation {
   }
 
   resolveSleep(person) {
-    if (!this.sleepEnabled || !person.alive) return null;
+    if (!this.sleepEnabled || !person.alive || person.isDependent) return null;
     const debtBefore = person.sleepDebt;
     const debtAfterAccrual = clamp(debtBefore + 0.25);
     const quality = this.sleepQuality(person);
@@ -3943,13 +4073,13 @@ export class TownSimulation {
     if (!this.schedulesEnabled) this.runJobMarket();
     operatingFirms.forEach((firm) => this.finishFirmSettlement(firm));
     if (this.sleepEnabled) this.people.forEach((person) => {
-      if (!person.alive) return;
+      if (!person.alive || person.isDependent) return;
       this.resolveSleep(person);
       this.applySleepDebtConsequences(person);
     });
     this.decayRelationships();
     this.people.forEach((person) => {
-      if (!person.alive) return;
+      if (!person.alive || person.isDependent) return;
       this.updateStress(person);
       if (person.stress > 0.55) {
         person.health = clamp(person.health - (0.002 + (person.stress - 0.55) * 0.018), 0.08, 1);
@@ -4514,7 +4644,9 @@ export class TownSimulation {
 
   planningPhase() {
     this.expirePerishableInventory();
+    this.resolveGestations();
     this.runPartnerships();
+    this.runBirthAttempts();
     if (this.schedulesEnabled) Object.entries(this.pendingFormations).forEach(([archetypeId, pending]) => {
       const archetype = this.firmArchetype(archetypeId);
       if (!archetype || !this.archetypeOpenOnDay(archetype)) return;
@@ -4600,6 +4732,13 @@ export class TownSimulation {
       throw new Error("Invalid citizen lifecycle state");
     }
     if (this.people.some((person) => person.partnerId !== null && (this.people[person.partnerId]?.partnerId !== person.id || person.lifecycleStage !== "adult" || !person.alive))) throw new Error("Partnership references must be reciprocal living adults");
+    if (new Set(this.gestations.map((gestation) => gestation.id)).size !== this.gestations.length
+      || this.gestations.some((gestation) => gestation.parentIds.length !== 2
+        || gestation.parentIds[0] === gestation.parentIds[1]
+        || gestation.parentIds.some((parentId) => !this.people[parentId])
+        || !["active", "completed", "ended"].includes(gestation.status)
+        || gestation.dueDay !== gestation.conceivedDay + GESTATION_DAYS)) throw new Error("Invalid gestation state");
+    if (this.people.some((person) => person.isDependent && (person.employer >= 0 || person.jobApplicationFirm >= 0 || person.partnerId !== null))) throw new Error("A dependent cannot hold adult economic or romantic roles");
     if (new Set(this.firms.map((firm) => firm.instanceId)).size !== this.firms.length) throw new Error("Firm instance identities must remain unique");
     if (this.people.some((person) => !person.alive && person.employer >= 0)) throw new Error("A dead person cannot remain employed");
     if (this.schedulesEnabled && this.people.some((person) => person.employer >= 0 && (
@@ -4671,6 +4810,8 @@ export class TownSimulation {
   snapshot() {
     const alive = this.people.filter((person) => person.alive).length;
     const dead = this.people.length - alive;
+    const workforceAdults = this.people.filter((person) => person.alive && !person.isDependent).length;
+    const dependents = alive - workforceAdults;
     const lifecycleCounts = Object.fromEntries(LIFECYCLE_STAGES.map((stage) => [stage, this.people.filter((person) => person.alive && person.lifecycleStage === stage).length]));
     const townStage = inferTownStage({ day: this.day, people: this.people, firms: this.firms, policy: this.policy, essentialCost: this.essentialCost() });
     return {
@@ -4682,11 +4823,16 @@ export class TownSimulation {
       totalMoney: this.totalMoney(),
       initialMoney: this.initialMoney,
       employed: this.people.filter((person) => person.alive && person.employer >= 0).length,
+      workforceAdults,
+      dependencyRatio: workforceAdults ? dependents / workforceAdults : dependents ? Infinity : 0,
       alive,
       dead,
       totalCitizens: this.people.length,
       lifecycleEnabled: this.lifecycleEnabled,
+      birthsEnabled: this.birthsEnabled,
       lifecycleCounts,
+      activeGestations: this.gestations.filter((gestation) => gestation.status === "active").length,
+      birthAttempts: this.birthAttemptHistory.length,
       positionsAvailable: this.firms
         .filter((firm) => firm.active)
         .reduce((total, firm) => total + Math.max(0, firm.targetStaff - firm.employees.length), 0),

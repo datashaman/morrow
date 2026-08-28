@@ -85,7 +85,7 @@ There are 40 named people. Each person carries:
 
 Starting cash is uniformly sampled from 18 to 80. Starting health ranges from 0.58 to 0.94; stress ranges from 0.12 to 0.37. These are design values, not calibrated distributions.
 
-Calendar-age stage boundaries are fixed gameplay hypotheses: infant from day 0 through 27, child from day 28 through 83, student from day 84 through 167, and adult from day 168. Existing adults keep `null` birth day and age because this tracer does not introduce general adult ageing. Citizen IDs remain append-only array references; the next available ID begins after the initial population. Birth, maturation, guardianship, and dependent behavior remain inactive.
+Calendar-age stage boundaries are fixed gameplay hypotheses: infant from day 0 through 27, child from day 28 through 83, student from day 84 through 167, and adult from day 168. Existing adults keep `null` birth day and age because this tracer does not introduce general adult ageing. Citizen IDs remain append-only array references; the next available ID begins after the initial population. Maturation and dependent care remain inactive.
 
 ### Romantic partnerships
 
@@ -94,6 +94,16 @@ The browser enables lifecycle behavior; headless callers retain a disabled compa
 Either partner may choose separation through `motivation-v3`; death and friendship strength below `0.20` also end the partnership. Ordinary separation preserves friendship and starts a 28-calendar-day re-partnering cooldown. A partner's death adds no new survivor cooldown. Separation scoring uses friendship strength and contact staleness, while proposal and acceptance scoring use closeness, material security, stress, and the stable connection, planning, security, and avoidance weights. Ties retain the current partnership, remain single, or decline.
 
 Unpartnered eligible adults snapshot their legal close friends and may propose to one. Recipients snapshot the resulting proposals and may accept at most one. Formations apply afterward in immutable-ID order and revalidate exclusivity and every eligibility rule. A declined proposal does not alter friendship. Formation and ending produce paired structured lifecycle records; proposals, responses, and separation choices remain in the ordinary decision history. No partnership automatically causes a birth, shared residence, shared pantry, shared wallet, or inheritance in this slice.
+
+### Birth attempts, gestation, and newborn identity
+
+The birth tracer has a separate activation gate and remains disabled in the browser until guardian-funded dependent care is implemented. When explicitly enabled, every active partnership receives a Monday opportunity if neither partner has an active gestation and at least 84 days have passed since their last shared birth. Material hardship affects motivation rather than legality. Both adults independently choose through `motivation-v3`; ties wait. The care-capacity hypothesis combines shared material security, mean health, town housing availability, current food-sector reliability, and current dependent load.
+
+Dual consent increments the pair's stable attempt sequence and applies a 25% conception chance from an isolated stream keyed by town seed, ordered parent IDs, and attempt sequence. It never consumes the main simulation random stream. Failed attempts create no gestation and may recur on later Mondays. A successful attempt creates one pair-owned gestation due after 28 calendar days. Separation does not cancel it and an active gestation blocks either participant from re-partnering. One surviving prospective guardian can complete it; if both die, it ends without a citizen.
+
+Completion appends a citizen with the next immutable ID and a reproducible name selected from a fixed gender-neutral pool using an isolated seed-and-ID stream. Duplicate names receive deterministic ordinals. The newborn begins as an infant with zero cash and restricted inheritance, health `0.75`, stress and hunger zero, general skill `0.05`, zero vocational knowledge, reliability `0.75`, no work or adult relationship roles, no pantry stock, immutable parent references, and all living parents as guardians. A housed guardian is the initial residential reference without consuming another dwelling. Birth creates no cash, inventory, dwelling, firm, position, or job. Its first event and lifecycle record identify the birth, while both parents receive linked lifecycle records.
+
+Dependents are excluded from employment, applications, autonomous purchases, adult care and education choices, mutual aid, firm founding, housing occupancy, and romantic relationships. Workforce and employment rates use living adults, while population totals include dependents and expose a dependency ratio. The town continues when only dependents remain. Their actual food, health, sleep, residence, guardian decisions, stage progression, and maturation remain for the next slices; the birth gate prevents this intentionally inert state from entering ordinary browser runs.
 
 #### Trade-knowledge tracer
 

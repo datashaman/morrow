@@ -4,14 +4,15 @@ const STAGE_ORDER = ["collapsed", "subsistence", "stability", "convenience", "af
 
 export function inferTownStage({ day, people, firms, policy, essentialCost }) {
   const living = people.filter((person) => person.alive);
+  const adults = living.filter((person) => !person.isDependent);
   const essentialArchetypes = ["farm", "everyday-grocer", "housing-provider", "toolmaker"];
   const essentialStates = essentialArchetypes.map((archetypeId) => {
     const firm = firms.find((candidate) => candidate.active && candidate.archetypeId === archetypeId);
     return { archetypeId, operating: Boolean(firm), readiness: firm ? clamp(firm.operationalReadiness ?? 1) : 0 };
   });
   const essentialReliability = essentialStates.reduce((sum, state) => sum + state.readiness, 0) / essentialStates.length;
-  const employmentRate = living.length ? living.filter((person) => person.employer >= 0).length / living.length : 0;
-  const reserveShare = living.length ? living.filter((person) => person.cash / Math.max(0.01, essentialCost) >= 10).length / living.length : 0;
+  const employmentRate = adults.length ? adults.filter((person) => person.employer >= 0).length / adults.length : 0;
+  const reserveShare = adults.length ? adults.filter((person) => person.cash / Math.max(0.01, essentialCost) >= 10).length / adults.length : 0;
   const optionalFirms = firms.filter((firm) => firm.active && ["cafe", "premium-grocer"].includes(firm.archetypeId));
   const persistentOptionalSectors = optionalFirms.filter((firm) => day - firm.foundingDay >= 7).length;
   const oldestOptionalAge = optionalFirms.reduce((oldest, firm) => Math.max(oldest, day - firm.foundingDay), 0);
@@ -42,6 +43,7 @@ export function inferTownStage({ day, people, firms, policy, essentialCost }) {
     description: descriptions[id],
     evidence: Object.freeze({
       livingCitizens: living.length,
+      adultCitizens: adults.length,
       essentialReliability,
       essentialStates: Object.freeze(essentialStates),
       employmentRate,

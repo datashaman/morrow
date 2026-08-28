@@ -411,7 +411,7 @@ export class GatedNeuralCitizenPolicy implements CitizenPolicy {
     const fallback = this.fallbackPolicy.decide(input);
     // These domains remain outside the personal-time activation gate.
     // Keep them under the auditable motivation fallback until a future gate covers them.
-    if (["health", "education", "clinical-care", "workday-plan", "sleep", "mutual-aid-offer", "mutual-aid-receive", "welfare", "partnership"].includes(input.observation.kind)) return { ...fallback, policy: this.fallbackPolicy.id } as CitizenPolicyDecision;
+    if (["health", "education", "clinical-care", "workday-plan", "sleep", "mutual-aid-offer", "mutual-aid-receive", "welfare", "partnership", "birth-attempt"].includes(input.observation.kind)) return { ...fallback, policy: this.fallbackPolicy.id } as CitizenPolicyDecision;
     const inference = this.neuralPolicy.infer(input.observation, input.legalActions);
     const neuralControls = this.enabled && input.observation.kind === "personal-time";
     const shadow: ShadowDecision = Object.freeze({
