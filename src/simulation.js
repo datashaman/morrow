@@ -2,6 +2,7 @@ import {
   CLINIC_TREATMENT_RECOVERY,
   CLINIC_TREATMENT_RESERVE_DAYS,
   CLINIC_TREATMENT_THRESHOLD,
+  CLOSE_FRIENDSHIP_THRESHOLD,
   COOPERATION_MODES,
   DEFAULT_POLICY,
   EDUCATION_RESERVE_DAYS,
@@ -21,6 +22,7 @@ import {
   FRIENDSHIP_DECAY_GRACE_DAYS,
   FRIENDSHIP_END_THRESHOLD,
   FOOD_HEALTH_RECOVERY,
+  FOOD_PANTRY_CAPACITY,
   FOOD_QUALITY_DECAY_PER_DAY,
   HEALTH_TREATMENT_RECOVERY,
   HEALTH_TREATMENT_RESERVE_DAYS,
@@ -240,6 +242,9 @@ export class TownSimulation {
     this.controlSequence = 0;
     this.controlHistory = [];
     this.opportunitySequence = 0;
+    this.foodItemSequence = 0;
+    this.mutualAidOfferSequence = 0;
+    this.mutualAidTransferSequence = 0;
     this.opportunityHistory = [];
     this.pendingFormations = {};
     this.opportunityWindows = Object.fromEntries(FIRMS.map((archetype) => [archetype.archetypeId, []]));
@@ -328,6 +333,7 @@ export class TownSimulation {
         foodSeller: -1,
         foodReserveTarget: 1 + (id % 3),
         foodStock: [],
+        mutualAidHistory: [],
         foodConsumedToday: 0,
         foodConsumedTotal: 0,
         wasteSequence: 0,
@@ -1428,7 +1434,7 @@ export class TownSimulation {
 
   recordDecision(person, observation, legalActions, decision, phase) {
     person.decisionSequence += 1;
-    person.decisions.unshift({
+    const record = {
       day: this.day,
       phase,
       ...temporalMetadata(this.day, phase),
@@ -1442,7 +1448,9 @@ export class TownSimulation {
       scores: decision.scores ? { ...decision.scores } : {},
       control: decision.control ? structuredClone(decision.control) : null,
       shadow: decision.shadow ? structuredClone(decision.shadow) : null,
-    });
+    };
+    person.decisions.unshift(record);
+    return record;
   }
 
   considerOwnerAction(owner, firm, domain, options, phase) {
@@ -1901,6 +1909,7 @@ export class TownSimulation {
       person.foodSeller = firm.id;
       inventoryTaken.forEach((batch) => {
         for (let unit = 0; unit < batch.quantity; unit += 1) person.foodStock.push({
+          mealId: ++this.foodItemSequence,
           product: firm.sells,
           processedDay: batch.batchDay,
           purchasedDay: this.day,
@@ -1911,6 +1920,7 @@ export class TownSimulation {
           ownerKind: person.kind,
           ownerId: person.id,
           ownerName: person.name,
+          custody: [],
         });
       });
     } else person.personalSeller = firm.id;
@@ -2316,6 +2326,7 @@ export class TownSimulation {
   }
 
   foodPhase() {
+    if (this.cooperationMode === "mutual-aid") this.runMutualAidExchange();
     const foodFirms = this.firms.filter((firm) => this.firmServiceAvailable(firm, "Evening") && firm.sector === "food").sort((a, b) => a.price - b.price);
     const activeFoodFirms = this.firms.filter((firm) => firm.active && firm.sector === "food");
     const nextFoodOpening = foodFirms.length ? null : activeFoodFirms
@@ -2342,6 +2353,218 @@ export class TownSimulation {
     if (!nextOpening) return normalTarget;
     const mealsUntilNextOpening = Math.max(1, nextOpening - this.day);
     return Math.min(3, Math.max(normalTarget, mealsUntilNextOpening));
+  }
+
+  foodExpiryDay(food) {
+    return (food.processedDay ?? food.purchasedDay) + (food.shelfLife ?? 3);
+  }
+
+  foodReserveRemainsViable(person, stock) {
+    const protectedReserve = this.foodReserveTargetForDay(person);
+    if (stock.length < protectedReserve) return false;
+    const expiryDays = stock.map((meal) => this.foodExpiryDay(meal)).sort((a, b) => a - b);
+    let searchFrom = 0;
+    for (let offset = 0; offset < protectedReserve; offset += 1) {
+      const intendedDay = this.day + offset;
+      while (searchFrom < expiryDays.length && expiryDays[searchFrom] <= intendedDay) searchFrom += 1;
+      if (searchFrom >= expiryDays.length) return false;
+      searchFrom += 1;
+    }
+    return true;
+  }
+
+  closeFriendshipStrength(a, b) {
+    const forward = a.relationships[b.id]?.strength;
+    const reciprocal = b.relationships[a.id]?.strength;
+    if (forward === undefined || reciprocal === undefined) return 0;
+    const strength = Math.min(forward, reciprocal);
+    return strength + 1e-9 >= CLOSE_FRIENDSHIP_THRESHOLD ? strength : 0;
+  }
+
+  mutualAidRecipientNeed(snapshot) {
+    const scarcity = clamp(1 - snapshot.runwayDays / 12);
+    const pantryFill = clamp(snapshot.viableMealCount / FOOD_PANTRY_CAPACITY);
+    return clamp(
+      0.45 * clamp(snapshot.hungryDays / 2)
+      + 0.25 * (1 - pantryFill)
+      + 0.2 * scarcity
+      + 0.1 * (snapshot.housed ? 0 : 1),
+    );
+  }
+
+  runMutualAidExchange() {
+    const living = this.people.filter((person) => person.alive).sort((a, b) => a.id - b.id);
+    const snapshots = new Map(living.map((person) => [person.id, Object.freeze({
+      personId: person.id,
+      alive: person.alive,
+      hungryDays: person.hungryDays,
+      housed: person.housed,
+      runwayDays: this.runwayDays(person),
+      viableMealCount: person.foodStock.length,
+      pantryCapacity: FOOD_PANTRY_CAPACITY,
+      stress: person.stress,
+      foodStock: Object.freeze(person.foodStock.map((meal) => Object.freeze({ ...meal, custody: Object.freeze([...(meal.custody ?? [])]) }))),
+    })]));
+    const offered = [];
+
+    living.forEach((giver) => {
+      const giverSnapshot = snapshots.get(giver.id);
+      const protectedReserve = this.foodReserveTargetForDay(giver);
+      const friends = living.map((recipient) => ({
+        recipient,
+        strength: recipient.id === giver.id ? 0 : this.closeFriendshipStrength(giver, recipient),
+      })).filter(({ recipient, strength }) => strength && snapshots.get(recipient.id).viableMealCount < FOOD_PANTRY_CAPACITY);
+      const options = [];
+      giverSnapshot.foodStock.forEach((meal) => {
+        const remaining = giverSnapshot.foodStock.filter((candidate) => candidate.mealId !== meal.mealId);
+        if (!this.foodReserveRemainsViable(giver, remaining)) return;
+        const reserveHeadroom = clamp(remaining.length / Math.max(1, protectedReserve) - 1);
+        const age = Math.max(0, this.day - (meal.processedDay ?? meal.purchasedDay));
+        const spoilagePressure = clamp(age / Math.max(1, meal.shelfLife ?? 3));
+        friends.forEach(({ recipient, strength }) => {
+          const offerId = ++this.mutualAidOfferSequence;
+          options.push(Object.freeze({
+            action: `offer-meal:${offerId}`,
+            offerId,
+            mealId: meal.mealId,
+            recipientId: recipient.id,
+            recipientName: recipient.name,
+            relationshipStrength: strength,
+            recipientNeed: this.mutualAidRecipientNeed(snapshots.get(recipient.id)),
+            reserveHeadroom,
+            spoilagePressure,
+          }));
+        });
+      });
+      if (!options.length) return;
+      const legalActions = Object.freeze(["keep-meal", ...options.map((option) => option.action)]);
+      const observation = Object.freeze({
+        kind: "mutual-aid-offer",
+        citizenId: giver.id,
+        citizenName: giver.name,
+        stress: giverSnapshot.stress,
+        runwayDays: giverSnapshot.runwayDays,
+        protectedReserve,
+        profile: { ...giver.motivationProfile },
+        options,
+      });
+      const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+      if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal mutual-aid offer action`);
+      const decisionRecord = this.recordDecision(giver, observation, legalActions, decision, "Food shopping");
+      const option = options.find((candidate) => candidate.action === decision.action);
+      if (option) offered.push(Object.freeze({ ...option, giverId: giver.id, giverName: giver.name, giverDecisionSequence: decisionRecord.sequence }));
+    });
+
+    const accepted = [];
+    const offersByRecipient = offered.reduce((groups, offer) => {
+      const group = groups.get(offer.recipientId) ?? [];
+      group.push(offer);
+      groups.set(offer.recipientId, group);
+      return groups;
+    }, new Map());
+    [...offersByRecipient.entries()].sort(([left], [right]) => left - right).forEach(([recipientId, offers]) => {
+      const recipient = this.people[recipientId];
+      const recipientSnapshot = snapshots.get(recipientId);
+      const options = offers.sort((a, b) => a.offerId - b.offerId).map((offer) => {
+        const meal = snapshots.get(offer.giverId).foodStock.find((candidate) => candidate.mealId === offer.mealId);
+        const age = Math.max(0, this.day - (meal.processedDay ?? meal.purchasedDay));
+        const shelfLife = Math.max(1, meal.shelfLife ?? 3);
+        return Object.freeze({
+          action: `accept-meal:${offer.offerId}`,
+          offerId: offer.offerId,
+          mealId: offer.mealId,
+          giverId: offer.giverId,
+          giverName: offer.giverName,
+          relationshipStrength: offer.relationshipStrength,
+          recipientNeed: offer.recipientNeed,
+          mealQuality: this.effectiveFoodQuality(meal),
+          remainingLifeFraction: clamp((shelfLife - age) / shelfLife),
+        });
+      });
+      const legalActions = Object.freeze(["refuse-mutual-aid", ...options.map((option) => option.action)]);
+      const observation = Object.freeze({
+        kind: "mutual-aid-receive",
+        citizenId: recipient.id,
+        citizenName: recipient.name,
+        stress: recipientSnapshot.stress,
+        pantryFill: clamp(recipientSnapshot.viableMealCount / FOOD_PANTRY_CAPACITY),
+        profile: { ...recipient.motivationProfile },
+        options,
+      });
+      const decision = this.citizenPolicy.decide({ observation, legalActions, random: this.random });
+      if (!decision || !legalActions.includes(decision.action)) throw new Error(`Citizen policy ${this.citizenPolicy.id ?? "unknown"} chose an illegal mutual-aid response action`);
+      const decisionRecord = this.recordDecision(recipient, observation, legalActions, decision, "Food shopping");
+      const option = options.find((candidate) => candidate.action === decision.action);
+      if (option) accepted.push({ offer: offers.find((candidate) => candidate.offerId === option.offerId), recipientDecision: decisionRecord });
+    });
+
+    const usedGivers = new Set();
+    const usedRecipients = new Set();
+    accepted.sort((left, right) => left.offer.offerId - right.offer.offerId).forEach(({ offer, recipientDecision }) => {
+      const giver = this.people[offer.giverId];
+      const recipient = this.people[offer.recipientId];
+      const mealIndex = giver?.foodStock.findIndex((meal) => meal.mealId === offer.mealId) ?? -1;
+      const remaining = mealIndex >= 0 ? giver.foodStock.filter((_, index) => index !== mealIndex) : [];
+      const failure = !giver?.alive || !recipient?.alive
+        ? "giver or recipient was no longer living"
+        : usedGivers.has(giver.id) || usedRecipients.has(recipient.id)
+          ? "daily giver or recipient limit was already used"
+          : !this.closeFriendshipStrength(giver, recipient)
+            ? "the reciprocal close friendship no longer qualified"
+            : mealIndex < 0
+              ? "the exact offered meal was no longer owned by the giver"
+              : !this.foodReserveRemainsViable(giver, remaining)
+                ? "the giver's closure-aware protected reserve no longer remained viable"
+                : recipient.foodStock.length >= FOOD_PANTRY_CAPACITY
+                  ? "the recipient pantry no longer had room"
+                  : this.foodExpiryDay(giver.foodStock[mealIndex]) <= this.day
+                    ? "the offered meal was no longer unexpired"
+                    : null;
+      recipientDecision.application = Object.freeze({ offerId: offer.offerId, applied: !failure, failure });
+      const giverDecision = giver?.decisions.find((decision) => decision.sequence === offer.giverDecisionSequence);
+      if (giverDecision) giverDecision.application = Object.freeze({ offerId: offer.offerId, applied: !failure, failure });
+      if (failure) return;
+
+      const giverPantryBefore = giver.foodStock.length;
+      const recipientPantryBefore = recipient.foodStock.length;
+      const [meal] = giver.foodStock.splice(mealIndex, 1);
+      const transferSequence = ++this.mutualAidTransferSequence;
+      const custody = Object.freeze({
+        offerId: offer.offerId,
+        day: this.day,
+        ...temporalMetadata(this.day, "Food shopping"),
+        phase: "Food shopping",
+        sequence: transferSequence,
+        giverId: giver.id,
+        giverName: giver.name,
+        recipientId: recipient.id,
+        recipientName: recipient.name,
+      });
+      meal.custody = [...(meal.custody ?? []), custody];
+      meal.ownerKind = recipient.kind;
+      meal.ownerId = recipient.id;
+      meal.ownerName = recipient.name;
+      recipient.foodStock.push(meal);
+      usedGivers.add(giver.id);
+      usedRecipients.add(recipient.id);
+      const shared = {
+        offerId: offer.offerId,
+        mealId: meal.mealId,
+        giverId: giver.id,
+        giverName: giver.name,
+        recipientId: recipient.id,
+        recipientName: recipient.name,
+        sellerId: meal.seller,
+        sellerName: this.firms[meal.seller]?.name ?? "unknown seller",
+        quality: this.effectiveFoodQuality(meal),
+        age: Math.max(0, this.day - (meal.processedDay ?? meal.purchasedDay)),
+        custody,
+      };
+      giver.activitySequence += 1;
+      recipient.activitySequence += 1;
+      giver.mutualAidHistory.unshift(Object.freeze({ day: this.day, ...temporalMetadata(this.day, "Food shopping"), sequence: giver.activitySequence, direction: "out", pantryBefore: giverPantryBefore, pantryAfter: giver.foodStock.length, ...shared }));
+      recipient.mutualAidHistory.unshift(Object.freeze({ day: this.day, ...temporalMetadata(this.day, "Food shopping"), sequence: recipient.activitySequence, direction: "in", pantryBefore: recipientPantryBefore, pantryAfter: recipient.foodStock.length, ...shared }));
+    });
   }
 
   foodAccessOrder() {

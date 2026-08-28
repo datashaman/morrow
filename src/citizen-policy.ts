@@ -17,8 +17,9 @@ export type HousingAction = "defer-housing" | "remain-unhoused" | `pay-housing:$
 export type HealthAction = "defer-treatment" | `buy-medicine:${number}`;
 export type EducationAction = "defer-education" | `buy-education:${number}`;
 export type ClinicalAction = "defer-clinical-care" | `buy-clinical-care:${number}`;
+export type MutualAidAction = "keep-meal" | "refuse-mutual-aid" | `offer-meal:${number}` | `accept-meal:${number}`;
 export type OwnerAction = "draw-owner-wage" | "waive-owner-wage" | "contribute-owner-capital" | "wait-on-owner-financing" | "choose-voluntary-insolvency" | "hold-owner-price" | "lower-owner-price" | "raise-owner-price" | "retain-owner-cash" | "take-owner-distribution";
-export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | OwnerAction;
+export type CitizenAction = JobOfferAction | AttendanceAction | JobSearchAction | PersonalTimeAction | WorkdayAction | SleepAction | FoodAction | HousingAction | HealthAction | EducationAction | ClinicalAction | MutualAidAction | OwnerAction;
 
 export type MotivationProfile = Readonly<{
   comfort: number;
@@ -265,6 +266,51 @@ export type ClinicalObservation = Readonly<{
   options: readonly ClinicalOption[];
 }>;
 
+export type MutualAidOfferOption = Readonly<{
+  action: `offer-meal:${number}`;
+  offerId: number;
+  mealId: number;
+  recipientId: number;
+  recipientName: string;
+  relationshipStrength: number;
+  recipientNeed: number;
+  reserveHeadroom: number;
+  spoilagePressure: number;
+}>;
+
+export type MutualAidOfferObservation = Readonly<{
+  kind: "mutual-aid-offer";
+  citizenId: number;
+  citizenName: string;
+  stress: number;
+  runwayDays: number;
+  protectedReserve: number;
+  profile: MotivationProfile;
+  options: readonly MutualAidOfferOption[];
+}>;
+
+export type MutualAidReceiveOption = Readonly<{
+  action: `accept-meal:${number}`;
+  offerId: number;
+  mealId: number;
+  giverId: number;
+  giverName: string;
+  relationshipStrength: number;
+  recipientNeed: number;
+  mealQuality: number;
+  remainingLifeFraction: number;
+}>;
+
+export type MutualAidReceiveObservation = Readonly<{
+  kind: "mutual-aid-receive";
+  citizenId: number;
+  citizenName: string;
+  stress: number;
+  pantryFill: number;
+  profile: MotivationProfile;
+  options: readonly MutualAidReceiveOption[];
+}>;
+
 export type OwnerOption = Readonly<{
   action: OwnerAction;
   label: string;
@@ -294,7 +340,7 @@ export type OwnerObservation = Readonly<{
   options: readonly OwnerOption[];
 }>;
 
-export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | OwnerObservation;
+export type CitizenObservation = JobOfferObservation | JobSearchObservation | AttendanceObservation | PersonalTimeObservation | WorkdayObservation | SleepObservation | FoodObservation | HousingObservation | HealthObservation | EducationObservation | ClinicalObservation | MutualAidOfferObservation | MutualAidReceiveObservation | OwnerObservation;
 
 export type CitizenPolicyDecision = Readonly<{
   action: CitizenAction;
@@ -448,6 +494,8 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
     if (input.observation.kind === "clinical-care") return this.decideClinicalCare(input.observation, input.legalActions);
     if (input.observation.kind === "workday-plan") return this.decideWorkdayPlan(input.observation, input.legalActions);
     if (input.observation.kind === "sleep") return this.decideSleep(input.observation, input.legalActions);
+    if (input.observation.kind === "mutual-aid-offer") return this.decideMutualAidOffer(input.observation, input.legalActions);
+    if (input.observation.kind === "mutual-aid-receive") return this.decideMutualAidReceive(input.observation, input.legalActions);
     if (input.observation.kind === "owner") return this.decideOwner(input.observation, input.legalActions);
 
     const { observation, legalActions } = input;
@@ -524,6 +572,41 @@ export class MotivationCitizenPolicy implements CitizenPolicy {
         - observation.stress * 0.2,
     };
     return this.highestScoringDecision(legalActions, scores, "overnight");
+  }
+
+  decideMutualAidOffer(observation: MutualAidOfferObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const scarcity = clamp(1 - observation.runwayDays / 12);
+    const minimumHeadroom = observation.options.reduce((minimum, option) => Math.min(minimum, option.reserveHeadroom), 1);
+    const scores: Record<string, number> = {
+      "keep-meal": 0.25
+        + observation.profile.security * (0.45 + scarcity * 0.45)
+        + observation.profile.planning * (1 - minimumHeadroom) * 0.25,
+    };
+    observation.options.forEach((option) => {
+      scores[option.action] = observation.profile.connection * (0.25 + option.relationshipStrength * 0.35 + option.recipientNeed * 0.55)
+        + observation.profile.planning * (option.reserveHeadroom * 0.2 + option.spoilagePressure * 0.2)
+        - observation.profile.security * scarcity * 0.15
+        - observation.profile.avoidance * observation.stress * 0.1;
+    });
+    return this.highestScoringDecision(legalActions, scores, "mutual-aid offer");
+  }
+
+  decideMutualAidReceive(observation: MutualAidReceiveObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
+    const refusalScores = observation.options.map((option) => 0.18
+      + observation.profile.avoidance * observation.stress * 0.25
+      + observation.profile.planning * observation.pantryFill * 0.45
+      + observation.profile.foodQuality * (1 - option.mealQuality) * 0.4);
+    const scores: Record<string, number> = {
+      "refuse-mutual-aid": refusalScores.length ? Math.max(...refusalScores) : 0.18,
+    };
+    observation.options.forEach((option) => {
+      scores[option.action] = 0.2
+        + option.recipientNeed * 0.9
+        + observation.profile.foodQuality * option.mealQuality * 0.4
+        + option.relationshipStrength * 0.15
+        + observation.profile.planning * option.remainingLifeFraction * 0.15;
+    });
+    return this.highestScoringDecision(legalActions, scores, "mutual-aid response");
   }
 
   decideOwner(observation: OwnerObservation, legalActions: readonly CitizenAction[]): CitizenPolicyDecision {
