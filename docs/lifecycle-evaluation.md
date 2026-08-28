@@ -24,17 +24,19 @@ The required five-seed, 504-requested-day replay completed with exact cash conse
 
 | Seed | Mode | Days | Opportunities / attempts / conceptions / births | Dependent meals | Health care | Lessons | Firm failures |
 | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| 101 | full | 100 | 22 / 34 / 11 / 6 | 138 / 228 | 0 / 54 | 0 / 0 | 4 |
-| 101 | disabled | 80 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 4 |
-| 202 | full | 89 | 22 / 23 / 7 / 5 | 96 / 174 | 0 / 34 | 0 / 0 | 4 |
-| 202 | disabled | 87 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 |
+| 101 | full | 100 | 22 / 34 / 11 / 6 | 138 / 228 | 0 / 54 | 0 / 0 | 3 |
+| 101 | disabled | 80 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 |
+| 202 | full | 89 | 22 / 23 / 7 / 5 | 96 / 174 | 0 / 34 | 0 / 0 | 3 |
+| 202 | disabled | 87 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 |
 | 303 | full | 98 | 19 / 25 / 10 / 10 | 252 / 401 | 0 / 24 | 58 / 88 | 2 |
 | 303 | disabled | 97 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 |
 | 404 | full | 91 | 34 / 33 / 4 / 1 | 19 / 34 | 0 / 12 | 0 / 0 | 4 |
-| 404 | disabled | 92 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 3 |
+| 404 | disabled | 92 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 2 |
 | 505 | full | 100 | 24 / 32 / 13 / 12 | 236 / 419 | 0 / 0 | 48 / 95 | 0 |
 | 505 | disabled | 92 | 0 / 0 / 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | 1 |
 
 Across the full-lifecycle runs, 34 births occurred, 741 of 1,256 dependent meals were delivered, none of 124 planned dependent health episodes completed, and 106 of 183 scheduled lessons were attended. Births extended survival in four seeds by 1–20 days and shortened it in seed 404 by one day. No run exceeded the initial peak of 40 living citizens because deaths outpaced births.
 
 These observations do not constitute a demographic acceptance threshold. They do show that the current economy prevents the evaluation from exercising maturation and workforce entry and repeatedly fails dependent essentials. The browser birth gate therefore remains off while the underlying town-survival and dependent-care constraints are investigated; the implemented lifecycle remains available to deterministic tests and explicit headless configurations.
+
+The same accepted run includes public haulage re-entry after its finite cooldown. This reduces the final failed-firm count in several seeds, but does not change births, survival, dependent care, schooling, or workforce outcomes: restarted transport still lacks sufficiently reliable attended capacity to restore the late farm-to-apothecary pipeline before extinction.

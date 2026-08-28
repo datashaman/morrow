@@ -811,6 +811,27 @@ test("a missing essential production sector can gain a funded public operator", 
   assert.match(farm.ledger[0].text, /essential-sector re-entry from treasury/);
 });
 
+test("a missing vital carrier can gain a funded public operator only when transport is enabled", () => {
+  const town = new TownSimulation({ seed: 42, transportEnabled: true });
+  const carrier = town.firms.find((firm) => firm.archetypeId === "haulage");
+  town.closeFirm(carrier);
+  town.day = carrier.closedDay + 14;
+  const totalBefore = town.totalMoney();
+
+  assert.equal(town.resolveEssentialSectorReentry(), true);
+  assert.equal(carrier.active, true);
+  assert.equal(carrier.publiclyOperated, true);
+  assert.equal(carrier.employees.length, 2);
+  assert.equal(town.totalMoney(), totalBefore);
+  assert.ok(town.contracts.filter((contract) => contract.supplierId === carrier.id || contract.buyerId === carrier.id).every((contract) => contract.active));
+
+  const disabled = new TownSimulation({ seed: 42, transportEnabled: false });
+  const disabledCarrier = disabled.firms.find((firm) => firm.archetypeId === "haulage");
+  assert.equal(disabledCarrier, undefined);
+  disabled.day += 14;
+  assert.equal(disabled.resolveEssentialSectorReentry(), false);
+});
+
 test("a town with hungry citizens can restore its missing everyday-food operator after one day", () => {
   const town = new TownSimulation({ seed: 42, schedulesEnabled: true });
   const food = town.firms.find((firm) => firm.name === "Harvest Foods");

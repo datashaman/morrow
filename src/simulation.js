@@ -5175,7 +5175,8 @@ export class TownSimulation {
 
   resolveEssentialSectorReentry() {
     let restarted = false;
-    ["agriculture", "food"].forEach((sector) => {
+    ["transport", "agriculture", "food"].forEach((sector) => {
+      if (sector === "transport" && !this.transportEnabled) return;
       if (this.firms.some((firm) => firm.active && firm.sector === sector)) return;
       if (sector === "food" && !this.firms.some((firm) => firm.active && firm.sector === "agriculture")) return;
       const firm = this.firms.find((candidate) => candidate.vital && candidate.sector === sector && candidate.status === "insolvent");
