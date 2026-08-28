@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MotivationCitizenPolicy } from "../src/citizen-policy.ts";
-import { KNOWLEDGE_VOCATIONAL_DOMAINS } from "../src/config.js";
+import { KNOWLEDGE_VOCATIONAL_DOMAINS, OPPORTUNITY_OBSERVATION_DAYS } from "../src/config.js";
 import { TownSimulation } from "../src/simulation.js";
 
 const profile = { comfort: 1, connection: 1, mastery: 1, security: 1, foodQuality: 1, planning: 1, avoidance: 1 };
@@ -111,4 +111,29 @@ test("education need uses general skill and only the latest five scheduled lesso
 
   assert.equal(town.recentScheduledSchoolRecords(dependent).length, 5);
   assert.equal(town.dependentEducationNeed(dependent), 0.55 * 0.6 + 0.45 * 0.6);
+});
+
+test("a delivered dependent lesson exact-pays restricted funds, protected guardian cash, and finite assistance", () => {
+  const town = new TownSimulation({ seed: 91, lifecycleEnabled: true, welfareMode: "combined", policy: { supportRate: 100, shockRisk: 0 } });
+  town.people.forEach((person) => { person.cash = 100; person.skill = 0.3; person.knowledgeProfile.general = 0.3; });
+  town.initialMoney = town.totalMoney();
+  for (let day = 1; day <= OPPORTUNITY_OBSERVATION_DAYS; day += 1) { town.day = day; town.observeFirmOpportunities(); }
+  const school = town.firms.find((firm) => firm.archetypeId === "school");
+  const dependent = town.createNewborn([0]);
+  const guardian = town.people[0];
+  dependent.restrictedInheritance = 1;
+  guardian.cash = town.guardianSchoolProtectedReserve(guardian) + 1;
+  school.inventory = 2;
+  school.transactionsToday = 0;
+  const moneyBefore = town.totalMoney();
+  const schoolBefore = school.cash;
+
+  const result = town.settleDependentSchoolPayment(dependent, guardian, school);
+
+  assert.equal(result.completed, true);
+  assert.equal(dependent.restrictedInheritance, 0);
+  assert.equal(guardian.cash, town.guardianSchoolProtectedReserve(guardian));
+  assert.equal(school.cash, schoolBefore + school.price);
+  assert.equal(result.evidence.treasuryContribution, school.price - 2);
+  assert.equal(town.totalMoney(), moneyBefore);
 });

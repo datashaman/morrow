@@ -1107,7 +1107,7 @@ export class TownSimulation {
     if (!provider) return "no eligible provider";
     if (!provider.active) return "provider inactive";
     if (!this.firmOpenOnDay(provider)) return "provider closed";
-    const serviceWindow = purpose === "clinical care" ? "Workday" : "Evening";
+    const serviceWindow = ["clinical care", "dependent education"].includes(purpose) ? "Workday" : "Evening";
     if (!this.firmServiceAvailable(provider, serviceWindow)) return purpose === "rent" ? "unavailable housing transaction" : "no eligible provider";
     if (purpose === "food") {
       this.reconcileInventoryBatches(provider);
@@ -1119,6 +1119,8 @@ export class TownSimulation {
       if (provider.archetypeId !== "apothecary" || provider.sells !== "medicine" || provider.inventory < 1) return "no eligible provider";
     } else if (purpose === "clinical care") {
       if (provider.archetypeId !== "clinic" || provider.sells !== "clinicalCare" || provider.inventory < 1) return "no eligible provider";
+    } else if (purpose === "dependent education") {
+      if (provider.archetypeId !== "school" || provider.sells !== "education" || provider.inventory < 1) return "no eligible provider";
     }
     const attendedStaff = provider.employees.filter((id) => this.people[id]?.alive && this.people[id].attended).length;
     if (attendedStaff === 0) return "no attended staff";
@@ -1435,15 +1437,15 @@ export class TownSimulation {
     return Object.freeze({ completed: false, reason, evidence: Object.freeze(evidence) });
   }
 
-  settleDirectAssistance({ programme: programmeKey, recipient, decisionMaker = recipient, privatePayer = recipient, provider, purpose, completePrice = provider?.price, welfareId: offeredWelfareId = null }) {
+  settleDirectAssistance({ programme: programmeKey, recipient, decisionMaker = recipient, privatePayer = recipient, provider, purpose, completePrice = provider?.price, welfareId: offeredWelfareId = null, privateContributionCap = Infinity }) {
     const programme = WELFARE_PROGRAMMES[programmeKey];
     if (!programme) throw new Error(`Unknown welfare programme: ${programmeKey}`);
     if (!offeredWelfareId) this.welfareTransactionSequence += 1;
     const welfareId = offeredWelfareId ?? `welfare:${this.day}:${this.welfareTransactionSequence}`;
     const price = roundMoney(completePrice ?? 0);
-    const restrictedCash = ["food", "medicine", "clinical care"].includes(purpose) ? Math.max(0, recipient?.restrictedInheritance ?? 0) : 0;
+    const restrictedCash = ["food", "medicine", "clinical care", "dependent education"].includes(purpose) ? Math.max(0, recipient?.restrictedInheritance ?? 0) : 0;
     const restrictedContribution = roundMoney(Math.min(restrictedCash, price));
-    const payerContribution = roundMoney(Math.min(Math.max(0, privatePayer?.cash ?? 0), price - restrictedContribution));
+    const payerContribution = roundMoney(Math.min(Math.max(0, privatePayer?.cash ?? 0), Math.max(0, privateContributionCap), price - restrictedContribution));
     const privateCash = roundMoney(restrictedContribution + payerContribution);
     const shortfall = roundMoney(Math.max(0, price - privateCash));
     const state = this.beginWelfareEnvelope();
@@ -1470,12 +1472,12 @@ export class TownSimulation {
     if (!(price > 0) || Math.abs(price - roundMoney(provider.price)) > 1e-9) {
       return fail(purpose === "rent" ? "unavailable housing transaction" : "no eligible provider");
     }
-    if (!["food", "rent", "medicine", "clinical care"].includes(purpose)) throw new Error(`Unsupported direct-assistance purpose: ${purpose}`);
-    if (!(shortfall > 0)) return fail("no exact shortfall");
+    if (!["food", "rent", "medicine", "clinical care", "dependent education"].includes(purpose)) throw new Error(`Unsupported direct-assistance purpose: ${purpose}`);
+    if (!(shortfall > 0) && programmeKey !== "childEducation") return fail("no exact shortfall");
     if (shortfall > envelopeBefore + 1e-9) return fail("exhausted daily envelope");
     if (shortfall > this.government.cash + 1e-9) return fail("insufficient treasury cash");
 
-    const inventoryPurpose = ["food", "medicine", "clinical care"].includes(purpose);
+    const inventoryPurpose = ["food", "medicine", "clinical care", "dependent education"].includes(purpose);
     const inventory = inventoryPurpose ? this.peekFirmInventory(provider, 1) : null;
     if (inventoryPurpose && !inventory.length) return fail("no stock");
     const transactionPurpose = purpose === "rent" ? "housing payment" : purpose;
@@ -1507,13 +1509,15 @@ export class TownSimulation {
       this.ledger(provider, { direction: "in", amount: paid, text: `${programme.name} co-pay from ${privatePayer.name} for ${recipient.name}`, before: providerBefore, transactionId, programme: programme.id });
       linkedTransactionIds.push(transactionId);
     }
-    const treasuryTransactionId = `${welfareId}:treasury`;
-    const providerBeforeTreasury = provider.cash;
-    const treasuryPaid = this.transfer(this.government, provider, shortfall, { exact: true });
-    if (treasuryPaid !== shortfall) throw new Error(`Atomic ${programme.name} treasury contribution failed`);
-    this.ledger(this.government, { direction: "out", amount: treasuryPaid, text: `${programme.name} to ${provider.name} for ${recipient.name}`, before: treasuryBefore, transactionId: treasuryTransactionId, programme: programme.id });
-    this.ledger(provider, { direction: "in", amount: treasuryPaid, text: `${programme.name} from treasury for ${recipient.name}`, before: providerBeforeTreasury, transactionId: treasuryTransactionId, programme: programme.id });
-    linkedTransactionIds.push(treasuryTransactionId);
+    if (shortfall > 0) {
+      const treasuryTransactionId = `${welfareId}:treasury`;
+      const providerBeforeTreasury = provider.cash;
+      const treasuryPaid = this.transfer(this.government, provider, shortfall, { exact: true });
+      if (treasuryPaid !== shortfall) throw new Error(`Atomic ${programme.name} treasury contribution failed`);
+      this.ledger(this.government, { direction: "out", amount: treasuryPaid, text: `${programme.name} to ${provider.name} for ${recipient.name}`, before: treasuryBefore, transactionId: treasuryTransactionId, programme: programme.id });
+      this.ledger(provider, { direction: "in", amount: treasuryPaid, text: `${programme.name} from treasury for ${recipient.name}`, before: providerBeforeTreasury, transactionId: treasuryTransactionId, programme: programme.id });
+      linkedTransactionIds.push(treasuryTransactionId);
+    }
 
     if (purpose === "food") {
       const inventoryTaken = this.takeFirmInventory(provider, 1);
@@ -1547,7 +1551,8 @@ export class TownSimulation {
       const inventoryTaken = this.takeFirmInventory(provider, 1);
       if (!inventoryTaken.length) throw new Error(`Inventory changed during atomic ${programme.name} settlement`);
       if (purpose === "medicine") recipient.healthSeller = provider.id;
-      else recipient.clinicalSeller = provider.id;
+      else if (purpose === "clinical care") recipient.clinicalSeller = provider.id;
+      else recipient.educationSeller = provider.id;
     }
     provider.sales = roundMoney(provider.sales + price);
     provider.unitsSold += 1;
@@ -1923,6 +1928,33 @@ export class TownSimulation {
     const restrictedContribution = Math.min(dependent.restrictedInheritance, school.price);
     const guardianContribution = roundMoney(school.price - restrictedContribution);
     return guardian.cash - guardianContribution + 1e-9 >= this.guardianSchoolProtectedReserve(guardian);
+  }
+
+  settleDependentSchoolPayment(dependent, guardian, school) {
+    const reserve = guardian?.kind === "person" ? this.guardianSchoolProtectedReserve(guardian) : 0;
+    const availableGuardianCash = guardian?.kind === "person" ? Math.max(0, roundMoney(guardian.cash - reserve)) : 0;
+    const privateFunds = roundMoney(dependent.restrictedInheritance + availableGuardianCash);
+    if (privateFunds + 1e-9 >= school.price && guardian?.kind === "person") {
+      return this.settleDirectAssistance({
+        programme: "childEducation",
+        recipient: dependent,
+        decisionMaker: guardian,
+        privatePayer: guardian,
+        provider: school,
+        purpose: "dependent education",
+        privateContributionCap: availableGuardianCash,
+      });
+    }
+    if (!this.directWelfareEnabled()) return Object.freeze({ completed: false, reason: "no finite education assistance" });
+    return this.settleDirectAssistance({
+      programme: "childEducation",
+      recipient: dependent,
+      decisionMaker: guardian ?? this.government,
+      privatePayer: guardian?.kind === "person" ? guardian : dependent,
+      provider: school,
+      purpose: "dependent education",
+      privateContributionCap: availableGuardianCash,
+    });
   }
 
   recordDependentSchool(dependent, outcome, { school = null, guardian = null, scheduled = true, reason = null } = {}) {
